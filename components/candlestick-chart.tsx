@@ -9,7 +9,32 @@ export function CandlestickChart({symbol="BTCUSDT"}:{symbol?:string}){
   const [interval,setInterval]=useState<(typeof intervals)[number]>("1m");
   const [candles,setCandles]=useState<Candle[]>([]);
   const [ticker,setTicker]=useState<MarketTicker|null>(null);
-  useEffect(()=>{let active=true;fetch(`/api/chart?symbol=${symbol}&interval=${interval}`).then(r=>r.json()).then(data=>{if(active&&Array.isArray(data.candles))setCandles(data.candles);}).catch(()=>{});const source=new EventSource("/api/prices/stream");source.addEventListener("kline",event=>{const data=JSON.parse((event as MessageEvent).data) as {symbol:string;interval:string;candle:Candle};if(!active||data.symbol!==symbol||data.interval!==interval)return;setCandles(current=>{const next=[...current];const index=next.findIndex(item=>item.openTime===data.candle.openTime);if(index>=0)next[index]=data.candle;else next.push(data.candle);return next.slice(-120);});});source.addEventListener("tickers",event=>{const rows=JSON.parse((event as MessageEvent).data) as MarketTicker[];const found=rows.find(row=>row.symbol===symbol);if(found)setTicker(found);});return()=>{active=false;source.close();};},[symbol,interval]);
+  useEffect(()=>{
+    let active=true;
+    let source:EventSource|null=null;
+    let reconnectTimer:ReturnType<typeof setTimeout>|null=null;
+    let attempt=0;
+    const load=()=>fetch(`/api/chart?symbol=${symbol}&interval=${interval}`).then(r=>r.json()).then(data=>{if(active&&Array.isArray(data.candles))setCandles(data.candles);}).catch(error=>console.error("[market-data] chart fetch failed",error));
+    const connect=()=>{
+      source?.close();
+      source=new EventSource("/api/prices/stream");
+      source.addEventListener("open",()=>{attempt=0;void load();});
+      source.addEventListener("kline",event=>{const data=JSON.parse((event as MessageEvent).data) as {symbol:string;interval:string;candle:Candle};if(!active||data.symbol!==symbol||data.interval!==interval)return;setCandles(current=>{const next=[...current];const index=next.findIndex(item=>item.openTime===data.candle.openTime);if(index>=0)next[index]=data.candle;else next.push(data.candle);return next.slice(-120);});});
+      source.addEventListener("tickers",event=>{const rows=JSON.parse((event as MessageEvent).data) as MarketTicker[];const found=rows.find(row=>row.symbol===symbol);if(active&&found)setTicker(found);});
+      source.addEventListener("error",event=>{
+        console.error("[market-data] chart stream disconnected",event);
+        source?.close();
+        attempt+=1;
+        const delay=Math.min(30000,1000*2**Math.min(attempt-1,5));
+        if(reconnectTimer)clearTimeout(reconnectTimer);
+        void load();
+        reconnectTimer=setTimeout(()=>{if(active)connect();},delay);
+      });
+    };
+    void load();
+    connect();
+    return()=>{active=false;if(reconnectTimer)clearTimeout(reconnectTimer);source?.close();};
+  },[symbol,interval]);
   const shown=useMemo(()=>candles.slice(-36),[candles]);
   const bounds=useMemo(()=>{const lows=shown.map(c=>c.low),highs=shown.map(c=>c.high);const min=Math.min(...lows),max=Math.max(...highs);return {min:Number.isFinite(min)?min:0,max:Number.isFinite(max)?max:1};},[shown]);
   const scale=(value:number)=>190-((value-bounds.min)/Math.max(bounds.max-bounds.min,.00000001))*180;
