@@ -1,0 +1,420 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum WalletType {
+  SPOT
+  FUTURES
+  BITEX
+  FEE
+}
+
+enum WalletTransferStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum JournalStatus {
+  PENDING
+  POSTED
+  REVERSED
+}
+
+enum DepositStatus {
+  DETECTED
+  CONFIRMING
+  CONFIRMED
+  CREDITED
+  FAILED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  COMPLETED
+  APPROVED
+  REJECTED
+}
+
+enum CodeStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  DELETED
+}
+
+enum TradeStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  INCOME_CREDITED
+  FAILED
+}
+
+enum IncomeType {
+  DIRECT
+  LEVEL
+  MATCHING
+  COPY_TRADE
+  BONUS
+}
+
+enum PackageStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model User {
+  id                    String           @id @default(cuid())
+  email                 String           @unique
+  uid                   String           @unique @db.VarChar(12)
+  name                  String
+  passwordHash          String
+  role                  Role             @default(USER)
+  status                UserStatus       @default(ACTIVE)
+  referredById          String?
+  referredBy            User?            @relation("ReferralTree", fields: [referredById], references: [id])
+  referrals             User[]           @relation("ReferralTree")
+  joinedAt              DateTime         @default(now())
+  extraTradeTrialEndsAt DateTime
+  permanentExtraTrade   Boolean          @default(false)
+  spotBalance           Decimal          @default(0) @db.Decimal(36, 18)
+  futuresBalance        Decimal          @default(0) @db.Decimal(36, 18)
+  bitexBalance          Decimal          @default(0) @db.Decimal(36, 18)
+  bitexPrincipal        Decimal          @default(0) @db.Decimal(36, 18)
+  bitexIncomeEarned     Decimal          @default(0) @db.Decimal(36, 18)
+  bitexTargetAmount     Decimal          @default(0) @db.Decimal(36, 18)
+  bitexUnlocked         Boolean          @default(false)
+  wallets               WalletAccount[]
+  walletTransfers       WalletTransfer[]
+  addresses             DepositAddress[]
+  deposits              Deposit[]
+  withdrawals           Withdrawal[]
+  packages              UserPackage[]
+  assignedCodes         TradeCode[]
+  trades                CopyTrade[]
+  incomes               Income[]
+  auditLogs             AuditLog[]       @relation("AuditActor")
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([referredById])
+}
+
+model WalletTransfer {
+  id              String               @id @default(cuid())
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id])
+  fromWallet      WalletType
+  toWallet        WalletType
+  amount          Decimal              @db.Decimal(36, 18)
+  feeAmount       Decimal              @default(0) @db.Decimal(36, 18)
+  receivedAmount  Decimal              @db.Decimal(36, 18)
+  reason          String
+  status          WalletTransferStatus @default(PENDING)
+  idempotencyKey  String               @unique
+  ledgerJournalId String?              @unique
+  failureReason   String?
+  completedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Asset {
+  id             String           @id @default(cuid())
+  symbol         String           @unique
+  name           String
+  decimals       Int
+  enabled        Boolean          @default(true)
+  walletAccounts WalletAccount[]
+  addresses      DepositAddress[]
+  deposits       Deposit[]
+  withdrawals    Withdrawal[]
+}
+
+model CoinMetadata {
+  id            String   @id @default(cuid())
+  symbol        String   @unique
+  name          String
+  pair          String   @unique
+  logoUrl       String?
+  localLogoPath String?
+  isActive      Boolean  @default(true)
+  displayOrder  Int      @default(9999)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive, displayOrder])
+}
+
+model WalletAccount {
+  id        String        @id @default(cuid())
+  userId    String?
+  user      User?         @relation(fields: [userId], references: [id])
+  assetId   String
+  asset     Asset         @relation(fields: [assetId], references: [id])
+  type      WalletType
+  entries   LedgerEntry[]
+  createdAt DateTime      @default(now())
+
+  @@unique([userId, assetId, type])
+  @@index([assetId, type])
+}
+
+model LedgerJournal {
+  id             String        @id @default(cuid())
+  referenceType  String
+  referenceId    String
+  idempotencyKey String        @unique
+  memo           String
+  status         JournalStatus @default(PENDING)
+  entries        LedgerEntry[]
+  postedAt       DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@unique([referenceType, referenceId])
+}
+
+model LedgerEntry {
+  id        String          @id @default(cuid())
+  journalId String
+  journal   LedgerJournal   @relation(fields: [journalId], references: [id])
+  accountId String
+  account   WalletAccount   @relation(fields: [accountId], references: [id])
+  direction LedgerDirection
+  amount    Decimal         @db.Decimal(36, 18)
+  createdAt DateTime        @default(now())
+
+  @@index([accountId, createdAt])
+}
+
+model ChainNetwork {
+  id                    String           @id @default(cuid())
+  key                   String           @unique
+  name                  String
+  requiredConfirmations Int
+  enabled               Boolean          @default(true)
+  addresses             DepositAddress[]
+  deposits              Deposit[]
+  withdrawals           Withdrawal[]
+}
+
+model DepositAddress {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id])
+  assetId         String
+  asset           Asset        @relation(fields: [assetId], references: [id])
+  networkId       String
+  network         ChainNetwork @relation(fields: [networkId], references: [id])
+  address         String
+  derivationIndex Int
+  path            String
+  active          Boolean      @default(true)
+  deposits        Deposit[]
+  createdAt       DateTime     @default(now())
+
+  @@unique([networkId, address])
+  @@unique([networkId, derivationIndex])
+  @@index([userId, assetId])
+}
+
+model Deposit {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  assetId       String
+  asset         Asset          @relation(fields: [assetId], references: [id])
+  networkId     String
+  network       ChainNetwork   @relation(fields: [networkId], references: [id])
+  addressId     String
+  address       DepositAddress @relation(fields: [addressId], references: [id])
+  txHash        String
+  eventIndex    Int            @default(0)
+  amount        Decimal        @db.Decimal(36, 18)
+  blockNumber   BigInt
+  confirmations Int            @default(0)
+  status        DepositStatus  @default(DETECTED)
+  creditedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([networkId, txHash, eventIndex])
+  @@index([status, createdAt])
+}
+
+model Withdrawal {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  assetId         String
+  asset           Asset            @relation(fields: [assetId], references: [id])
+  networkId       String
+  network         ChainNetwork     @relation(fields: [networkId], references: [id])
+  walletType      WalletType
+  address         String
+  amount          Decimal          @db.Decimal(36, 18)
+  feeAmount       Decimal          @default(0) @db.Decimal(36, 18)
+  receivableAmount Decimal         @db.Decimal(36, 18)
+  idempotencyKey  String           @unique
+  ledgerJournalId String?          @unique
+  txHash          String?
+  status          WithdrawalStatus @default(PENDING)
+  adminActionBy   String?
+  adminActionAt   DateTime?
+  rejectionReason String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model MlmPlan {
+  id                    String        @id @default(cuid())
+  name                  String
+  version               Int
+  packageAmountUsd      Decimal       @db.Decimal(18, 2)
+  directPercent         Decimal       @db.Decimal(5, 2)
+  matchingPercent       Decimal       @db.Decimal(5, 2)
+  levelPercents         Json
+  minQualifiedDirectUsd Decimal       @default(50) @db.Decimal(18, 2)
+  active                Boolean       @default(true)
+  packages              UserPackage[]
+  createdAt             DateTime      @default(now())
+
+  @@unique([name, version])
+}
+
+model UserPackage {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  planId      String
+  plan        MlmPlan       @relation(fields: [planId], references: [id])
+  amountUsd   Decimal       @db.Decimal(18, 2)
+  status      PackageStatus @default(ACTIVE)
+  purchasedAt DateTime      @default(now())
+  expiresAt   DateTime?
+
+  @@index([userId, status])
+}
+
+model TradeSlot {
+  id              String      @id @default(cuid())
+  label           String
+  utcTime         String
+  durationMinutes Int         @default(20)
+  creditDelayMins Int         @default(10)
+  enabled         Boolean     @default(true)
+  codes           TradeCode[]
+  trades          CopyTrade[]
+}
+
+model TradeCode {
+  id             String     @id @default(cuid())
+  code           String     @unique @db.VarChar(6)
+  returnPercent  Decimal    @db.Decimal(5, 2)
+  assignedUserId String?
+  assignedUser   User?      @relation(fields: [assignedUserId], references: [id])
+  slotId         String?
+  slot           TradeSlot? @relation(fields: [slotId], references: [id])
+  status         CodeStatus @default(ACTIVE)
+  expiresAt      DateTime?
+  maxUsage       Int        @default(1)
+  usedCount      Int        @default(0)
+  trades         CopyTrade[]
+  createdBy      String
+  createdAt      DateTime   @default(now())
+
+  @@index([status, expiresAt])
+  @@index([createdBy, createdAt])
+}
+
+model CopyTrade {
+  id               String      @id @default(cuid())
+  userId           String
+  user             User        @relation(fields: [userId], references: [id])
+  codeId           String
+  code             TradeCode   @relation(fields: [codeId], references: [id])
+  slotId           String
+  slot             TradeSlot   @relation(fields: [slotId], references: [id])
+  principalAmount  Decimal     @db.Decimal(36, 18)
+  returnPercent    Decimal     @db.Decimal(5, 2)
+  incomeAmount     Decimal?    @db.Decimal(36, 18)
+  status           TradeStatus @default(PENDING)
+  startedAt        DateTime
+  completesAt      DateTime
+  creditDueAt      DateTime
+  completedAt      DateTime?
+  incomeCreditedAt DateTime?
+  failureReason    String?
+  income           Income?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([status, completesAt])
+  @@index([status, creditDueAt])
+  @@index([userId, startedAt])
+  @@unique([userId, codeId])
+}
+
+model Income {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id])
+  type            IncomeType
+  sourceType      String
+  sourceId        String
+  amount          Decimal    @db.Decimal(36, 18)
+  copyTradeId     String?    @unique
+  copyTrade       CopyTrade? @relation(fields: [copyTradeId], references: [id])
+  ledgerJournalId String     @unique
+  createdAt       DateTime   @default(now())
+
+  @@unique([userId, type, sourceType, sourceId])
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+  actorType  String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
