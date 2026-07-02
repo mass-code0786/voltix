@@ -57,6 +57,7 @@ class BinanceMarketData {
   subscribe(listener:(event:string,data:unknown)=>void){this.listeners.add(listener);return()=>this.listeners.delete(listener);}
   configureTickerPairs(pairs:Array<string|null|undefined>){
     const next=new Set(pairs.filter((pair):pair is string=>typeof pair==="string").map(normalizeSymbol).filter(pair=>pair!=="USDTUSDT"));
+    if(next.size===0){this.logError("ticker-pairs-empty",new Error("Ignoring empty ticker pair configuration"));return;}
     const nextKey=[...next].sort().join(",");
     if(nextKey===this.tickerKey)return;
     this.tickerPairs=next;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { marketData } from "@/lib/market-data";
 import { prisma } from "@/lib/prisma";
+import { enabledTradingPairs } from "@/lib/coin-list";
 
 export async function GET() {
   await configureEnabledPairs();
@@ -11,6 +12,9 @@ export async function GET() {
 async function configureEnabledPairs(){
   try{
     const coins=await prisma.coinMetadata.findMany({where:{isActive:true},select:{symbol:true,pair:true}});
-    if(coins.length)marketData.configureTickerPairs(coins.map(coin=>coin.pair??coin.symbol));
-  }catch{}
+    marketData.configureTickerPairs(coins.length?coins.map(coin=>coin.pair??coin.symbol):enabledTradingPairs);
+  }catch(error){
+    console.error("[market-data] coin metadata unavailable, using catalog pairs",error);
+    marketData.configureTickerPairs(enabledTradingPairs);
+  }
 }

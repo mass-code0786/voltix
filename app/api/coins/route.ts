@@ -3,9 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { catalogBySymbol, coinCatalog } from "@/lib/coin-list";
 
 export async function GET(){
-  await ensureCatalogCoins();
-  const coins=await prisma.coinMetadata.findMany({orderBy:[{displayOrder:"asc"},{symbol:"asc"}]});
-  return NextResponse.json({coins});
+  try{
+    await ensureCatalogCoins();
+    const coins=await prisma.coinMetadata.findMany({orderBy:[{displayOrder:"asc"},{symbol:"asc"}]});
+    return NextResponse.json({coins});
+  }catch(error){
+    console.error("[coins] database unavailable, using catalog fallback",error);
+    return NextResponse.json({coins:catalogFallbackCoins(),source:"catalog-fallback"});
+  }
 }
 
 export async function POST(request:Request){
@@ -29,5 +34,12 @@ async function ensureCatalogCoins(){
       return {symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`};
     }),
     skipDuplicates:true,
+  });
+}
+
+function catalogFallbackCoins(){
+  return coinCatalog.map(coin=>{
+    const catalog=catalogBySymbol.get(coin.symbol)!;
+    return {id:coin.symbol,symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,logoUrl:null,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,createdAt:null,updatedAt:null};
   });
 }
