@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { CodeStatus, Prisma, TradeStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { MIN_COPY_TRADE_STAKE_USD, dailyTradeLimit, tradeTimeline } from "./trade-rules";
 import { postBalancedJournal } from "./ledger";
@@ -13,18 +13,18 @@ export async function redeemTradeCode(input: { userId: string; code: string; now
     const normalizedCode = input.code.trim().toUpperCase();
     const user = await tx.user.findUniqueOrThrow({ where: { id: input.userId } });
     const code = await tx.tradeCode.findUnique({ where: { code: normalizedCode }, include: { slot: true } });
-    const fail = async (reason: string) => {
+    const fail = async (reason: string): Promise<never> => {
       await tx.auditLog.create({ data: { actorId: input.userId, actorType: "USER", action: "COPY_TRADE_CODE_REJECTED", entityType: "TradeCode", entityId: code?.id ?? normalizedCode, ipAddress: input.ipAddress, metadata: { userId: input.userId, strategyCode: normalizedCode, result: "REJECTED", reason, device: input.device ?? null, attemptedAt: now.toISOString() } } });
       throw new Error(INVALID_CODE_MESSAGE);
     };
-    if (!code) await fail("NOT_FOUND");
-    if (code.status !== "ACTIVE") await fail(`STATUS_${code.status}`);
-    if (code.expiresAt && code.expiresAt <= now) await fail("EXPIRED");
-    if (code.assignedUserId && code.assignedUserId !== input.userId) await fail("ASSIGNED_TO_OTHER_USER");
-    if (!code.slotId || !code.slot) await fail("NO_TRADE_SLOT");
-    if (code.usedCount >= code.maxUsage) await fail("USAGE_LIMIT_EXCEEDED");
+    if (!code) return fail("NOT_FOUND");
+    if (code.status !== CodeStatus.ACTIVE) return fail(`STATUS_${code.status}`);
+    if (code.expiresAt && code.expiresAt <= now) return fail("EXPIRED");
+    if (code.assignedUserId && code.assignedUserId !== input.userId) return fail("ASSIGNED_TO_OTHER_USER");
+    if (!code.slotId || !code.slot) return fail("NO_TRADE_SLOT");
+    if (code.usedCount >= code.maxUsage) return fail("USAGE_LIMIT_EXCEEDED");
     const alreadyUsedByUser = await tx.copyTrade.findFirst({ where: { userId: input.userId, codeId: code.id }, select: { id: true } });
-    if (alreadyUsedByUser) await fail("USER_ALREADY_USED_CODE");
+    if (alreadyUsedByUser) return fail("USER_ALREADY_USED_CODE");
     if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to Bitex wallet before starting copy trade.");
     const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
     if (tradeAmount.lt(MIN_COPY_TRADE_STAKE)) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.`);
@@ -34,10 +34,10 @@ export async function redeemTradeCode(input: { userId: string; code: string; now
     if (tradesToday >= dailyTradeLimit({ joinedAt: user.joinedAt, now, permanentExtraTrade: user.permanentExtraTrade })) throw new Error("Daily trade limit reached");
 
     const claimed = await tx.tradeCode.updateMany({
-      where: { id: code.id, status: "ACTIVE", usedCount: { lt: code.maxUsage } },
+      where: { id: code.id, status: CodeStatus.ACTIVE, usedCount: { lt: code.maxUsage } },
       data: { usedCount: { increment: 1 } },
     });
-    if (claimed.count !== 1) await fail("CONCURRENT_REPLAY_OR_LIMIT");
+    if (claimed.count !== 1) return fail("CONCURRENT_REPLAY_OR_LIMIT");
     const locked = await tx.user.updateMany({
       where: { id: input.userId, bitexBalance: { gte: tradeAmount } },
       data: { bitexBalance: { decrement: tradeAmount } },
@@ -46,7 +46,7 @@ export async function redeemTradeCode(input: { userId: string; code: string; now
 
     const timeline = tradeTimeline(now, code.slot.durationMinutes, code.slot.creditDelayMins);
     const trade = await tx.copyTrade.create({
-      data: { userId: input.userId, codeId: code.id, slotId: code.slotId, principalAmount: tradeAmount, returnPercent: code.returnPercent, status: "ACTIVE", startedAt: now, ...timeline },
+      data: { userId: input.userId, codeId: code.id, slotId: code.slotId, principalAmount: tradeAmount, returnPercent: code.returnPercent, status: TradeStatus.ACTIVE, startedAt: now, ...timeline },
     });
     await tx.auditLog.create({ data: { actorId: input.userId, actorType: "USER", action: "COPY_TRADE_STARTED", entityType: "CopyTrade", entityId: trade.id, ipAddress: input.ipAddress, metadata: { userId: input.userId, strategyCode: code.code, tradeAmount: tradeAmount.toString(), profitPercent: code.returnPercent.toString(), startTime: now.toISOString(), completionTime: timeline.completesAt.toISOString(), result: "STARTED", device: input.device ?? null } } });
     return trade;
@@ -57,7 +57,7 @@ export async function completeCopyTrade(tradeId: string, now = new Date()) {
   return prisma.$transaction(async (tx) => {
     const trade = await tx.copyTrade.findUniqueOrThrow({ where: { id: tradeId } });
     if (trade.status === "COMPLETED" || trade.status === "INCOME_CREDITED") return trade;
-    if (trade.status !== "ACTIVE" || trade.completesAt > now) throw new Error("Trade is not complete");
+    if (trade.status !== TradeStatus.ACTIVE || trade.completesAt > now) throw new Error("Trade is not complete");
     return tx.copyTrade.update({ where: { id: trade.id }, data: { status: "COMPLETED", completedAt: now } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
