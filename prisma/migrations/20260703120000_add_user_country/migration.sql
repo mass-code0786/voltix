@@ -1,1 +1,2 @@
-ALTER TABLE "User" ADD COLUMN "country" TEXT NOT NULL DEFAULT 'United States';
+-- Compatibility no-op.
+-- User.country is created by the baseline migration.

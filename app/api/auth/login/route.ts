@@ -14,13 +14,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid login details" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: parsed.data.email },
-    select: { id: true, uid: true, name: true, email: true, country: true, vipRank: true, passwordHash: true, status: true },
-  });
-  if (!user || user.status !== "ACTIVE" || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
-    return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+  let user;
+  try {
+    user = await prisma.user.findUnique({
+      where: { email: parsed.data.email },
+      select: { id: true, uid: true, name: true, email: true, country: true, vipRank: true, passwordHash: true, status: true },
+    });
+  } catch (error) {
+    console.error("[auth] login failed", error);
+    return NextResponse.json({ error: "Login failed" }, { status: 500 });
   }
+  if (!user || user.status !== "ACTIVE" || !(await verifyPassword(parsed.data.password, user.passwordHash))) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
 
   await createSession(user.id);
   const { passwordHash: _passwordHash, status: _status, ...safeUser } = user;
