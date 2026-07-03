@@ -14,9 +14,10 @@ import { Sparkline } from "./sparkline";
 import { CandlestickChart } from "./candlestick-chart";
 import { OrderBookPanel } from "./order-book";
 import { BrandLogo } from "./brand-logo";
-import { coins, teamMembers, usdInr } from "@/lib/demo-data";
+import { coins, teamMembers } from "@/lib/demo-data";
 import { compact, inr, usd } from "@/lib/format";
 import { useLiveTickers } from "@/lib/use-market-data";
+import { currencyConfigForCountry, formatLocalCurrency } from "@/lib/local-currency";
 
 type Tab = "home" | "markets" | "trade" | "bitex" | "team" | "wallet";
 type TradeCategory = "spot" | "futures" | "grid" | "margin" | "copy";
@@ -148,6 +149,7 @@ export default function AppShell() {
     [ArrowUpRight, "BTC transfer", "-0.002 BTC", "Completed"],
     [CircleDollarSign, "Copy trade income", "+24.50 BITEX", "Credited to Bitex"],
   ]);
+  const [userCountry, setUserCountry] = useState("United States");
 
   const notify = (message: string) => {
     setToast(message);
@@ -164,6 +166,15 @@ export default function AppShell() {
         setWalletCoins(current => mergeCoinSettings(current, settings));
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/me")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        if (typeof data.country === "string" && data.country.trim()) setUserCountry(data.country);
+      })
+      .catch(() => setUserCountry("United States"));
   }, []);
 
   const syncNavigation = useCallback(() => {
@@ -328,8 +339,8 @@ export default function AppShell() {
   }, [activeCopyTrade, notify]);
 
   const screen = {
-    home: <HomeScreen onNavigate={navigate} onOpenCopyTrade={()=>navigate("bitex")} assets={walletCoins} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} />,
-    markets: <MarketsScreen coins={walletCoins} />,
+    home: <HomeScreen onNavigate={navigate} onOpenCopyTrade={()=>navigate("bitex")} assets={walletCoins} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
+    markets: <MarketsScreen coins={walletCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
     bitex: <BitexCopyTradePage activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} />,
     team: <TeamScreen notify={notify} />,
@@ -405,10 +416,11 @@ function ProfileMenu({ close,notify,openVerification,openHelp }: { close: () => 
   return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">Arjun Kumar</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>UID 762897</span><button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button><span>· Pro member</span></div></div><button onClick={openVerification} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button><Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link></div></>;
 }
 
-function HomeScreen({ onNavigate, onOpenCopyTrade, assets, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance }: { onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenCopyTrade: () => void; assets: AppCoin[]; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number }) {
+function HomeScreen({ onNavigate, onOpenCopyTrade, assets, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance, userCountry }: { onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenCopyTrade: () => void; assets: AppCoin[]; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number; userCountry: string }) {
   const total = useMemo(() => assets.reduce((sum, c) => sum + c.price * c.balance, 0), [assets]);
   const live=useLiveTickers();
   const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
+  const localCurrency=useMemo(()=>currencyConfigForCountry(userCountry),[userCountry]);
   const marketPulseAssets=useMemo<MarketCoin[]>(()=>homeMarketPulseSymbols.flatMap(symbol=>{
     const coin=assets.find(item=>item.symbol===symbol);
     if(!coin)return [];
@@ -430,7 +442,7 @@ function HomeScreen({ onNavigate, onOpenCopyTrade, assets, balanceVisible, setBa
 
     <div className="grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
       <div className="space-y-5">
-        <section className={card}><div className="flex items-center justify-between px-5 pb-2 pt-5"><div><h2 className="font-bold">Market pulse</h2></div><button onClick={() => onNavigate("markets")} className="text-xs font-bold text-lime">View all</button></div><div className="divide-y divide-line/70">{marketPulseAssets.map(c => <CoinRow key={c.symbol} coin={c} />)}</div></section>
+        <section className={card}><div className="flex items-center justify-between px-5 pb-2 pt-5"><div><h2 className="font-bold">Market pulse</h2></div><button onClick={() => onNavigate("markets")} className="text-xs font-bold text-lime">View all</button></div><div className="divide-y divide-line/70">{marketPulseAssets.map(c => <CoinRow key={c.symbol} coin={c} localCurrency={localCurrency} />)}</div></section>
       </div>
       <div className="space-y-5">
         <TradeActiveCard onClick={onOpenCopyTrade} trade={activeCopyTrade} previewAmount={bitexBalance * 0.01} />
@@ -450,19 +462,20 @@ function TopCopyTraders() {
   return <section className={`${card} overflow-hidden`}><div className="border-b border-line px-5 py-4"><h2 className="font-bold">Top Copy Traders</h2></div><div className="divide-y divide-line/60">{topCopyTraders.map((trader,index)=>{const assetIndex=index+1;return <div key={`${trader.country}-${trader.name}`} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-5"><img src={`/trader-flags/flag-${assetIndex}.png`} alt={`${trader.country} flag`} className="h-5 w-7 shrink-0 rounded object-cover ring-1 ring-white/10 sm:h-6 sm:w-8" /><img src={`/traders/trader-${assetIndex}.png`} alt={`${trader.name} profile`} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-lime/25 sm:h-10 sm:w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{trader.name}</p><p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-500">{trader.message}</p></div><div className="w-[42px] shrink-0 text-right sm:w-[54px]"><p className="text-xs font-black text-lime sm:text-sm">+{trader.monthlyReturn}%</p><p className="text-[9px] text-slate-500 sm:text-[10px]">/ month</p></div><img src={`/trader-charts/chart-${assetIndex}.png`} alt={`${trader.name} monthly profit chart`} className="h-[34px] w-[54px] shrink-0 rounded-md border border-line bg-black/20 object-cover" /></div>;})}</div></section>;
 }
 
-function CoinRow({ coin, action }: { coin: AppCoin&{volume?:number;live?:boolean}; action?: () => void }) {
+function CoinRow({ coin, action, localCurrency=currencyConfigForCountry() }: { coin: AppCoin&{volume?:number;live?:boolean}; action?: () => void; localCurrency?: ReturnType<typeof currencyConfigForCountry> }) {
   const shown = coin.price < .001 ? coin.price.toFixed(8) : coin.price < 1 ? coin.price.toFixed(4) : coin.price.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  return <button onClick={action} className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-5 py-4 text-left hover:bg-white/[.025]"><div className="flex min-w-0 items-center gap-3"><CoinMark symbol={coin.symbol} color={coin.color} logoPath={coin.localLogoPath} /><div><div className="font-bold">{coin.symbol}<span className="ml-1.5 text-[10px] font-normal text-slate-500">/USDT</span></div><p className="mt-1 text-xs text-slate-500">{coin.name}</p><p className="mt-1 text-[9px] text-slate-600">24h vol {coin.live&&coin.volume!==undefined?compact(coin.volume):"--"}</p></div></div><div className="hidden sm:block"><Sparkline data={coin.spark} positive={coin.change >= 0} /></div><div className="min-w-[88px] text-right"><p className="text-sm font-bold">{coin.live?`$${shown}`:"--"}</p>{coin.live&&<p className="mt-1 text-[11px] text-slate-500">?{(coin.price * usdInr).toLocaleString("en-IN", { maximumFractionDigits: coin.price < 1 ? 4 : 2 })}</p>}<p className={`mt-1 text-xs font-bold ${coin.change >= 0 ? "text-mint" : "text-danger"}`}>{coin.live?`${coin.change >= 0 ? "+" : ""}${coin.change.toFixed(2)}%`:"Live"}</p></div></button>;
+  return <button onClick={action} className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-5 py-4 text-left hover:bg-white/[.025]"><div className="flex min-w-0 items-center gap-3"><CoinMark symbol={coin.symbol} color={coin.color} logoPath={coin.localLogoPath} /><div><div className="font-bold">{coin.symbol}<span className="ml-1.5 text-[10px] font-normal text-slate-500">/USDT</span></div><p className="mt-1 text-xs text-slate-500">{coin.name}</p><p className="mt-1 text-[9px] text-slate-600">24h vol {coin.live&&coin.volume!==undefined?compact(coin.volume):"--"}</p></div></div><div className="hidden sm:block"><Sparkline data={coin.spark} positive={coin.change >= 0} /></div><div className="min-w-[88px] text-right"><p className="text-sm font-bold">{coin.live?`$${shown}`:"--"}</p>{coin.live&&<p className="mt-1 text-[11px] text-slate-500">{formatLocalCurrency(coin.price, localCurrency)}</p>}<p className={`mt-1 text-xs font-bold ${coin.change >= 0 ? "text-mint" : "text-danger"}`}>{coin.live?`${coin.change >= 0 ? "+" : ""}${coin.change.toFixed(2)}%`:"Live"}</p></div></button>;
 }
 
-function MarketsScreen({coins:marketBase}:{coins:AppCoin[]}) {
+function MarketsScreen({coins:marketBase,userCountry}:{coins:AppCoin[];userCountry:string}) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
   const live=useLiveTickers();
   const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
+  const localCurrency=useMemo(()=>currencyConfigForCountry(userCountry),[userCountry]);
   const marketCoins=useMemo(()=>marketBase.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return {...coin,price:ticker?.price??0,change:ticker?.changePercent??0,volume:ticker?.volume,quoteVolume:ticker?.quoteVolume,live:Boolean(ticker?.price)};}),[marketBase,tickerMap]);
   const list = marketCoins.filter(c => (filter === "Gainers" ? c.change > 2 : filter === "Losers" ? c.change < 0 : true) && `${c.symbol}${c.name}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className="space-y-5"><div><h2 className="text-2xl font-black">Markets</h2></div><div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search coin" className="w-full rounded-2xl border border-line bg-panel py-3.5 pl-11 pr-4 text-sm outline-none focus:border-lime/50" /></div><div className="flex gap-2 overflow-auto no-scrollbar">{["All","Gainers","Losers","Favorites"].map(item=><button key={item} onClick={()=>setFilter(item)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold ${filter===item?"bg-lime text-ink":"border border-line bg-panel text-slate-400"}`}>{item}</button>)}</div><section className={`${card} overflow-hidden`}><div className="grid grid-cols-[1fr_auto] border-b border-line px-5 py-3 text-[10px] uppercase tracking-wider text-slate-600 sm:grid-cols-[1fr_84px_auto]"><span>Asset / volume</span><span className="hidden text-center sm:block">24h trend</span><span className="text-right">Price / change</span></div>{list.map(c=><CoinRow key={c.symbol} coin={c} action={()=>{window.location.href=`/markets/${c.pair}`;}}/>)}</section></div>;
+  return <div className="space-y-5"><div><h2 className="text-2xl font-black">Markets</h2></div><div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search coin" className="w-full rounded-2xl border border-line bg-panel py-3.5 pl-11 pr-4 text-sm outline-none focus:border-lime/50" /></div><div className="flex gap-2 overflow-auto no-scrollbar">{["All","Gainers","Losers","Favorites"].map(item=><button key={item} onClick={()=>setFilter(item)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold ${filter===item?"bg-lime text-ink":"border border-line bg-panel text-slate-400"}`}>{item}</button>)}</div><section className={`${card} overflow-hidden`}><div className="grid grid-cols-[1fr_auto] border-b border-line px-5 py-3 text-[10px] uppercase tracking-wider text-slate-600 sm:grid-cols-[1fr_84px_auto]"><span>Asset / volume</span><span className="hidden text-center sm:block">24h trend</span><span className="text-right">Price / change</span></div>{list.map(c=><CoinRow key={c.symbol} coin={c} localCurrency={localCurrency} action={()=>{window.location.href=`/markets/${c.pair}`;}}/>)}</section></div>;
 }
 
 function TradeWorkspace({category}:{category:TradeCategory}) {

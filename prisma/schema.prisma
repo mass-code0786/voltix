@@ -93,6 +93,7 @@ model User {
   email                 String           @unique
   uid                   String           @unique @db.VarChar(12)
   name                  String
+  country               String           @default("United States")
   passwordHash          String
   role                  Role             @default(USER)
   status                UserStatus       @default(ACTIVE)
