@@ -29,6 +29,7 @@ type DemoWithdrawal = { id: string; user: string; uid: string; walletType: "SPOT
 type ActiveCopyTrade = { code: string; amount: number; returnPercent: number; profit: number };
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: "Completed" | "Credited" };
 type AppCoin = typeof coins[number];
+type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath">> & { localLogoPath?: string | null };
 
 const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
@@ -406,7 +407,14 @@ function ProfileMenu({ close,notify,openVerification,openHelp }: { close: () => 
 
 function HomeScreen({ onNavigate, onOpenCopyTrade, assets, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance }: { onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenCopyTrade: () => void; assets: AppCoin[]; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number }) {
   const total = useMemo(() => assets.reduce((sum, c) => sum + c.price * c.balance, 0), [assets]);
-  const marketPulseAssets=homeMarketPulseSymbols.map(symbol=>assets.find(coin=>coin.symbol===symbol)).filter((coin): coin is AppCoin=>Boolean(coin));
+  const live=useLiveTickers();
+  const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
+  const marketPulseAssets=useMemo<MarketCoin[]>(()=>homeMarketPulseSymbols.flatMap(symbol=>{
+    const coin=assets.find(item=>item.symbol===symbol);
+    if(!coin)return [];
+    const ticker=tickerMap.get(coin.pair??`${coin.symbol}USDT`);
+    return [{...coin,price:ticker?.price??0,change:ticker?.changePercent??0,volume:ticker?.volume,quoteVolume:ticker?.quoteVolume,live:Boolean(ticker?.price)}];
+  }),[assets,tickerMap]);
   const shortcuts: { icon: typeof Home; label: string; onClick: () => void }[] = [
     { icon: ArrowDownToLine, label: "Add Fund", onClick: () => onNavigate("wallet", "overview", "deposit") },
     { icon: Send, label: "Transfer", onClick: () => onNavigate("wallet") },
