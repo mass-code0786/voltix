@@ -32,6 +32,8 @@ type CopyTradeHistory = ActiveCopyTrade & { date: string; status: "Completed" | 
 type AppCoin = typeof coins[number];
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath">> & { localLogoPath?: string | null };
+type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; vipRank?: string | null };
+type AuthMode = "login" | "register";
 
 const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
@@ -66,10 +68,10 @@ const topCopyTraders = [
 const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA","TRX","AVAX","DOT","LINK","TON","SHIB","LTC","BCH","ATOM","APT","ARB","OP","PEPE","NEAR","INJ","SEI","FIL"];
 const invalidCopyTradeCodeMessage = "Invalid copy trade code. Please use a valid code issued by the platform.";
 const demoTradeCodes: Record<string, { returnPercent: number; status: "ACTIVE" | "INACTIVE" | "EXPIRED" | "DELETED"; maxUsage: number; usedCount: number; createdBy: string; expiresAt: string }> = {
-  A7K92B: { returnPercent: 2.5, status: "ACTIVE", maxUsage: 1, usedCount: 1, createdBy: "admin@voltix.app", expiresAt: "2026-06-21T20:10:00Z" },
-  Q4M8XZ: { returnPercent: 2.2, status: "ACTIVE", maxUsage: 50, usedCount: 12, createdBy: "admin@voltix.app", expiresAt: "2026-06-22T20:10:00Z" },
-  B9T2KL: { returnPercent: 2.5, status: "ACTIVE", maxUsage: 10, usedCount: 0, createdBy: "superadmin@voltix.app", expiresAt: "2026-06-22T20:10:00Z" },
-  P6V3RD: { returnPercent: 2.15, status: "EXPIRED", maxUsage: 1, usedCount: 0, createdBy: "admin@voltix.app", expiresAt: "2026-06-20T14:10:00Z" },
+  A7K92B: { returnPercent: 2.5, status: "ACTIVE", maxUsage: 1, usedCount: 1, createdBy: "system", expiresAt: "2026-06-21T20:10:00Z" },
+  Q4M8XZ: { returnPercent: 2.2, status: "ACTIVE", maxUsage: 50, usedCount: 12, createdBy: "system", expiresAt: "2026-06-22T20:10:00Z" },
+  B9T2KL: { returnPercent: 2.5, status: "ACTIVE", maxUsage: 10, usedCount: 0, createdBy: "system", expiresAt: "2026-06-22T20:10:00Z" },
+  P6V3RD: { returnPercent: 2.15, status: "EXPIRED", maxUsage: 1, usedCount: 0, createdBy: "system", expiresAt: "2026-06-20T14:10:00Z" },
 };
 const minCopyTradeStake = 1;
 
@@ -144,6 +146,8 @@ export default function AppShell() {
   ]);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [walletActivity, setWalletActivity] = useState<WalletActivity[]>([
     [ArrowDownLeft, "USDT deposit", "+500.00 USDT", "Confirmed"],
     [ArrowUpRight, "BTC transfer", "-0.002 BTC", "Completed"],
@@ -155,6 +159,11 @@ export default function AppShell() {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
   };
+
+  const applyAuthenticatedUser = useCallback((user: CurrentUser | null) => {
+    setCurrentUser(user);
+    if (user?.country?.trim()) setUserCountry(user.country);
+  }, []);
 
   useEffect(() => {
     fetch("/api/coins")
@@ -172,10 +181,12 @@ export default function AppShell() {
     fetch("/api/me")
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => {
-        if (typeof data.country === "string" && data.country.trim()) setUserCountry(data.country);
+        const user = data?.user ?? data;
+        if (data?.authenticated === false || !user) return;
+        applyAuthenticatedUser(user);
       })
       .catch(() => setUserCountry("United States"));
-  }, []);
+  }, [applyAuthenticatedUser]);
 
   const syncNavigation = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -293,16 +304,16 @@ export default function AppShell() {
     if (walletType === "SPOT") {
       setWalletCoins((current) => current.map((coin) => coin.symbol === "USDT" ? { ...coin, balance: coin.balance - amount } : coin));
       setWalletActivity((current) => [[ArrowUpRight, "Spot withdrawal", `-${amount.toFixed(2)} USDT`, `${received.toFixed(2)} sent instantly, ${fee.toFixed(2)} fee`], ...current]);
-      setWithdrawals((current) => [{ id, user: "Arjun Kumar", uid: "762897", walletType, amount, address, network, fee, receivable: received, status: "COMPLETED" }, ...current]);
+      setWithdrawals((current) => [{ id, user: currentUser?.name?.trim() || "Current user", uid: currentUser?.uid?.trim() || "Unavailable", walletType, amount, address, network, fee, receivable: received, status: "COMPLETED" }, ...current]);
       notify(`${received.toFixed(2)} USDT sent instantly after ${fee.toFixed(2)} USDT withdrawal fee`);
     } else {
-      setWithdrawals((current) => [{ id, user: "Arjun Kumar", uid: "762897", walletType, amount, address, network, fee, receivable: received, status: "PENDING" }, ...current]);
+      setWithdrawals((current) => [{ id, user: currentUser?.name?.trim() || "Current user", uid: currentUser?.uid?.trim() || "Unavailable", walletType, amount, address, network, fee, receivable: received, status: "PENDING" }, ...current]);
       setWalletActivity((current) => [[FileClock, "Bitex withdrawal request", `${amount.toFixed(2)} USDT`, "Pending admin approval"], ...current]);
       notify("Bitex withdrawal request sent to admin");
     }
     setWithdrawalOpen(false);
     return true;
-  }, [bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, walletCoins]);
+  }, [bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, walletCoins]);
 
   const startCopyTrade = useCallback((rawCode: string) => {
     const code = rawCode.toUpperCase();
@@ -343,7 +354,7 @@ export default function AppShell() {
     markets: <MarketsScreen coins={walletCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
     bitex: <BitexCopyTradePage activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} />,
-    team: <TeamScreen notify={notify} />,
+    team: <TeamScreen notify={notify} currentUser={currentUser} />,
     wallet: <WalletScreen notify={notify} assets={walletCoins} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} />,
   }[tab];
 
@@ -376,11 +387,11 @@ export default function AppShell() {
               </div>
               <div className="flex items-center gap-2">
                 <button className="relative rounded-full border border-line bg-panel p-2.5 text-slate-300"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-panel bg-lime" /></button>
-                <button onClick={() => setMenu(!menu)} className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-lime to-mint text-sm font-black text-ink">AK</button>
+                <button onClick={() => setMenu(!menu)} className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-lime to-mint text-sm font-black text-ink">{initials(currentUser?.name)}</button>
               </div>
             </div>
           </header>
-          {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} openVerification={()=>{setMenu(false);setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
+          {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);setAuthMode("login");}} openRegister={()=>{setMenu(false);setAuthMode("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});applyAuthenticatedUser(null);setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
           <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8">{screen}</div>
         </main>
       </div>
@@ -400,8 +411,9 @@ export default function AppShell() {
       {tradeMenuOpen&&<TradeMenu close={()=>setTradeMenuOpen(false)} select={openTrade}/>} 
       {transferOpen&&<WalletTransferModal initialFrom={transferOpen.from} initialTo={transferOpen.to} balances={{SPOT:walletCoins.find((coin)=>coin.symbol==="USDT")?.balance??0,FUTURES:futuresBalance,BITEX:bitexBalance}} close={()=>setTransferOpen(null)} transfer={transferWallet}/>} 
       {withdrawalOpen&&<WithdrawalModal balances={{SPOT:walletCoins.find((coin)=>coin.symbol==="USDT")?.balance??0,BITEX:bitexBalance}} bitexUnlocked={bitexPrincipalLocked>0&&bitexIncomeEarned>=bitexPrincipalLocked*2} close={()=>setWithdrawalOpen(false)} withdraw={createWithdrawal}/>} 
-      {verificationOpen&&<VerificationRequestModal close={()=>setVerificationOpen(false)} notify={notify}/>} 
+      {verificationOpen&&<VerificationRequestModal close={()=>setVerificationOpen(false)} notify={notify} user={currentUser}/>} 
       {helpOpen&&<HelpCenterModal close={()=>setHelpOpen(false)} notify={notify}/>} 
+      {authMode&&<AuthModal mode={authMode} setMode={setAuthMode} close={()=>setAuthMode(null)} authenticated={(user)=>{applyAuthenticatedUser(user);setAuthMode(null);notify(authMode==="register"?"Registration complete":"Logged in");}}/>}
       {toast && <div className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 whitespace-nowrap rounded-full border border-lime/20 bg-[#17231e] px-5 py-3 text-xs font-bold shadow-2xl lg:bottom-8"><span className="mr-2 text-lime">?</span>{toast}</div>}
     </div>
   );
@@ -411,9 +423,40 @@ function Brand({ compact = false }: { compact?: boolean }) {
   return <BrandLogo compact={compact} />;
 }
 
-function ProfileMenu({ close,notify,openVerification,openHelp }: { close: () => void;notify:(message:string)=>void;openVerification:()=>void;openHelp:()=>void }) {
-  const copyUid=()=>{navigator.clipboard?.writeText("762897");notify("UID copied");};
-  return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">Arjun Kumar</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>UID 762897</span><button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button><span>· Pro member</span></div></div><button onClick={openVerification} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button><Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link></div></>;
+function initials(name?: string | null) {
+  const parts = name?.trim().split(/\s+/).filter(Boolean) ?? [];
+  return parts.length ? parts.slice(0, 2).map(part => part[0]).join("").toUpperCase() : "AC";
+}
+
+function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerification,openHelp }: { close: () => void;notify:(message:string)=>void;user:CurrentUser|null;openLogin:()=>void;openRegister:()=>void;logout:()=>void;openVerification:()=>void;openHelp:()=>void }) {
+  const uid=user?.uid?.trim();
+  const copyUid=()=>{if(!uid){notify("UID unavailable");return;}navigator.clipboard?.writeText(uid);notify("UID copied");};
+  return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">{user?.name?.trim() || "Account"}</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>{uid?`UID ${uid}`:"Not logged in"}</span>{uid&&<button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button>}<span>· {user?.vipRank || "Pro"} member</span></div></div>{user?<button onClick={logout} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Logout</button>:<><button onClick={openLogin} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Login</button><button onClick={openRegister} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Users size={17}/> Register</button></>}<button onClick={openVerification} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button><Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link></div></>;
+}
+
+function AuthModal({mode,setMode,close,authenticated}:{mode:AuthMode;setMode:(mode:AuthMode)=>void;close:()=>void;authenticated:(user:CurrentUser)=>void}) {
+  const [name,setName]=useState("");
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [confirmPassword,setConfirmPassword]=useState("");
+  const [country,setCountry]=useState("United States");
+  const [referralCode,setReferralCode]=useState("");
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(false);
+  const countries=["United States","India","UAE","Bangladesh","Pakistan","Saudi Arabia","Nepal"];
+  const register=mode==="register";
+  const submit=async()=>{
+    setError("");
+    setLoading(true);
+    try{
+      const response=await fetch(register?"/api/auth/register":"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(register?{name,email,password,confirmPassword,country,referralCode}:{email,password})});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||"Authentication failed");
+      authenticated(data.user);
+    }catch(err){setError(err instanceof Error?err.message:"Authentication failed");}
+    finally{setLoading(false);}
+  };
+  return <div className="fixed inset-0 z-[90] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">{register?"Create account":"Login"}</h3><p className="mt-1 text-xs text-slate-500">{register?"Register with your details":"Access your Voltix account"}</p></div><button onClick={close}><X/></button></div><div className="mt-5 space-y-4">{register&&<FormField label="Full name" value={name} onChange={setName}/>}<FormField label="Email" value={email} onChange={setEmail}/><label className="block text-xs font-bold text-slate-400">Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label>{register&&<><label className="block text-xs font-bold text-slate-400">Confirm password<input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Country<select value={country} onChange={e=>setCountry(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none">{countries.map(item=><option key={item}>{item}</option>)}</select></label><FormField label="Referral code / sponsor code" value={referralCode} onChange={setReferralCode} placeholder="Optional"/></>}{error&&<p className="text-xs text-danger">{error}</p>}</div><button disabled={loading} onClick={submit} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Please wait...":register?"Create account":"Login"}</button><button onClick={()=>{setError("");setMode(register?"login":"register");}} className="mt-3 w-full text-center text-xs font-bold text-lime">{register?"Already have an account? Login":"Create a new account"}</button></div></div>;
 }
 
 function HomeScreen({ onNavigate, onOpenCopyTrade, assets, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance, userCountry }: { onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenCopyTrade: () => void; assets: AppCoin[]; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number; userCountry: string }) {
@@ -524,9 +567,9 @@ function WalletBalanceRow({label,balance}:{label:string;balance:number}) { retur
 
 function ActivityRows({rows}:{rows:readonly WalletActivity[]}) { return <div className="mt-4 space-y-4">{rows.map(([I,t,a,s],index)=><div className="flex items-center gap-3" key={`${t}-${a}-${index}`}><div className="rounded-xl bg-white/5 p-2.5 text-slate-400"><I size={17}/></div><div className="flex-1"><p className="text-sm font-semibold">{t}</p><p className="text-[10px] text-mint">{s}</p></div><p className="text-xs font-bold">{a}</p></div>)}</div> }
 
-function DepositModal({close,notify}:{close:()=>void;notify:(s:string)=>void}) { const addr="0x7F3B91a8D4C62E5a1108f42D8E6b2C309A7dB844"; return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex justify-between"><div><h3 className="text-xl font-black">Deposit to Main/Spot wallet</h3><p className="mt-1 text-xs text-slate-500">Send only USDT on BNB Smart Chain</p></div><button onClick={close}><X/></button></div><div className="mx-auto my-6 grid h-44 w-44 place-items-center rounded-2xl bg-white p-3"><div className="grid h-full w-full grid-cols-5 gap-1 bg-ink p-2">{Array.from({length:25}).map((_,i)=><i key={i} className={`${[0,1,2,5,7,10,11,12,14,17,20,22,23,24].includes(i)?"bg-white":"bg-ink"}`}/>)}</div></div><p className="text-center text-[10px] uppercase tracking-widest text-slate-500">Your unique deposit address</p><button onClick={()=>{navigator.clipboard?.writeText(addr);notify("Address copied")}} className="mt-3 flex w-full items-center gap-3 rounded-xl border border-line bg-ink p-3 text-left"><span className="min-w-0 flex-1 break-all text-xs text-slate-300">{addr}</span><Copy size={16} className="shrink-0 text-lime"/></button><div className="mt-4 rounded-xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. After 12 network confirmations, funds are credited only to the Main/Spot wallet.</div></div></div> }
+function DepositModal({close,notify}:{close:()=>void;notify:(s:string)=>void}) { const addr=""; const copyAddress=()=>{if(!addr){notify("Deposit address unavailable");return;}navigator.clipboard?.writeText(addr);notify("Address copied");}; return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex justify-between"><div><h3 className="text-xl font-black">Deposit to Main/Spot wallet</h3><p className="mt-1 text-xs text-slate-500">Send only USDT on BNB Smart Chain</p></div><button onClick={close}><X/></button></div><div className="mx-auto my-6 grid h-44 w-44 place-items-center rounded-2xl bg-white p-3"><div className="grid h-full w-full grid-cols-5 gap-1 bg-ink p-2">{Array.from({length:25}).map((_,i)=><i key={i} className={`${[0,1,2,5,7,10,11,12,14,17,20,22,23,24].includes(i)?"bg-white":"bg-ink"}`}/>)}</div></div><p className="text-center text-[10px] uppercase tracking-widest text-slate-500">Your unique deposit address</p><button onClick={copyAddress} className="mt-3 flex w-full items-center gap-3 rounded-xl border border-line bg-ink p-3 text-left"><span className="min-w-0 flex-1 break-all text-xs text-slate-300">{addr || "Deposit address unavailable"}</span><Copy size={16} className="shrink-0 text-lime"/></button><div className="mt-4 rounded-xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. After 12 network confirmations, funds are credited only to the Main/Spot wallet.</div></div></div> }
 
-function TeamScreen({notify}:{notify:(s:string)=>void}) { const referralLink="voltix.app/join/762897"; const [shareOpen,setShareOpen]=useState(false); const copyReferral=()=>{navigator.clipboard?.writeText(referralLink);notify("Referral link copied");}; return <div className="space-y-5"><div><h2 className="text-2xl font-black">My Network</h2><p className="mt-1 text-sm text-slate-500">Grow your team and unlock rewards</p></div><section className="rounded-2xl border border-lime/20 bg-gradient-to-br from-[#18291f] to-panel px-4 py-3"><div className="flex min-w-0 items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Referral Link</p><p className="mt-1 truncate text-xs font-bold text-white sm:text-sm">{referralLink}</p></div><div className="flex shrink-0 items-center gap-2"><button onClick={copyReferral} aria-label="Copy referral link" className="grid h-9 w-9 place-items-center rounded-xl bg-lime text-ink"><Copy size={15}/></button><button onClick={()=>setShareOpen(true)} aria-label="Share referral link" className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-white/5 text-lime"><Share2 size={15}/></button></div></div></section><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Direct team" value="5" /><Stat label="Total network" value="28" /><Stat label="Active" value="24" /><Stat label="Team volume" value="$8.4K" /></div><section className={`${card} p-5`}><div className="flex items-center justify-between"><h3 className="font-bold">Extra trade goal</h3><span className="text-xs font-bold text-[#f6c85f]">3 / 5</span></div><p className="mt-2 text-xs text-slate-500">Qualified directs with a $50+ active package</p><div className="mt-4 h-2 rounded-full bg-ink"><div className="h-full w-3/5 rounded-full bg-gradient-to-r from-[#f6c85f] to-lime"/></div></section><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line p-5"><div><h3 className="font-bold">Team members</h3><p className="mt-1 text-xs text-slate-500">Across all levels</p></div><button className="flex items-center gap-1 text-xs text-slate-400">All levels <ChevronDown size={14}/></button></div>{teamMembers.map((m,i)=><div key={m.name} className="flex items-center gap-3 border-b border-line/60 p-4 last:border-0"><div className={`grid h-10 w-10 place-items-center rounded-full text-xs font-black ${i<3?"bg-lime/10 text-lime":"bg-white/5 text-slate-400"}`}>{m.initials}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{m.name}</p><span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-500">L{m.level}</span></div><p className="mt-1 text-[10px] text-slate-500">Joined {m.joined}</p></div><div className="text-right"><p className="text-xs font-bold">${m.package}</p><p className="mt-1 text-[10px] text-mint">? {m.status}</p></div></div>)}</section>{shareOpen&&<ReferralShareSheet link={referralLink} close={()=>setShareOpen(false)} copied={()=>{copyReferral();setShareOpen(false);}}/>}</div> }
+function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:CurrentUser|null}) { const referralLink=currentUser?.uid?.trim()?`voltix.app/join/${currentUser.uid.trim()}`:""; const [shareOpen,setShareOpen]=useState(false); const copyReferral=()=>{if(!referralLink){notify("Referral link unavailable");return;}navigator.clipboard?.writeText(referralLink);notify("Referral link copied");}; return <div className="space-y-5"><div><h2 className="text-2xl font-black">My Network</h2><p className="mt-1 text-sm text-slate-500">Grow your team and unlock rewards</p></div><section className="rounded-2xl border border-lime/20 bg-gradient-to-br from-[#18291f] to-panel px-4 py-3"><div className="flex min-w-0 items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Referral Link</p><p className="mt-1 truncate text-xs font-bold text-white sm:text-sm">{referralLink || "Referral link unavailable"}</p></div><div className="flex shrink-0 items-center gap-2"><button onClick={copyReferral} aria-label="Copy referral link" className="grid h-9 w-9 place-items-center rounded-xl bg-lime text-ink"><Copy size={15}/></button><button onClick={()=>referralLink&&setShareOpen(true)} aria-label="Share referral link" className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-white/5 text-lime"><Share2 size={15}/></button></div></div></section><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Direct team" value="5" /><Stat label="Total network" value="28" /><Stat label="Active" value="24" /><Stat label="Team volume" value="$8.4K" /></div><section className={`${card} p-5`}><div className="flex items-center justify-between"><h3 className="font-bold">Extra trade goal</h3><span className="text-xs font-bold text-[#f6c85f]">3 / 5</span></div><p className="mt-2 text-xs text-slate-500">Qualified directs with a $50+ active package</p><div className="mt-4 h-2 rounded-full bg-ink"><div className="h-full w-3/5 rounded-full bg-gradient-to-r from-[#f6c85f] to-lime"/></div></section><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line p-5"><div><h3 className="font-bold">Team members</h3><p className="mt-1 text-xs text-slate-500">Across all levels</p></div><button className="flex items-center gap-1 text-xs text-slate-400">All levels <ChevronDown size={14}/></button></div>{teamMembers.map((m,i)=><div key={m.name} className="flex items-center gap-3 border-b border-line/60 p-4 last:border-0"><div className={`grid h-10 w-10 place-items-center rounded-full text-xs font-black ${i<3?"bg-lime/10 text-lime":"bg-white/5 text-slate-400"}`}>{m.initials}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{m.name}</p><span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-500">L{m.level}</span></div><p className="mt-1 text-[10px] text-slate-500">Joined {m.joined}</p></div><div className="text-right"><p className="text-xs font-bold">${m.package}</p><p className="mt-1 text-[10px] text-mint">? {m.status}</p></div></div>)}</section>{shareOpen&&referralLink&&<ReferralShareSheet link={referralLink} close={()=>setShareOpen(false)} copied={()=>{copyReferral();setShareOpen(false);}}/>}</div> }
 
 function ReferralShareSheet({link,close,copied}:{link:string;close:()=>void;copied:()=>void}) {
   const url=`https://${link}`;
@@ -574,16 +617,16 @@ function WithdrawalModal({balances,bitexUnlocked,close,withdraw}:{balances:Recor
   return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Send</h3><p className="mt-1 text-xs text-slate-500">Spot is instant. Bitex is manual after 2x income.</p></div><button onClick={close} aria-label="Close withdrawal"><X/></button></div><label className="mt-5 block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={e=>{setWalletType(e.target.value as "SPOT"|"BITEX");setError("");}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="SPOT">Spot Wallet</option><option value="BITEX">Bitex Wallet</option></select></label>{locked&&<div className="mt-3 rounded-xl border border-[#624e1a] bg-[#2a2412] p-3 text-xs leading-5 text-[#c9b98d]">Bitex withdrawal will unlock after completing 2x copy trade income.</div>}<label className="mt-4 block text-xs font-bold text-slate-400">Amount</label><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3.5 outline-none"/><button onClick={()=>setAmount(available.toFixed(2))} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div><p className="mt-1 text-[10px] text-slate-500">Available: {available.toFixed(2)} USDT</p><label className="mt-4 block text-xs font-bold text-slate-400">External wallet or exchange address<input value={address} onChange={e=>{setAddress(e.target.value);setError("");}} placeholder="0x... or exchange deposit address" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>setNetwork(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Wallet" value={`${walletType[0]}${walletType.slice(1).toLowerCase()} Wallet`}/><LineItem label="Amount" value={`${value.toFixed(2)} USDT`}/>{walletType==="SPOT"&&<><LineItem label="Fixed fee" value={`${fixedFee.toFixed(2)} USDT`}/><LineItem label="5% fee" value={`${percentageFee.toFixed(2)} USDT`}/></>}<LineItem label="Total fee" value={`${totalFee.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${received.toFixed(2)} USDT`}/><LineItem label="Status" value={walletType==="SPOT"?"Completed instantly":"Pending admin approval"}/></div><button onClick={submit} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink">Confirm Send</button></div></div>
 }
 
-function VerificationRequestModal({close,notify}:{close:()=>void;notify:(message:string)=>void}) {
-  const [name,setName]=useState("Arjun Kumar");
+function VerificationRequestModal({close,notify,user}:{close:()=>void;notify:(message:string)=>void;user:CurrentUser|null}) {
+  const [name,setName]=useState(user?.name?.trim() ?? "");
   const [documentType,setDocumentType]=useState("Aadhaar Card");
   const [documentNumber,setDocumentNumber]=useState("");
   const submit=()=>{if(!name.trim()||!documentNumber.trim()){notify("Complete all verification fields");return;}notify("Verification request submitted");close();};
-  return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Verification Request</h3><p className="mt-1 text-xs text-slate-500">Submit identity details for review.</p></div><button onClick={close}><X/></button></div><div className="mt-5 space-y-4"><FormField label="Full name" value={name} onChange={setName}/><label className="block text-xs font-bold text-slate-400">UID<input value="762897" readOnly className="mt-2 w-full rounded-xl border border-line bg-ink/70 p-3 text-slate-500 outline-none"/></label><label className="block text-xs font-bold text-slate-400">Document type<select value={documentType} onChange={e=>setDocumentType(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option>Aadhaar Card</option><option>PAN Card</option><option>Passport</option><option>Driving License</option></select></label><FormField label="Document number" value={documentNumber} onChange={setDocumentNumber} placeholder="Enter document number"/><label className="block text-xs font-bold text-slate-400">Upload document/image<span className="mt-2 flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-line bg-ink/60 px-4 py-6 text-xs font-normal text-slate-500 hover:border-lime/40"><input type="file" accept="image/*,.pdf" className="hidden"/>Choose image or PDF</span></label></div><button onClick={submit} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink">Submit request</button></div></div>;
+  return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Verification Request</h3><p className="mt-1 text-xs text-slate-500">Submit identity details for review.</p></div><button onClick={close}><X/></button></div><div className="mt-5 space-y-4"><FormField label="Full name" value={name} onChange={setName}/><label className="block text-xs font-bold text-slate-400">UID<input value={user?.uid?.trim() || "Unavailable"} readOnly className="mt-2 w-full rounded-xl border border-line bg-ink/70 p-3 text-slate-500 outline-none"/></label><label className="block text-xs font-bold text-slate-400">Document type<select value={documentType} onChange={e=>setDocumentType(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option>Aadhaar Card</option><option>PAN Card</option><option>Passport</option><option>Driving License</option></select></label><FormField label="Document number" value={documentNumber} onChange={setDocumentNumber} placeholder="Enter document number"/><label className="block text-xs font-bold text-slate-400">Upload document/image<span className="mt-2 flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-line bg-ink/60 px-4 py-6 text-xs font-normal text-slate-500 hover:border-lime/40"><input type="file" accept="image/*,.pdf" className="hidden"/>Choose image or PDF</span></label></div><button onClick={submit} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink">Submit request</button></div></div>;
 }
 
 function HelpCenterModal({close,notify}:{close:()=>void;notify:(message:string)=>void}) {
-  const [messages,setMessages]=useState<{from:"user"|"ai";text:string}[]>([{from:"ai",text:"Hi Arjun. How can I help with deposits, transfers, copy trade, or verification?"}]);
+  const [messages,setMessages]=useState<{from:"user"|"ai";text:string}[]>([{from:"ai",text:"Hi. How can I help with deposits, transfers, copy trade, or verification?"}]);
   const [input,setInput]=useState("");
   const [ticketOpen,setTicketOpen]=useState(false);
   const sendMessage=(text=input)=>{const clean=text.trim();if(!clean)return;setMessages(current=>[...current,{from:"user",text:clean},{from:"ai",text:"I checked the demo help guide. Try reviewing the relevant wallet or verification status. If this does not solve it, raise a support ticket below."}]);setInput("");};
