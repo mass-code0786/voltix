@@ -1,16 +1,18 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { getTeamSnapshot } from "@/lib/domain/team-service";
 import { getUserWalletSnapshot } from "@/lib/domain/user-wallets";
+import { getUserAssetsAndTotals } from "@/lib/domain/asset-service";
 
-type DashboardClient = Pick<PrismaClient, "asset" | "walletAccount" | "user" | "income" | "userPackage"> | Prisma.TransactionClient;
+type DashboardClient = Pick<PrismaClient, "asset" | "walletAccount" | "ledgerEntry" | "copyTrade" | "user" | "income" | "userPackage"> | Prisma.TransactionClient;
 
 export async function getDashboardSnapshot(client: DashboardClient, userId: string, origin: string) {
-  const [user, wallet, team, incomeTotals, todaysProfit, activePackage] = await Promise.all([
+  const [user, wallet, assets, team, incomeTotals, todaysProfit, activePackage] = await Promise.all([
     client.user.findUniqueOrThrow({
       where: { id: userId },
       select: { id: true, name: true, uid: true, vipRank: true },
     }),
     getUserWalletSnapshot(client, userId),
+    getUserAssetsAndTotals(client, userId),
     getTeamSnapshot(client, userId, origin),
     client.income.aggregate({
       where: { userId },
@@ -26,11 +28,6 @@ export async function getDashboardSnapshot(client: DashboardClient, userId: stri
     }),
   ]);
 
-  const totalPortfolio =
-    wallet.balances.spot +
-    wallet.balances.funding +
-    wallet.balances.bitex;
-
   return {
     user: {
       name: user.name,
@@ -38,7 +35,7 @@ export async function getDashboardSnapshot(client: DashboardClient, userId: stri
       vipRank: user.vipRank,
     },
     summary: {
-      totalPortfolio,
+      totalPortfolio: assets.totals.portfolio,
       todaysProfit: decimalToNumber(todaysProfit._sum.amount ?? 0),
       totalIncome: decimalToNumber(incomeTotals._sum.amount ?? 0),
       activePackageAmount: decimalToNumber(activePackage._sum.amountUsd ?? 0),

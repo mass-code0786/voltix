@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserWalletSnapshot } from "@/lib/domain/user-wallets";
+import { transferWallet } from "@/lib/domain/wallet-service";
 import { prisma } from "@/lib/prisma";
+
+const transferSchema = z.object({
+  fromWallet: z.enum(["SPOT", "FUTURES", "BITEX"]),
+  toWallet: z.enum(["SPOT", "FUTURES", "BITEX"]),
+  amount: z.coerce.number().positive(),
+});
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -11,4 +20,35 @@ export async function GET() {
 
   const wallet = await getUserWalletSnapshot(prisma, user.id);
   return NextResponse.json({ authenticated: true, userId: user.id, wallet });
+}
+
+export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
+  const parsed = transferSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid wallet transfer" }, { status: 400 });
+  }
+  try {
+    const transfer = await transferWallet({
+      userId: user.id,
+      fromWallet: parsed.data.fromWallet,
+      toWallet: parsed.data.toWallet,
+      amount: new Prisma.Decimal(parsed.data.amount),
+      idempotencyKey: `${user.id}:${Date.now()}:${crypto.randomUUID()}`,
+    });
+    return NextResponse.json({
+      transfer: {
+        id: transfer.id,
+        fromWallet: transfer.fromWallet,
+        toWallet: transfer.toWallet,
+        amount: Number(transfer.amount.toString()),
+        receivedAmount: Number(transfer.receivedAmount.toString()),
+        status: transfer.status,
+        createdAt: transfer.createdAt.toISOString(),
+      },
+    }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Wallet transfer failed" }, { status: 400 });
+  }
 }

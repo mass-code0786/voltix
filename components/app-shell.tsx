@@ -50,6 +50,49 @@ type WalletSnapshot = {
     unlocked?: boolean;
   };
 };
+type AssetTotals = {
+  available?: {
+    spot?: number;
+    futures?: number;
+    bitex?: number;
+  };
+  locked?: {
+    spot?: number;
+    futures?: number;
+    bitex?: number;
+  };
+  total?: {
+    spot?: number;
+    futures?: number;
+    bitex?: number;
+  };
+  portfolio?: number;
+  bitex?: {
+    principal?: number;
+    incomeEarned?: number;
+    targetAmount?: number;
+    unlocked?: boolean;
+  };
+};
+type AssetRecord = {
+  accountId: string;
+  walletType: UserWallet;
+  symbol: string;
+  name: string;
+  balance: number;
+  enabled: boolean;
+};
+type WalletHistoryRecord = {
+  id: string;
+  walletType: UserWallet;
+  asset: string;
+  direction: "DEBIT" | "CREDIT";
+  amount: number;
+  signedAmount: number;
+  title: string;
+  status: string;
+  createdAt: string;
+};
 type TeamMember = {
   id: string;
   uid?: string | null;
@@ -99,6 +142,27 @@ type AiSubscriptionStatus = {
   validityDays: number;
   subscription: AiSubscription | null;
 };
+type KycSnapshot = {
+  status: "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED";
+  request: { id: string; name: string; documentType: string; documentNumber: string; documentImagePath?: string | null; rejectionReason?: string | null; createdAt: string } | null;
+};
+type SupportTicket = {
+  id: string;
+  subject: string;
+  message: string;
+  status: "OPEN" | "PENDING" | "CLOSED";
+  adminReply?: string | null;
+  createdAt: string;
+};
+type NotificationItem = {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  readAt: string | null;
+  createdAt: string;
+  unread: boolean;
+};
 
 const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
@@ -120,12 +184,7 @@ const card = "rounded-2xl border border-line bg-panel/80";
 const coinSettingsKey = "voltix.coin-settings";
 const topCopyTraders: { country: string; name: string; monthlyReturn: number; message: string }[] = [];
 const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA","TRX","AVAX","DOT","LINK","TON","SHIB","LTC","BCH","ATOM","APT","ARB","OP","PEPE","NEAR","INJ","SEI","FIL"];
-const demoFuturesBalance = 350;
-const demoBitexBalance = 1284.65;
-const demoBitexTransferred = 2468.25;
-const demoBitexPrincipalLocked = 2468.25;
-const demoBitexIncomeEarned = 642.40;
-const demoBalancesBySymbol = new Map(coins.map(coin => [coin.symbol, coin.balance]));
+const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, bitex: 0 }, locked: { spot: 0, futures: 0, bitex: 0 }, total: { spot: 0, futures: 0, bitex: 0 }, portfolio: 0, bitex: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
 
 function applyCoinSettings(baseCoins: AppCoin[]): AppCoin[] {
   if (typeof window === "undefined") return baseCoins;
@@ -168,11 +227,43 @@ function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSet
   return merged.sort((a,b)=>(a.displayOrder??9999)-(b.displayOrder??9999));
 }
 
-function withSpotBalances(current: AppCoin[], spotBalance: number | null) {
-  return current.map(coin => ({
-    ...coin,
-    balance: spotBalance === null ? demoBalancesBySymbol.get(coin.symbol) ?? 0 : coin.symbol === "USDT" ? spotBalance : 0,
-  }));
+function mergeAssetRecords(baseCoins: AppCoin[], assets: AssetRecord[]): AppCoin[] {
+  const bySymbol = new Map(baseCoins.map(coin => [coin.symbol, coin]));
+  const grouped = new Map<string, AssetRecord>();
+  for (const asset of assets) {
+    const current = grouped.get(asset.symbol);
+    grouped.set(asset.symbol, current ? { ...current, balance: current.balance + Number(asset.balance ?? 0), enabled: current.enabled || asset.enabled } : { ...asset, balance: Number(asset.balance ?? 0) });
+  }
+  return Array.from(grouped.values()).map((asset, index) => {
+    const base = bySymbol.get(asset.symbol);
+    return {
+      ...(base ?? {
+        symbol: asset.symbol,
+        name: asset.name,
+        pair: `${asset.symbol}USDT`,
+        price: asset.symbol === "USDT" ? 1 : 0,
+        change: 0,
+        color: "#94a3b8",
+        spark: [20,21,20,22,21,23,22,24,23],
+        logoPath: `/coin-logos/${asset.symbol.toLowerCase()}.png`,
+        localLogoPath: `/coin-logos/${asset.symbol.toLowerCase()}.png`,
+        isActive: asset.enabled,
+        displayOrder: 9999 + index,
+      }),
+      name: base?.name ?? asset.name,
+      balance: Number(asset.balance ?? 0),
+      isActive: asset.enabled,
+    };
+  }).sort((a,b)=>(a.displayOrder??9999)-(b.displayOrder??9999));
+}
+
+function mapLedgerHistory(rows: WalletHistoryRecord[]): WalletActivity[] {
+  return rows.map(row => [
+    row.direction === "CREDIT" ? ArrowDownLeft : ArrowUpRight,
+    row.title || `${row.walletType} wallet movement`,
+    `${row.signedAmount >= 0 ? "+" : "-"}${Math.abs(Number(row.amount)).toFixed(2)} ${row.asset}`,
+    row.status,
+  ] as WalletActivity);
 }
 
 export default function AppShell() {
@@ -186,16 +277,21 @@ export default function AppShell() {
   const [toast, setToast] = useState("");
   const [activeCopyTrade, setActiveCopyTrade] = useState<ActiveCopyTrade | null>(null);
   const [copyTradeHistory, setCopyTradeHistory] = useState<CopyTradeHistory[]>([]);
-  const [walletCoins, setWalletCoins] = useState(() => applyCoinSettings(coins).map((coin) => ({ ...coin })));
-  const [futuresBalance, setFuturesBalance] = useState(demoFuturesBalance);
-  const [bitexBalance, setBitexBalance] = useState(demoBitexBalance);
-  const [bitexTransferred, setBitexTransferred] = useState(demoBitexTransferred);
-  const [bitexPrincipalLocked, setBitexPrincipalLocked] = useState(demoBitexPrincipalLocked);
-  const [bitexIncomeEarned, setBitexIncomeEarned] = useState(demoBitexIncomeEarned);
+  const [marketCoins, setMarketCoins] = useState(() => applyCoinSettings(coins).map((coin) => ({ ...coin, balance: 0 })));
+  const [walletAssets, setWalletAssets] = useState<AppCoin[]>([]);
+  const [assetTotals, setAssetTotals] = useState<AssetTotals>(emptyAssetTotals);
+  const [futuresBalance, setFuturesBalance] = useState(0);
+  const [bitexBalance, setBitexBalance] = useState(0);
+  const [bitexTransferred, setBitexTransferred] = useState(0);
+  const [bitexPrincipalLocked, setBitexPrincipalLocked] = useState(0);
+  const [bitexIncomeEarned, setBitexIncomeEarned] = useState(0);
   const [transferOpen, setTransferOpen] = useState<{ from: UserWallet; to: UserWallet } | null>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
@@ -223,12 +319,11 @@ export default function AppShell() {
 
   const applyWalletSnapshot = useCallback((wallet: WalletSnapshot | null) => {
     if (!wallet) {
-      setWalletCoins(current => withSpotBalances(current, null));
-      setFuturesBalance(demoFuturesBalance);
-      setBitexBalance(demoBitexBalance);
-      setBitexTransferred(demoBitexTransferred);
-      setBitexPrincipalLocked(demoBitexPrincipalLocked);
-      setBitexIncomeEarned(demoBitexIncomeEarned);
+      setFuturesBalance(0);
+      setBitexBalance(0);
+      setBitexTransferred(0);
+      setBitexPrincipalLocked(0);
+      setBitexIncomeEarned(0);
       return;
     }
 
@@ -239,7 +334,6 @@ export default function AppShell() {
     const bitexPrincipal = Number(wallet.bitex?.principal ?? 0);
     const bitexIncome = Number(wallet.bitex?.incomeEarned ?? 0);
 
-    setWalletCoins(current => withSpotBalances(current, spotBalance));
     setFuturesBalance(fundingBalance);
     setBitexBalance(realBitexBalance);
     setBitexTransferred(bitexPrincipal);
@@ -296,37 +390,41 @@ export default function AppShell() {
     return status;
   }, []);
 
-  const refreshPaymentHistory = useCallback(async (user: CurrentUser | null) => {
+  const refreshAssets = useCallback(async (user: CurrentUser | null) => {
     if (!user) {
+      setWalletAssets([]);
+      setAssetTotals(emptyAssetTotals);
       setWalletActivity([]);
       return;
     }
-    const [depositResponse, withdrawalResponse] = await Promise.all([
-      fetch("/api/deposits"),
-      fetch("/api/withdrawals"),
-    ]);
-    if (!depositResponse.ok || !withdrawalResponse.ok) throw new Error("Payment history request failed");
-    const [depositData, withdrawalData] = await Promise.all([depositResponse.json(), withdrawalResponse.json()]);
-    const deposits = Array.isArray(depositData?.deposits) ? depositData.deposits as DepositRecord[] : [];
-    const withdrawals = Array.isArray(withdrawalData?.withdrawals) ? withdrawalData.withdrawals as WithdrawalRecord[] : [];
-    setWalletActivity([
-      ...deposits.map(deposit => ({
-        icon: ArrowDownLeft,
-        title: "USDT deposit request",
-        amount: `+${Number(deposit.amount).toFixed(2)} ${deposit.asset}`,
-        status: deposit.status,
-        createdAt: deposit.createdAt,
-      })),
-      ...withdrawals.map(withdrawal => ({
-        icon: withdrawal.status === "PENDING" ? FileClock : ArrowUpRight,
-        title: `${withdrawal.walletType} withdrawal request`,
-        amount: `-${Number(withdrawal.amount).toFixed(2)} ${withdrawal.asset}`,
-        status: withdrawal.status,
-        createdAt: withdrawal.createdAt,
-      })),
-    ]
-      .sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime())
-      .map(item=>[item.icon, item.title, item.amount, item.status] as WalletActivity));
+    const response = await fetch("/api/assets");
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Assets request failed");
+    const assets = Array.isArray(data.assets) ? data.assets as AssetRecord[] : [];
+    const totals = data.totals as AssetTotals;
+    const history = Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
+    setWalletAssets(mergeAssetRecords(marketCoins, assets));
+    setAssetTotals(totals ?? emptyAssetTotals);
+    setFuturesBalance(Number(totals?.total?.futures ?? 0));
+    setBitexBalance(Number(totals?.total?.bitex ?? 0));
+    setBitexTransferred(Number(totals?.bitex?.principal ?? 0));
+    setBitexPrincipalLocked(Number(totals?.bitex?.principal ?? 0));
+    setBitexIncomeEarned(Number(totals?.bitex?.incomeEarned ?? 0));
+    setWalletActivity(mapLedgerHistory(history));
+  }, [marketCoins]);
+
+  const refreshNotifications = useCallback(async (user: CurrentUser | null) => {
+    if (!user) {
+      setNotifications([]);
+      setUnreadNotifications(0);
+      setNotificationOpen(false);
+      return;
+    }
+    const response = await fetch("/api/notifications");
+    if (!response.ok) throw new Error("Notifications request failed");
+    const data = await response.json();
+    setNotifications(Array.isArray(data.notifications) ? data.notifications as NotificationItem[] : []);
+    setUnreadNotifications(Number(data.unreadCount ?? 0));
   }, []);
 
   useEffect(() => {
@@ -336,7 +434,7 @@ export default function AppShell() {
         if (!Array.isArray(data.coins) || !data.coins.length) return;
         const settings = Object.fromEntries(data.coins.map((coin: CoinSetting & {symbol:string}) => [coin.symbol, coin])) as Record<string,CoinSetting>;
         window.localStorage.setItem(coinSettingsKey, JSON.stringify(settings));
-        setWalletCoins(current => mergeCoinSettings(current, settings));
+        setMarketCoins(current => mergeCoinSettings(current, settings).map(coin => ({ ...coin, balance: 0 })));
       })
       .catch(() => {});
   }, []);
@@ -378,11 +476,25 @@ export default function AppShell() {
   }, [currentUser, refreshAiSubscription]);
 
   useEffect(() => {
-    refreshPaymentHistory(currentUser)
+    refreshAssets(currentUser)
       .catch(() => {
-        if (!currentUser) setWalletActivity([]);
+        if (!currentUser) {
+          setWalletAssets([]);
+          setAssetTotals(emptyAssetTotals);
+          setWalletActivity([]);
+        }
       });
-  }, [currentUser, refreshPaymentHistory]);
+  }, [currentUser, refreshAssets]);
+
+  useEffect(() => {
+    refreshNotifications(currentUser)
+      .catch(() => {
+        if (!currentUser) {
+          setNotifications([]);
+          setUnreadNotifications(0);
+        }
+      });
+  }, [currentUser, refreshNotifications]);
 
   const syncNavigation = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -425,6 +537,7 @@ export default function AppShell() {
     setWalletSection(section ?? "overview");
     setWalletAction(action ?? null);
     setMenu(false);
+    setNotificationOpen(false);
     updateUrl(nextTab, section, action);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [updateUrl]);
@@ -464,43 +577,35 @@ export default function AppShell() {
     updateUrl("wallet", section);
   }, [updateUrl]);
 
-  const transferWallet = useCallback((from: UserWallet, to: UserWallet, amount: number) => {
-    const spotBalance = walletCoins.find((coin) => coin.symbol === "USDT")?.balance ?? 0;
+  const transferWallet = useCallback(async (from: UserWallet, to: UserWallet, amount: number) => {
+    const spotBalance = Number(assetTotals.total?.spot ?? 0);
     const balances = { SPOT: spotBalance, FUTURES: futuresBalance, BITEX: bitexBalance };
     if (from === "BITEX" || amount <= 0 || amount > balances[from]) return false;
-    const received = amount;
-    const adjustSpot = (delta: number) => setWalletCoins((current) => current.map((coin) => coin.symbol === "USDT" ? { ...coin, balance: coin.balance + delta } : coin));
-    if (from === "SPOT") adjustSpot(-amount);
-    if (from === "FUTURES") setFuturesBalance((current) => current - amount);
-    if (to === "SPOT") adjustSpot(received);
-    if (to === "FUTURES") setFuturesBalance((current) => current + received);
-    if (to === "BITEX") {
-      setBitexBalance((current) => current + received);
-      setBitexTransferred((current) => current + amount);
-      setBitexPrincipalLocked((current) => current + amount);
+    const response = await fetch("/api/wallet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromWallet: from, toWallet: to, amount }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      notify(data.error || "Transfer could not be completed");
+      return false;
     }
-    setWalletActivity((current) => [
-      [ArrowLeftRight, `${from} to ${to}`, `${received.toFixed(2)} USDT received`, "Completed"],
-      ...current,
-    ]);
+    await Promise.all([refreshWallet(currentUser), refreshAssets(currentUser), refreshDashboard(currentUser)]);
     setTransferOpen(null);
     notify(`${amount.toFixed(2)} USDT transferred to ${to}`);
     return true;
-  }, [bitexBalance, futuresBalance, walletCoins]);
+  }, [assetTotals, bitexBalance, currentUser, futuresBalance, notify, refreshAssets, refreshDashboard, refreshWallet]);
 
   const createDeposit = useCallback(async ({ amount, network, txHash }: DepositInput) => {
     const response = await fetch("/api/deposits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, network, txHash }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, message: data.error || "Deposit request failed" };
-    await refreshPaymentHistory(currentUser);
+    await refreshAssets(currentUser);
     notify("Deposit request submitted");
     setWalletAction(null);
     updateUrl("wallet", walletSection, null, true);
     return { ok: true, message: "" };
-  }, [currentUser, notify, refreshPaymentHistory, updateUrl, walletSection]);
+  }, [currentUser, notify, refreshAssets, updateUrl, walletSection]);
 
   const createWithdrawal = useCallback(async ({ walletType, amount, address, network }: WithdrawalInput) => {
-    const spotBalance = walletCoins.find((coin) => coin.symbol === "USDT")?.balance ?? 0;
+    const spotBalance = Number(assetTotals.total?.spot ?? 0);
     const bitexUnlocked = bitexPrincipalLocked > 0 && bitexIncomeEarned >= bitexPrincipalLocked * 2;
     if (walletType === "SPOT" && (amount <= 0 || amount > spotBalance)) return { ok: false, message: "Insufficient Spot wallet balance" };
     if (walletType === "BITEX" && (!bitexUnlocked || amount <= 0 || amount > bitexBalance)) return { ok: false, message: !bitexUnlocked ? "AI withdrawal will unlock after completing 2x copy trade income." : "Insufficient AI wallet balance" };
@@ -510,11 +615,11 @@ export default function AppShell() {
     const response = await fetch("/api/withdrawals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletType, amount, address, network }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, message: data.error || "Withdrawal request failed" };
-    await refreshPaymentHistory(currentUser);
+    await refreshAssets(currentUser);
     notify("Withdrawal request sent to admin");
     setWithdrawalOpen(false);
     return { ok: true, message: "" };
-  }, [bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, notify, refreshPaymentHistory, walletCoins]);
+  }, [assetTotals, bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, notify, refreshAssets]);
 
   const startCopyTrade = useCallback(async (rawCode: string) => {
     const response = await fetch("/api/copy-trade/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: rawCode.toUpperCase() }) });
@@ -522,10 +627,10 @@ export default function AppShell() {
     if (!response.ok) return { ok: false, message: data.error || "Copy trade failed" };
     await refreshCopyTradeStatus(currentUser);
     await refreshWallet(currentUser);
-    setWalletActivity((current) => [[LineChart, "Copy trade stake locked", `-${Number(data.trade.amount).toFixed(2)} USDT`, `Strategy code ${data.trade.code}`], ...current]);
+    await refreshAssets(currentUser);
     notify(`Strategy ${data.trade.code} verified. ${Number(data.trade.amount).toFixed(2)} USDT locked from AI.`);
     return { ok: true, message: "" };
-  }, [currentUser, notify, refreshCopyTradeStatus, refreshWallet]);
+  }, [currentUser, notify, refreshAssets, refreshCopyTradeStatus, refreshWallet]);
 
   const purchaseAi = useCallback(async () => {
     if (!currentUser) {
@@ -558,13 +663,23 @@ export default function AppShell() {
     refreshWallet(currentUser).catch(() => {});
   }, [currentUser, refreshCopyTradeStatus, refreshWallet]);
 
+  const markNotificationsRead = useCallback(async () => {
+    if (!currentUser || !unreadNotifications) return;
+    const response = await fetch("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setUnreadNotifications(Number(data.unreadCount ?? 0));
+      setNotifications(current => current.map(notification => ({ ...notification, readAt: notification.readAt ?? new Date().toISOString(), unread: false })));
+    }
+  }, [currentUser, unreadNotifications]);
+
   const screen = {
-    home: <HomeScreen onNavigate={navigate} onOpenCopyTrade={()=>navigate("bitex")} assets={walletCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
-    markets: <MarketsScreen coins={walletCoins} userCountry={userCountry} />,
+    home: <HomeScreen onNavigate={navigate} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
+    markets: <MarketsScreen coins={marketCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
     bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>setAuthMode("login")} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
-    wallet: <WalletScreen notify={notify} assets={walletCoins} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
+    wallet: <WalletScreen notify={notify} assets={walletAssets} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
 
   return (
@@ -595,11 +710,12 @@ export default function AppShell() {
                 <h1 className="font-bold">{tab==="team"?"Team":tabs.find((item) => item.id === tab)?.label}</h1>
               </div>
               <div className="flex items-center gap-2">
-                <button className="relative rounded-full border border-line bg-panel p-2.5 text-slate-300"><Bell size={18} /></button>
-                <button onClick={() => setMenu(!menu)} className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-lime to-mint text-sm font-black text-ink">{initials(currentUser?.name)}</button>
+                <button onClick={() => { if (!currentUser) { setAuthMode("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }} className="relative rounded-full border border-line bg-panel p-2.5 text-slate-300" aria-label="Notifications"><Bell size={18} />{unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-lime px-1 text-[10px] font-black text-ink">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}</button>
+                <button onClick={() => { setMenu(!menu); setNotificationOpen(false); }} className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-lime to-mint text-sm font-black text-ink">{initials(currentUser?.name)}</button>
               </div>
             </div>
           </header>
+          {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);setAuthMode("login");}} openRegister={()=>{setMenu(false);setAuthMode("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
           <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8">{screen}</div>
         </main>
@@ -618,8 +734,8 @@ export default function AppShell() {
         </div>
       </nav>
       {tradeMenuOpen&&<TradeMenu close={()=>setTradeMenuOpen(false)} select={openTrade}/>} 
-      {transferOpen&&<WalletTransferModal initialFrom={transferOpen.from} initialTo={transferOpen.to} balances={{SPOT:walletCoins.find((coin)=>coin.symbol==="USDT")?.balance??0,FUTURES:futuresBalance,BITEX:bitexBalance}} close={()=>setTransferOpen(null)} transfer={transferWallet}/>} 
-      {withdrawalOpen&&<WithdrawalModal balances={{SPOT:walletCoins.find((coin)=>coin.symbol==="USDT")?.balance??0,BITEX:bitexBalance}} bitexUnlocked={bitexPrincipalLocked>0&&bitexIncomeEarned>=bitexPrincipalLocked*2} close={()=>setWithdrawalOpen(false)} withdraw={createWithdrawal}/>} 
+      {transferOpen&&<WalletTransferModal initialFrom={transferOpen.from} initialTo={transferOpen.to} balances={{SPOT:Number(assetTotals.total?.spot??0),FUTURES:futuresBalance,BITEX:bitexBalance}} close={()=>setTransferOpen(null)} transfer={transferWallet}/>} 
+      {withdrawalOpen&&<WithdrawalModal balances={{SPOT:Number(assetTotals.total?.spot??0),BITEX:bitexBalance}} bitexUnlocked={bitexPrincipalLocked>0&&bitexIncomeEarned>=bitexPrincipalLocked*2} close={()=>setWithdrawalOpen(false)} withdraw={createWithdrawal}/>} 
       {verificationOpen&&<VerificationRequestModal close={()=>setVerificationOpen(false)} notify={notify} user={currentUser}/>} 
       {helpOpen&&<HelpCenterModal close={()=>setHelpOpen(false)} notify={notify}/>} 
       {authMode&&<AuthModal mode={authMode} setMode={setAuthMode} close={()=>setAuthMode(null)} authenticated={async()=>{await refreshMe();setAuthMode(null);notify(authMode==="register"?"Registration complete":"Logged in");}}/>}
@@ -647,6 +763,10 @@ function normalizeTrade(raw: ActiveCopyTrade & { startedAt?: string; remainingTi
     status: raw.status ?? "Completed",
     date: raw.date ?? (raw.startedAt ? new Date(raw.startedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""),
   };
+}
+
+function NotificationMenu({ close, notifications, unreadCount, markRead }: { close: () => void; notifications: NotificationItem[]; unreadCount: number; markRead: () => void }) {
+  return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => <div key={notification.id} className={`rounded-xl p-3 ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p><p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div></div></div>) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
 }
 
 function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerification,openHelp }: { close: () => void;notify:(message:string)=>void;user:CurrentUser|null;openLogin:()=>void;openRegister:()=>void;logout:()=>void;openVerification:()=>void;openHelp:()=>void }) {
@@ -831,7 +951,7 @@ function WalletScreen({notify,assets,futuresBalance,bitexBalance,bitexIncomeEarn
  const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotBalance=assets.find(c=>c.symbol==="USDT")?.balance??0; const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+bitexBalance;
 return <div className="space-y-5"><div><h2 className="text-2xl font-black">Asset</h2></div><div className="flex gap-1 overflow-x-auto rounded-xl border border-line bg-panel p-1 no-scrollbar">{(["overview","assets","ledger"] as const).map(item=><button key={item} onClick={()=>onSectionChange(item)} aria-current={section===item?"page":undefined} className={`min-w-[76px] flex-1 rounded-lg px-3 py-2.5 text-xs font-bold capitalize ${section===item?"bg-lime text-ink":"text-slate-500 hover:text-white"}`}>{item}</button>)}</div>
  {section==="overview"&&<><section className="rounded-2xl border border-lime/20 bg-gradient-to-br from-[#193024] to-panel px-3 py-3 sm:p-5"><p className="text-[11px] text-slate-400">Est. Total Value</p><h3 className="mt-1 text-2xl font-black sm:text-3xl">{total.toFixed(2)} USDT</h3><p className="mt-0.5 text-xs text-slate-400">{inr(total)}</p><div className="mt-3 flex w-full gap-[6px]"><button onClick={onOpenDeposit} className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[10px] bg-lime px-2 py-1 text-[11px] font-black leading-none text-ink"><Plus size={12}/>Add Funds</button><button onClick={onOpenWithdrawal} className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[10px] border border-line bg-white/5 px-2 py-1 text-[11px] font-bold leading-none"><Send size={12} className="text-lime"/>Send</button><button onClick={onOpenTransfer} className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[10px] border border-line bg-white/5 px-2 py-1 text-[11px] font-bold leading-none"><ArrowLeftRight size={12} className="text-lime"/>Transfer</button></div></section><section className={`${card} divide-y divide-line/70 overflow-hidden`}><WalletBalanceRow label="Spot Wallet" balance={spotBalance}/><WalletBalanceRow label="Futures Wallet" balance={futuresBalance}/><WalletBalanceRow label="AI Wallet" balance={bitexBalance}/></section><section className={`${card} p-5`}><div className="flex justify-between"><h3 className="font-bold">Recent activity</h3><button onClick={()=>onSectionChange("ledger")} className="text-xs text-lime">Full ledger</button></div><ActivityRows rows={activity.slice(0,3)}/></section></>}
- {section==="assets"&&<section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line p-5"><h3 className="font-bold">Your assets</h3><span className="text-xs text-slate-500">{activeAssets.length} coins</span></div>{activeAssets.map(c=><div key={c.symbol} className="flex items-center gap-3 border-b border-line/60 px-5 py-4 last:border-0"><CoinMark symbol={c.symbol} color={c.color} logoPath={c.localLogoPath}/><div className="flex-1"><p className="font-bold">{c.symbol}</p><p className="text-xs text-slate-500">{c.name}</p></div><div className="text-right"><p className="text-sm font-bold">{compact(c.balance)}</p><p className="mt-1 text-xs text-slate-500">{usd(c.balance*c.price)} · {inr(c.balance*c.price)}</p></div></div>)}</section>}
+ {section==="assets"&&<section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line p-5"><h3 className="font-bold">Your assets</h3><span className="text-xs text-slate-500">{activeAssets.length} coins</span></div>{activeAssets.length?activeAssets.map(c=><div key={c.symbol} className="flex items-center gap-3 border-b border-line/60 px-5 py-4 last:border-0"><CoinMark symbol={c.symbol} color={c.color} logoPath={c.localLogoPath}/><div className="flex-1"><p className="font-bold">{c.symbol}</p><p className="text-xs text-slate-500">{c.name}</p></div><div className="text-right"><p className="text-sm font-bold">{compact(c.balance)}</p><p className="mt-1 text-xs text-slate-500">{usd(c.balance*c.price)} · {inr(c.balance*c.price)}</p></div></div>):<p className="px-5 py-10 text-center text-xs text-slate-500">No records available</p>}</section>}
  {section==="ledger"&&<section className={`${card} p-5`}><div className="flex justify-between"><div><h3 className="font-bold">Wallet ledger</h3><p className="mt-1 text-xs text-slate-500">All balance movements and AI income credits</p></div><button onClick={()=>notify("Ledger export prepared")} className="text-xs text-lime">Export</button></div><ActivityRows rows={activity}/></section>}{action==="deposit"&&<DepositModal close={onCloseAction} notify={notify} createDeposit={onCreateDeposit}/>}</div>;
 }
 
@@ -880,7 +1000,7 @@ function ReferralShareSheet({link,close,copied}:{link:string;close:()=>void;copi
 
 function ShareLogo({label,className,onClick,children}:{label:string;className:string;onClick:()=>void;children:React.ReactNode}) { return <button onClick={onClick} aria-label={label} className={`grid h-11 w-11 place-items-center rounded-full text-sm font-black ${className}`}>{children}</button> }
 
-function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{initialFrom:UserWallet;initialTo:UserWallet;balances:Record<UserWallet,number>;close:()=>void;transfer:(from:UserWallet,to:UserWallet,amount:number)=>boolean}) {
+function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{initialFrom:UserWallet;initialTo:UserWallet;balances:Record<UserWallet,number>;close:()=>void;transfer:(from:UserWallet,to:UserWallet,amount:number)=>Promise<boolean>}) {
   const sourceWallets:UserWallet[]=["SPOT","FUTURES"];
   const transferWallets:UserWallet[]=["SPOT","FUTURES","BITEX"];
   const [from,setFrom]=useState<UserWallet>(sourceWallets.includes(initialFrom)?initialFrom:"SPOT");
@@ -896,7 +1016,7 @@ function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{in
   const changeTo=(wallet:UserWallet)=>{setTo(wallet);resetReview();};
   const swap=()=>{if(to==="BITEX")return;const nextFrom=to;setTo(from);setFrom(nextFrom);resetReview();};
   const review=()=>{if(value<=0){setError("Enter a valid amount");return;}if(value>balances[from]){setError(`Insufficient ${from} balance`);return;}setConfirming(true);};
-  const continueTransfer=()=>{if(!transfer(from,to,value)){setConfirming(false);setError("Transfer could not be completed");}};
+  const continueTransfer=async()=>{if(!await transfer(from,to,value)){setConfirming(false);setError("Transfer could not be completed");}};
   return <div className="fixed inset-0 z-[70] bg-[#0a120f] sm:grid sm:place-items-center sm:bg-black/70 sm:p-4 sm:backdrop-blur-sm"><div className="flex min-h-full w-full flex-col bg-[#111c18] sm:min-h-0 sm:max-w-md sm:rounded-3xl sm:border sm:border-line"><header className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="text-xl font-black">Transfer</h3><button onClick={close} aria-label="Close transfer"><X/></button></header>{confirming?<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="rounded-xl border border-line bg-ink/60 p-4 text-xs leading-5 text-slate-400"><p>Review this transfer before continuing. AI funds cannot be transferred back to Spot or Futures.</p></section><div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Transfer amount" value={`${value.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${value.toFixed(2)} USDT`}/></div></div><div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={()=>setConfirming(false)} className="rounded-xl border border-line py-4 text-sm font-black text-slate-300">Cancel</button><button onClick={continueTransfer} className="rounded-xl bg-lime py-4 text-sm font-black text-ink">Continue</button></div></>:<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="relative rounded-2xl border border-line bg-ink/60 p-4"><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">From<select value={from} onChange={e=>changeFrom(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{sourceWallets.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><div className="my-4 border-t border-line"/><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">To<select value={to} onChange={e=>changeTo(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{destinations.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><button onClick={swap} disabled={to==="BITEX"} className="absolute right-5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-panel text-lime disabled:opacity-30" aria-label="Swap wallets"><ArrowLeftRight size={18} className="rotate-90"/></button></section><label className="block text-xs font-bold text-slate-400">Coin<select className="mt-2 w-full rounded-xl border border-line bg-ink p-4 text-sm font-bold text-white"><option>USDT</option></select></label><div><div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400">Amount</label><span className="text-[11px] text-slate-500">Available {balances[from].toFixed(2)} USDT</span></div><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);resetReview();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-4 text-lg font-bold outline-none"/><button onClick={()=>{setAmount(balances[from].toFixed(2));resetReview();}} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}</div></div><div className="fixed inset-x-0 bottom-0 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={review} className="w-full rounded-xl bg-lime py-4 text-sm font-black text-ink">Confirm Transfer</button></div></>}</div></div>
 }
 
@@ -922,19 +1042,27 @@ function VerificationRequestModal({close,notify,user}:{close:()=>void;notify:(me
   const [name,setName]=useState(user?.name?.trim() ?? "");
   const [documentType,setDocumentType]=useState("Aadhaar Card");
   const [documentNumber,setDocumentNumber]=useState("");
-  const submit=()=>{if(!name.trim()||!documentNumber.trim()){notify("Complete all verification fields");return;}notify("Verification request submitted");close();};
-  return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Verification Request</h3><p className="mt-1 text-xs text-slate-500">Submit identity details for review.</p></div><button onClick={close}><X/></button></div><div className="mt-5 space-y-4"><FormField label="Full name" value={name} onChange={setName}/><label className="block text-xs font-bold text-slate-400">UID<input value={user?.uid?.trim() || "Unavailable"} readOnly className="mt-2 w-full rounded-xl border border-line bg-ink/70 p-3 text-slate-500 outline-none"/></label><label className="block text-xs font-bold text-slate-400">Document type<select value={documentType} onChange={e=>setDocumentType(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option>Aadhaar Card</option><option>PAN Card</option><option>Passport</option><option>Driving License</option></select></label><FormField label="Document number" value={documentNumber} onChange={setDocumentNumber} placeholder="Enter document number"/><label className="block text-xs font-bold text-slate-400">Upload document/image<span className="mt-2 flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-line bg-ink/60 px-4 py-6 text-xs font-normal text-slate-500 hover:border-lime/40"><input type="file" accept="image/*,.pdf" className="hidden"/>Choose image or PDF</span></label></div><button onClick={submit} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink">Submit request</button></div></div>;
+  const [documentImagePath,setDocumentImagePath]=useState("");
+  const [kyc,setKyc]=useState<KycSnapshot|null>(null);
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(false);
+  useEffect(()=>{let active=true;if(!user){setKyc(null);return;}fetch("/api/kyc").then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(active)setKyc(data as KycSnapshot);}).catch(()=>{if(active)setKyc(null);});return()=>{active=false};},[user]);
+  const submit=async()=>{setError("");if(!user){setError("Login required");notify("Login required");return;}if(!name.trim()||!documentNumber.trim()){setError("Complete all verification fields");return;}setLoading(true);const response=await fetch("/api/kyc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,documentType,documentNumber,documentImagePath})});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Verification request failed");return;}notify("Verification request submitted");close();};
+  return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Verification Request</h3><p className="mt-1 text-xs text-slate-500">Submit identity details for review.</p></div><button onClick={close}><X/></button></div>{kyc&&<div className="mt-4 rounded-xl border border-line bg-ink/70 p-3 text-xs text-slate-400">Status: <span className="font-bold text-lime">{kyc.status}</span>{kyc.request?.rejectionReason&&<span> · {kyc.request.rejectionReason}</span>}</div>}<div className="mt-5 space-y-4"><FormField label="Full name" value={name} onChange={setName}/><label className="block text-xs font-bold text-slate-400">UID<input value={user?.uid?.trim() || "Unavailable"} readOnly className="mt-2 w-full rounded-xl border border-line bg-ink/70 p-3 text-slate-500 outline-none"/></label><label className="block text-xs font-bold text-slate-400">Document type<select value={documentType} onChange={e=>setDocumentType(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option>Aadhaar Card</option><option>PAN Card</option><option>Passport</option><option>Driving License</option></select></label><FormField label="Document number" value={documentNumber} onChange={setDocumentNumber} placeholder="Enter document number"/><label className="block text-xs font-bold text-slate-400">Upload document/image<span className="mt-2 flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-line bg-ink/60 px-4 py-6 text-xs font-normal text-slate-500 hover:border-lime/40"><input type="file" accept="image/*,.pdf" className="hidden" onChange={e=>setDocumentImagePath(e.target.files?.[0]?.name??"")}/>{documentImagePath||"Choose image or PDF"}</span></label></div>{error&&<p className="mt-3 text-xs text-danger">{error}</p>}<button onClick={submit} disabled={loading} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Submitting...":"Submit request"}</button></div></div>;
 }
 
 function HelpCenterModal({close,notify}:{close:()=>void;notify:(message:string)=>void}) {
   const [messages,setMessages]=useState<{from:"user"|"ai";text:string}[]>([{from:"ai",text:"Hi. How can I help with deposits, transfers, copy trade, or verification?"}]);
   const [input,setInput]=useState("");
+  const [tickets,setTickets]=useState<SupportTicket[]>([]);
   const [ticketOpen,setTicketOpen]=useState(false);
-  const sendMessage=(text=input)=>{const clean=text.trim();if(!clean)return;setMessages(current=>[...current,{from:"user",text:clean},{from:"ai",text:"I checked the demo help guide. Try reviewing the relevant wallet or verification status. If this does not solve it, raise a support ticket below."}]);setInput("");};
-  return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="flex h-[85vh] w-full max-w-md flex-col rounded-t-3xl border border-line bg-[#111c18] sm:rounded-3xl"><header className="flex items-center justify-between border-b border-line p-5"><div><h3 className="text-xl font-black">Help Center</h3><p className="mt-1 text-xs text-lime">AI assistant online</p></div><button onClick={close}><X/></button></header>{ticketOpen?<SupportTicketForm close={()=>setTicketOpen(false)} submitted={()=>{notify("Support ticket submitted");close();}}/>:<><div className="border-b border-line p-3"><p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Common help topics</p><div className="flex gap-2 overflow-x-auto no-scrollbar">{["Deposit pending","Transfer fee","Copy trade","Verification"].map(topic=><button key={topic} onClick={()=>sendMessage(topic)} className="whitespace-nowrap rounded-full border border-line px-3 py-1.5 text-[11px] text-slate-300">{topic}</button>)}</div></div><div className="flex-1 space-y-3 overflow-y-auto p-4">{messages.map((message,index)=><div key={index} className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-5 ${message.from==="user"?"ml-auto bg-lime text-ink":"bg-ink text-slate-300"}`}>{message.text}</div>)}</div><div className="border-t border-line p-4"><button onClick={()=>setTicketOpen(true)} className="mb-3 w-full rounded-xl border border-line py-2.5 text-xs font-bold text-lime">Raise Ticket</button><div className="flex gap-2"><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendMessage();}} placeholder="Type your message..." className="min-w-0 flex-1 rounded-xl border border-line bg-ink px-4 py-3 text-xs outline-none focus:border-lime/50"/><button onClick={()=>sendMessage()} className="rounded-xl bg-lime px-4 text-ink"><Send size={17}/></button></div></div></>}</div></div>;
+  const refreshTickets=()=>fetch("/api/support").then(response=>response.ok?response.json():Promise.reject()).then(data=>setTickets(Array.isArray(data.tickets)?data.tickets:[])).catch(()=>setTickets([]));
+  useEffect(()=>{refreshTickets();},[]);
+  const sendMessage=(text=input)=>{const clean=text.trim();if(!clean)return;setMessages(current=>[...current,{from:"user",text:clean},{from:"ai",text:"Raise a support ticket below if you need account review."}]);setInput("");};
+  return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="flex h-[85vh] w-full max-w-md flex-col rounded-t-3xl border border-line bg-[#111c18] sm:rounded-3xl"><header className="flex items-center justify-between border-b border-line p-5"><div><h3 className="text-xl font-black">Help Center</h3><p className="mt-1 text-xs text-lime">AI assistant online</p></div><button onClick={close}><X/></button></header>{ticketOpen?<SupportTicketForm close={()=>setTicketOpen(false)} submitted={()=>{notify("Support ticket submitted");refreshTickets();setTicketOpen(false);}}/>:<><div className="border-b border-line p-3"><p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Common help topics</p><div className="flex gap-2 overflow-x-auto no-scrollbar">{["Deposit pending","Transfer fee","Copy trade","Verification"].map(topic=><button key={topic} onClick={()=>sendMessage(topic)} className="whitespace-nowrap rounded-full border border-line px-3 py-1.5 text-[11px] text-slate-300">{topic}</button>)}</div></div><div className="flex-1 space-y-3 overflow-y-auto p-4">{messages.map((message,index)=><div key={index} className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-5 ${message.from==="user"?"ml-auto bg-lime text-ink":"bg-ink text-slate-300"}`}>{message.text}</div>)}<div className="pt-2"><p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Tickets</p>{tickets.length?tickets.slice(0,3).map(ticket=><div key={ticket.id} className="mb-2 rounded-xl border border-line bg-ink/60 p-3 text-xs"><div className="flex justify-between gap-3"><span className="font-bold">{ticket.subject}</span><span className="text-lime">{ticket.status}</span></div>{ticket.adminReply&&<p className="mt-2 text-slate-400">{ticket.adminReply}</p>}</div>):<p className="rounded-xl border border-line bg-ink/60 p-3 text-center text-xs text-slate-500">No records available</p>}</div></div><div className="border-t border-line p-4"><button onClick={()=>setTicketOpen(true)} className="mb-3 w-full rounded-xl border border-line py-2.5 text-xs font-bold text-lime">Raise Ticket</button><div className="flex gap-2"><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendMessage();}} placeholder="Type your message..." className="min-w-0 flex-1 rounded-xl border border-line bg-ink px-4 py-3 text-xs outline-none focus:border-lime/50"/><button onClick={()=>sendMessage()} className="rounded-xl bg-lime px-4 text-ink"><Send size={17}/></button></div></div></>}</div></div>;
 }
 
-function SupportTicketForm({close,submitted}:{close:()=>void;submitted:()=>void}) { const [subject,setSubject]=useState(""); const [message,setMessage]=useState(""); const [priority,setPriority]=useState("Medium"); return <div className="flex-1 overflow-y-auto p-5"><button onClick={close} className="text-xs font-bold text-lime">Back to chat</button><h4 className="mt-4 text-lg font-black">Raise Ticket</h4><div className="mt-5 space-y-4"><FormField label="Subject" value={subject} onChange={setSubject} placeholder="Brief issue summary"/><label className="block text-xs font-bold text-slate-400">Message<textarea value={message} onChange={e=>setMessage(e.target.value)} rows={5} className="mt-2 w-full resize-none rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Priority<select value={priority} onChange={e=>setPriority(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select></label></div><button onClick={()=>{if(subject.trim()&&message.trim())submitted();}} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink">Submit Ticket</button></div> }
+function SupportTicketForm({close,submitted}:{close:()=>void;submitted:()=>void}) { const [subject,setSubject]=useState(""); const [message,setMessage]=useState(""); const [error,setError]=useState(""); const [loading,setLoading]=useState(false); const submit=async()=>{setError("");if(!subject.trim()||!message.trim()){setError("Complete all ticket fields");return;}setLoading(true);const response=await fetch("/api/support",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subject,message})});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Support ticket failed");return;}submitted();}; return <div className="flex-1 overflow-y-auto p-5"><button onClick={close} className="text-xs font-bold text-lime">Back to chat</button><h4 className="mt-4 text-lg font-black">Raise Ticket</h4><div className="mt-5 space-y-4"><FormField label="Subject" value={subject} onChange={setSubject} placeholder="Brief issue summary"/><label className="block text-xs font-bold text-slate-400">Message<textarea value={message} onChange={e=>setMessage(e.target.value)} rows={5} className="mt-2 w-full resize-none rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label></div>{error&&<p className="mt-3 text-xs text-danger">{error}</p>}<button onClick={submit} disabled={loading} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Submitting...":"Submit Ticket"}</button></div> }
 
 function FormField({label,value,onChange,placeholder}:{label:string;value:string;onChange:(value:string)=>void;placeholder?:string}) { return <label className="block text-xs font-bold text-slate-400">{label}<input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label> }
 

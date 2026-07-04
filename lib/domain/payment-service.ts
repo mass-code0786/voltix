@@ -2,6 +2,7 @@ import { Prisma, WalletType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ensureUserWalletAccounts } from "./user-wallets";
 import { postBalancedJournal } from "./ledger";
+import { createNotification } from "./notification-service";
 
 const WITHDRAWAL_FIXED_FEE = new Prisma.Decimal(2);
 const WITHDRAWAL_PERCENTAGE_RATE = new Prisma.Decimal("0.05");
@@ -131,6 +132,13 @@ export async function approveDepositRequest(input: { depositId: string; adminUse
     });
     await tx.user.update({ where: { id: deposit.userId }, data: { spotBalance: { increment: deposit.amount } } });
     const updated = await tx.deposit.update({ where: { id: deposit.id }, data: { status: "APPROVED", creditedAt: new Date() }, include: { asset: true, network: true } });
+    await createNotification(tx, {
+      userId: deposit.userId,
+      type: "DEPOSIT_STATUS",
+      title: "Deposit approved",
+      message: `${deposit.amount.toString()} ${deposit.asset.symbol} has been credited to your Spot wallet.`,
+      metadata: { depositId: deposit.id, status: "APPROVED", amount: deposit.amount.toString(), asset: deposit.asset.symbol },
+    });
     await tx.auditLog.create({
       data: {
         actorId: input.adminUserId,
@@ -156,6 +164,13 @@ export async function rejectDepositRequest(input: { depositId: string; adminUser
       memo: "Admin rejected user deposit request",
     });
     const updated = await tx.deposit.update({ where: { id: deposit.id }, data: { status: "REJECTED" }, include: { asset: true, network: true } });
+    await createNotification(tx, {
+      userId: deposit.userId,
+      type: "DEPOSIT_STATUS",
+      title: "Deposit rejected",
+      message: `${deposit.amount.toString()} ${deposit.asset.symbol} deposit request was rejected.`,
+      metadata: { depositId: deposit.id, status: "REJECTED", amount: deposit.amount.toString(), asset: deposit.asset.symbol, reason: input.reason ?? null },
+    });
     await tx.auditLog.create({
       data: {
         actorId: input.adminUserId,
@@ -206,6 +221,13 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
       data: { status: "APPROVED", feeAmount, receivableAmount, adminActionBy: input.adminUserId, adminActionAt: new Date(), ledgerJournalId: journal.id },
       include: { asset: true, network: true },
     });
+    await createNotification(tx, {
+      userId: withdrawal.userId,
+      type: "WITHDRAWAL_STATUS",
+      title: "Withdrawal approved",
+      message: `${receivableAmount.toString()} ${withdrawal.asset.symbol} withdrawal has been approved.`,
+      metadata: { withdrawalId: withdrawal.id, status: "APPROVED", walletType: withdrawal.walletType, amount: withdrawal.amount.toString(), receivableAmount: receivableAmount.toString(), asset: withdrawal.asset.symbol },
+    });
     await tx.auditLog.create({
       data: {
         actorId: input.adminUserId,
@@ -234,6 +256,13 @@ export async function rejectWithdrawalRequest(input: { withdrawalId: string; adm
       where: { id: withdrawal.id },
       data: { status: "REJECTED", adminActionBy: input.adminUserId, adminActionAt: new Date(), rejectionReason: input.reason?.trim() || null },
       include: { asset: true, network: true },
+    });
+    await createNotification(tx, {
+      userId: withdrawal.userId,
+      type: "WITHDRAWAL_STATUS",
+      title: "Withdrawal rejected",
+      message: `${withdrawal.amount.toString()} ${withdrawal.asset.symbol} withdrawal request was rejected.`,
+      metadata: { withdrawalId: withdrawal.id, status: "REJECTED", walletType: withdrawal.walletType, amount: withdrawal.amount.toString(), asset: withdrawal.asset.symbol, reason: input.reason ?? null },
     });
     await tx.auditLog.create({
       data: {

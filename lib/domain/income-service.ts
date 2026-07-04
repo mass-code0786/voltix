@@ -2,6 +2,7 @@ import { IncomeType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { postBalancedJournal } from "./ledger";
 import { settleDueCopyTrades } from "./trade-service";
+import { createNotification } from "./notification-service";
 
 const REFERRAL_LEVEL_1 = new Prisma.Decimal("0.05");
 const REFERRAL_LEVEL_2 = new Prisma.Decimal("0.01");
@@ -161,6 +162,15 @@ async function postIncome(tx: Prisma.TransactionClient, input: { userId: string;
     data: { userId: input.userId, type: input.type, sourceType: input.sourceType, sourceId: input.sourceId, amount: input.amount, ledgerJournalId: journal.id },
   });
   await tx.user.update({ where: { id: input.userId }, data: { spotBalance: { increment: input.amount } } });
+  if (input.type === "DIRECT" || input.type === "LEVEL" || input.type === "BOT_COMMISSION") {
+    await createNotification(tx, {
+      userId: input.userId,
+      type: "REFERRAL_INCOME",
+      title: "Referral income credited",
+      message: `${input.amount.toString()} USDT referral income has been credited to your Spot wallet.`,
+      metadata: { incomeId: income.id, incomeType: input.type, sourceType: input.sourceType, sourceId: input.sourceId },
+    });
+  }
   await tx.auditLog.create({
     data: { actorId: input.actorId ?? input.userId, actorType: input.actorId ? "ADMIN" : "SYSTEM", action: input.auditAction, entityType: "Income", entityId: income.id, metadata: input.metadata ?? {} },
   });

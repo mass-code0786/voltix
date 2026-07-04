@@ -1,6 +1,7 @@
 import { Prisma, WalletType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { postBalancedJournal } from "./ledger";
+import { ensureUserWalletAccounts } from "./user-wallets";
 
 const WITHDRAWAL_FIXED_FEE = new Prisma.Decimal(2);
 const WITHDRAWAL_PERCENTAGE_RATE = new Prisma.Decimal("0.05");
@@ -51,7 +52,7 @@ export async function transferWallet(input: {
       },
     });
 
-    const asset = await tx.asset.findUniqueOrThrow({ where: { symbol: "USDT" } });
+    const asset = await ensureUserWalletAccounts(tx, input.userId);
     const [source, destination] = await Promise.all([
       tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: input.userId, assetId: asset.id, type: input.fromWallet } } }),
       tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: input.userId, assetId: asset.id, type: input.toWallet } } }),

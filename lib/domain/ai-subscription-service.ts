@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { postBalancedJournal } from "./ledger";
 import { postBotSubscriptionCommission } from "./income-service";
 import { redeemTradeCode } from "./trade-service";
+import { createNotification } from "./notification-service";
 
 const AI_PRICE = new Prisma.Decimal(15);
 const AI_VALIDITY_DAYS = 30;
@@ -55,6 +56,13 @@ export async function purchaseAiSubscription(userId: string, now = new Date()) {
     });
     await tx.auditLog.create({
       data: { actorId: userId, actorType: "USER", action: "AI_SUBSCRIPTION_PURCHASED", entityType: "AiSubscription", entityId: created.id, metadata: { amount: AI_PRICE.toString(), expiresAt: created.expiresAt.toISOString(), ledgerJournalId: journal.id } },
+    });
+    await createNotification(tx, {
+      userId,
+      type: "AI_SUBSCRIPTION_PURCHASE",
+      title: "AI subscription active",
+      message: `AI subscription purchased for ${AI_PRICE.toString()} USDT.`,
+      metadata: { subscriptionId: created.id, amount: AI_PRICE.toString(), expiresAt: created.expiresAt.toISOString() },
     });
     return created;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

@@ -94,6 +94,29 @@ enum PackageStatus {
   CANCELLED
 }
 
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  PENDING
+  CLOSED
+}
+
+enum NotificationType {
+  DEPOSIT_STATUS
+  WITHDRAWAL_STATUS
+  COPY_TRADE_INCOME
+  REFERRAL_INCOME
+  AI_SUBSCRIPTION_PURCHASE
+  ADMIN_TRADE_CODE
+  ADMIN_BROADCAST
+}
+
 model User {
   id                    String           @id @default(cuid())
   email                 String           @unique
@@ -127,6 +150,9 @@ model User {
   assignedCodes         TradeCode[]
   trades                CopyTrade[]
   incomes               Income[]
+  kycRequests           KycRequest[]
+  supportTickets        SupportTicket[]
+  notifications         Notification[]
   auditLogs             AuditLog[]       @relation("AuditActor")
   sessions              Session[]
   createdAt             DateTime         @default(now())
@@ -364,6 +390,57 @@ model AiSubscription {
 
   @@index([userId, active, expiresAt])
   @@index([expiresAt])
+}
+
+model KycRequest {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  name              String
+  documentType      String
+  documentNumber    String
+  documentImagePath String?
+  status            KycStatus @default(PENDING)
+  reviewedById      String?
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model SupportTicket {
+  id           String              @id @default(cuid())
+  userId       String
+  user         User                @relation(fields: [userId], references: [id])
+  subject      String
+  message      String
+  status       SupportTicketStatus @default(OPEN)
+  adminReply   String?
+  repliedById  String?
+  repliedAt    DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([type, createdAt])
 }
 
 model TradeSlot {

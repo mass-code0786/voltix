@@ -2,6 +2,7 @@ import { CodeStatus, Prisma, TradeStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { MIN_COPY_TRADE_STAKE_USD, dailyTradeLimit, tradeTimeline } from "./trade-rules";
 import { postBalancedJournal } from "./ledger";
+import { broadcastNotification, createNotification } from "./notification-service";
 
 const COPY_TRADE_STAKE_RATE = new Prisma.Decimal("0.01");
 const MIN_COPY_TRADE_STAKE = new Prisma.Decimal(MIN_COPY_TRADE_STAKE_USD);
@@ -27,7 +28,7 @@ export async function createTradeCode(input: {
   const now = input.now ?? new Date();
   const code = input.code?.trim().toUpperCase() || generateTradeCode();
   const slot = await prisma.tradeSlot.findFirst({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
-  return prisma.tradeCode.create({
+  const tradeCode = await prisma.tradeCode.create({
     data: {
       code,
       vipRank: input.vipRank.trim().toUpperCase() || "NONE",
@@ -39,6 +40,13 @@ export async function createTradeCode(input: {
       slotId: slot?.id,
     },
   });
+  await broadcastNotification({
+    type: "ADMIN_TRADE_CODE",
+    title: "New trade code",
+    message: `Strategy code ${tradeCode.code} is available for copy trading.`,
+    metadata: { tradeCodeId: tradeCode.id, code: tradeCode.code, returnPercent: tradeCode.returnPercent.toString(), expiresAt: tradeCode.expiresAt?.toISOString() ?? null },
+  }).catch(() => null);
+  return tradeCode;
 }
 
 export async function getAdminTradeCodes(now = new Date()) {
@@ -176,6 +184,13 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
     ]);
     const journal = await postBalancedJournal(tx, { referenceType: "COPY_TRADE_INCOME", referenceId: trade.id, idempotencyKey: `copy-income:${trade.id}`, memo: "Copy trade principal returned and income credited to AI", lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: bitexCredit }, { accountId: bitexAccount.id, direction: "CREDIT", amount: bitexCredit }] });
     await tx.income.create({ data: { userId: trade.userId, type: "COPY_TRADE", sourceType: "COPY_TRADE", sourceId: trade.id, amount: profitAmount, copyTradeId: trade.id, ledgerJournalId: journal.id } });
+    await createNotification(tx, {
+      userId: trade.userId,
+      type: "COPY_TRADE_INCOME",
+      title: "Copy trade income credited",
+      message: `${profitAmount.toString()} USDT income has been credited to your AI wallet.`,
+      metadata: { tradeId: trade.id, incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString() },
+    });
     const progress = await tx.user.update({
       where: { id: trade.userId },
       data: { bitexBalance: { increment: bitexCredit }, bitexIncomeEarned: { increment: profitAmount } },
