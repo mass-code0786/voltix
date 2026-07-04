@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   ArrowDownLeft, ArrowDownToLine, ArrowLeftRight, ArrowUpRight, BarChart3, Bell,
-  ChevronDown, ChevronRight, CircleDollarSign, Copy, FileClock, Grid2X2,
+  Bot, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Copy, FileClock, Gift, Grid2X2,
   Headphones, Home, Landmark, LineChart, Menu, Network, Plus, QrCode, Search,
-  Send, Settings, Share2, ShieldCheck,
+  Send, Settings, Share2, ShieldCheck, Star,
   Trophy, Users, Wallet, X, Zap,
 } from "lucide-react";
 import { CoinMark } from "./coin-mark";
@@ -14,6 +14,19 @@ import { Sparkline } from "./sparkline";
 import { CandlestickChart } from "./candlestick-chart";
 import { OrderBookPanel } from "./order-book";
 import { BrandLogo } from "./brand-logo";
+import {
+  ActionTile,
+  AppHeader,
+  BottomNav,
+  CoinRow as DesignCoinRow,
+  EmptyState,
+  GlassCard,
+  NeonButton,
+  PageHero,
+  SectionHeader,
+  StatCard,
+  StatusBadge,
+} from "./design-system";
 import { coins } from "@/lib/market-defaults";
 import { compact, inr, usd } from "@/lib/format";
 import { useLiveTickers } from "@/lib/use-market-data";
@@ -21,6 +34,7 @@ import { currencyConfigForCountry, formatLocalCurrency } from "@/lib/local-curre
 import { getTranslator } from "@/lib/i18n";
 
 type Tab = "home" | "markets" | "trade" | "bitex" | "team" | "wallet";
+type MobileNavTab = Tab | "profile";
 type TradeCategory = "spot" | "futures" | "grid" | "margin" | "copy";
 type WalletSection = "overview" | "assets" | "ledger";
 type WalletAction = "deposit" | null;
@@ -186,12 +200,12 @@ const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
   { id: "wallet", label: "Asset", icon: Wallet },
 ];
 
-const mobileTabs: { id: Tab; label: string; icon: typeof Home; section?: WalletSection }[] = [
+const mobileTabs: { id: MobileNavTab; label: string; icon: typeof Home; section?: WalletSection }[] = [
   { id: "home", label: "Home", icon: Home },
   { id: "markets", label: "Markets", icon: BarChart3 },
-  { id: "trade", label: "Trade", icon: LineChart },
-  { id: "bitex", label: "AI", icon: Zap },
+  { id: "bitex", label: "AI Trade", icon: Zap },
   { id: "wallet", label: "Asset", icon: Wallet, section: "overview" },
+  { id: "profile", label: "Profile", icon: Settings },
 ];
 
 const card = "rounded-2xl border border-line bg-panel/80";
@@ -711,7 +725,7 @@ export default function AppShell() {
   }, [currentUser, unreadNotifications]);
 
   const screen = {
-    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
+    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} bitexBalance={bitexBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
     bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} />,
@@ -720,7 +734,7 @@ export default function AppShell() {
   }[tab];
 
   return (
-    <div className="min-h-screen pb-32 lg:pb-8">
+    <div className="dark-gradient-bg min-h-screen pb-32 lg:pb-8">
       <div className="mx-auto flex min-h-screen max-w-[1500px]">
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-line bg-[#09120f] p-5 lg:block">
           <Brand />
@@ -739,37 +753,22 @@ export default function AppShell() {
         </aside>
 
         <main className="min-w-0 flex-1 lg:ml-64">
-          <header className="sticky top-0 z-30 border-b border-line/80 bg-ink/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
-            <div className="mx-auto flex max-w-6xl items-center justify-between">
-              <div className="lg:hidden"><Brand compact /></div>
-              <div className="hidden lg:block">
-                <p className="text-xs text-slate-500">{t("welcomeBack")}</p>
-                <h1 className="font-bold">{tabLabel(tab)}</h1>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => { if (!currentUser) { openAuthPage("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }} className="relative rounded-full border border-line bg-panel p-2.5 text-slate-300" aria-label="Notifications"><Bell size={18} />{unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-lime px-1 text-[10px] font-black text-ink">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}</button>
-                <button onClick={() => { setMenu(!menu); setNotificationOpen(false); }} className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-lime to-mint text-sm font-black text-ink">{initials(currentUser?.name)}</button>
-              </div>
-            </div>
-          </header>
+          <AppHeader
+            title={tabLabel(tab)}
+            subtitle={t("welcomeBack")}
+            initials={initials(currentUser?.name)}
+            unreadNotifications={unreadNotifications}
+            onMenuButton={() => { setMenu(!menu); setNotificationOpen(false); }}
+            onNotifications={() => { if (!currentUser) { openAuthPage("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }}
+            onMenu={() => { setMenu(!menu); setNotificationOpen(false); }}
+          />
           {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
           <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8">{screen}</div>
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-[#09120f]/95 px-1 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl lg:hidden">
-        <div className="mx-auto flex max-w-lg justify-around">
-          {mobileTabs.map(({ id, label, icon: Icon, section }) => {
-            const active = tab === id && (id !== "wallet" || walletSection === section);
-            return (
-            <button key={`${id}-${section ?? label}`} onClick={() => selectTab(id, section)} aria-current={active ? "page" : undefined} className={`flex min-w-0 flex-1 flex-col items-center gap-1 text-[9px] font-semibold ${active ? "text-lime" : "text-slate-500"}`}>
-              <span className={`rounded-xl px-3 py-1 ${active ? "bg-lime/10" : ""}`}><Icon size={19} strokeWidth={active ? 2.5 : 1.8} /></span>
-              <span className="truncate text-[10px]">{tabLabel(id)}</span>
-            </button>
-          )})}
-        </div>
-      </nav>
+      <BottomNav items={mobileTabs} activeId={tab} activeSection={walletSection} labelFor={(id) => id === "profile" ? "Profile" : id === "bitex" ? "AI Trade" : id === "wallet" ? "Wallet" : tabLabel(id)} onSelect={(id, section) => { if (id === "profile") { window.location.href = "/profile"; return; } selectTab(id, section as WalletSection | undefined); }} />
       {tradeMenuOpen&&<TradeMenu close={()=>setTradeMenuOpen(false)} select={openTrade}/>} 
       {transferOpen&&<WalletTransferModal initialFrom={transferOpen.from} initialTo={transferOpen.to} balances={{SPOT:Number(assetTotals.total?.spot??0),FUTURES:futuresBalance,BITEX:bitexBalance}} close={()=>setTransferOpen(null)} transfer={transferWallet}/>} 
       {withdrawalOpen&&<WithdrawalModal balances={{SPOT:Number(assetTotals.total?.spot??0),BITEX:bitexBalance}} bitexUnlocked={bitexPrincipalLocked>0&&bitexIncomeEarned>=bitexPrincipalLocked*2} close={()=>setWithdrawalOpen(false)} withdraw={createWithdrawal}/>} 
@@ -813,9 +812,10 @@ function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerif
   return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">{user?.name?.trim() || "Account"}</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>{uid?`UID ${uid}`:"Not logged in"}</span>{uid&&<button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button>}<span>· {user?.vipRank || "Pro"} member</span></div></div>{user?<><Link href="/profile" onClick={close} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Settings size={17}/> Profile & Settings</Link><button onClick={logout} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Logout</button></>:<><button onClick={openLogin} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Login</button><button onClick={openRegister} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Users size={17}/> Register</button></>}<button onClick={openVerification} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button>{isAdminUser && <Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link>}</div></>;
 }
 
-function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, assets, dashboard, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance, userCountry }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number; userCountry: string }) {
+function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, assets, dashboard, balanceVisible, setBalanceVisible, copyTradeHistory, bitexBalance, userCountry, aiSubscription, vipTradeRows, startTrade, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; bitexBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
   const total = dashboard?.summary?.totalPortfolio ?? 0;
   const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
+  const totalIncome = dashboard?.summary?.totalIncome ?? 0;
   const live=useLiveTickers();
   const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
   const localCurrency=useMemo(()=>currencyConfigForCountry(userCountry),[userCountry]);
@@ -825,55 +825,226 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, a
     const ticker=tickerMap.get(coin.pair??`${coin.symbol}USDT`);
     return [{...coin,price:ticker?.price??0,change:ticker?.changePercent??0,volume:ticker?.volume,quoteVolume:ticker?.quoteVolume,live:Boolean(ticker?.price)}];
   }),[assets,tickerMap]);
+  const pulseCoins=marketPulseAssets.filter(coin=>["BTC","ETH","BNB","SOL"].includes(coin.symbol)).slice(0,4);
   const shortcuts: { icon: typeof Home; label: string; onClick: () => void }[] = [
-    { icon: ArrowDownToLine, label: t("addFund"), onClick: () => onNavigate("wallet", "overview", "deposit") },
-    { icon: Send, label: t("transfer"), onClick: () => onNavigate("wallet") },
-    { icon: Zap, label: t("copyTrade"), onClick: onOpenCopyTrade },
-    { icon: Users, label: t("team"), onClick: () => onNavigate("team") },
+    { icon: Wallet, label: "AI Wallet", onClick: () => onNavigate("wallet") },
+    { icon: Copy, label: "Copy Trading", onClick: onOpenCopyTrade },
+    { icon: Trophy, label: "VIP Benefits", onClick: onOpenCopyTrade },
+    { icon: Gift, label: "Rewards", onClick: () => onNavigate("team") },
   ];
-  return <div className="space-y-5">
-    {currentUser ? <section className="relative overflow-hidden rounded-3xl border border-lime/20 bg-gradient-to-br from-[#172a20] via-[#101d18] to-[#0a120f] p-5 shadow-glow sm:p-7">
-      <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full border-[34px] border-lime/[.04]" />
-      <div className="relative flex items-start justify-between"><div><div className="flex items-center gap-2 text-xs font-medium text-slate-400">Total portfolio <button onClick={() => setBalanceVisible(!balanceVisible)} className="text-slate-500">{balanceVisible ? "Hide" : "Show"}</button></div><div className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{balanceVisible ? usd(total) : "$ ••••••"}</div><div className="mt-1 text-sm text-slate-400">{balanceVisible ? inr(total) : "? ••••••"} <span className="ml-2 font-bold text-mint">{usd(todaysProfit)} today</span></div></div><div className="rounded-xl bg-lime/10 p-3 text-lime"><LineChart size={24} /></div></div>
-      <div className="relative mt-7 grid grid-cols-4 gap-2">{shortcuts.map(({icon:Icon,label,onClick}) => <button key={label} onClick={onClick} className="flex flex-col items-center gap-2 rounded-xl bg-white/[.045] px-1 py-3 text-xs font-semibold hover:bg-white/[.08]"><Icon size={19} className="text-lime" />{label}</button>)}</div>
-    </section> : <WelcomeCard t={t} onOpenAuth={onOpenAuth} />}
+  return <div className="mx-auto max-w-md space-y-4 overflow-x-hidden pb-4">
+    {currentUser ? (
+      <VoltixPortfolioHero
+        currentUser={currentUser}
+        total={total}
+        todaysProfit={todaysProfit}
+        balanceVisible={balanceVisible}
+        setBalanceVisible={setBalanceVisible}
+      />
+    ) : <WelcomeCard t={t} onOpenAuth={onOpenAuth} />}
 
-    <div className="grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
-      <div className="space-y-5">
-        <section className={card}><div className="flex items-center justify-between px-5 pb-2 pt-5"><div><h2 className="font-bold">{t("marketPulse")}</h2></div><button onClick={() => onNavigate("markets")} className="text-xs font-bold text-lime">{t("viewAll")}</button></div><div className="divide-y divide-line/70">{marketPulseAssets.map(c => <CoinRow key={c.symbol} coin={c} localCurrency={localCurrency} />)}</div></section>
-      </div>
-      <div className="space-y-5">
-        <TradeActiveCard t={t} onClick={onOpenCopyTrade} trade={activeCopyTrade} previewAmount={bitexBalance * 0.01} />
-        <TopCopyTraders t={t} />
-      </div>
+    <div className="grid grid-cols-4 gap-2.5">
+      {shortcuts.map(({icon:Icon,label,onClick}) => <HomeActionTile key={label} icon={Icon} label={label} onClick={onClick} />)}
     </div>
+
+    <AiOverviewCard totalIncome={totalIncome} history={copyTradeHistory} balanceVisible={balanceVisible} />
+    <VipTradeRowsCard rows={vipTradeRows} startTrade={startTrade} notify={notify} />
+    <HomeAiSubscriptionCard currentUser={currentUser} status={aiSubscription} purchaseAi={purchaseAi} onOpenAuth={onOpenAuth} notify={notify} />
+
+    <GlassCard className="overflow-hidden rounded-[26px]">
+      <SectionHeader title="Market Pulse" actionLabel="View All" onAction={() => onNavigate("markets")} />
+      <div className="flex gap-3 overflow-x-auto px-4 pb-5 no-scrollbar">
+        {pulseCoins.length ? pulseCoins.map(c => <MarketPulseCoinCard key={c.symbol} coin={c} localCurrency={localCurrency} />) : <div className="w-full"><EmptyState title="Live market data unavailable" icon={BarChart3} /></div>}
+      </div>
+    </GlassCard>
+  </div>;
+}
+function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; onOpenAuth: () => void }) {
+  return <GlassCard className="home-hero-card relative overflow-hidden rounded-[28px] p-5">
+    <div className="relative grid min-h-[188px] grid-cols-[1fr_112px] items-center gap-2">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-slate-400">Welcome to join Voltix</p>
+        <h2 className="mt-2 text-[28px] font-black leading-[1.02] text-white">VOLTIX</h2>
+        <p className="mt-3 max-w-[11rem] text-xs leading-5 text-slate-500">AI copy trading and wallet tools in one premium dashboard.</p>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button onClick={onOpenAuth} className="rounded-2xl bg-[#22ff8a] px-4 py-3 text-xs font-black text-[#050807] shadow-[0_14px_34px_rgba(34,255,138,.22)]">Login</button>
+          <button onClick={onOpenAuth} className="rounded-2xl border border-[#22ff8a]/25 bg-white/[.045] px-4 py-3 text-xs font-black text-[#22ff8a]">Sign up</button>
+        </div>
+      </div>
+      <VoltixVIllustration />
+    </div>
+  </GlassCard>;
+}
+
+function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible, setBalanceVisible }: { currentUser: CurrentUser; total: number; todaysProfit: number; balanceVisible: boolean; setBalanceVisible: (value: boolean) => void }) {
+  return <GlassCard className="home-hero-card relative overflow-hidden rounded-[28px] p-5">
+    <div className="relative grid min-h-[206px] grid-cols-[minmax(0,1fr)_118px] items-center gap-2">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-slate-400">Welcome Back,</p>
+        <div className="mt-1 flex min-w-0 items-center gap-2">
+          <h2 className="truncate text-[25px] font-black leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
+          <CheckCircle2 size={18} className="shrink-0 text-[#22ff8a]" fill="rgba(34,255,138,.18)" />
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="rounded-full border border-[#9b5cff]/35 bg-[#9b5cff]/12 px-2.5 py-1 text-[10px] font-black text-[#c9aeff]">{currentUser.vipRank || "VIP 0"}</span>
+          <span className="rounded-full border border-[#22ff8a]/20 bg-[#22ff8a]/10 px-2.5 py-1 text-[10px] font-black text-[#22ff8a]">Verified</span>
+        </div>
+        <p className="mt-5 text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">Total Balance</p>
+        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-1 text-left text-[30px] font-black leading-none text-[#22ff8a] drop-shadow-[0_0_14px_rgba(34,255,138,.3)]">
+          {balanceVisible ? usd(total) : "$ ******"}
+        </button>
+        <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-[11px] font-black ${todaysProfit >= 0 ? "border-[#22ff8a]/20 bg-[#22ff8a]/10 text-[#22ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
+          {balanceVisible ? `${todaysProfit >= 0 ? "+" : ""}${usd(todaysProfit)} today` : "Balance hidden"}
+        </div>
+      </div>
+      <VoltixVIllustration />
+    </div>
+  </GlassCard>;
+}
+
+function VoltixVIllustration() {
+  return <div className="voltix-v-scene" aria-hidden="true">
+    <div className="voltix-v-orbit" />
+    <div className="voltix-v-letter">V</div>
+    <div className="voltix-v-platform" />
   </div>;
 }
 
-function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; onOpenAuth: () => void }) {
-  return <section className="relative overflow-hidden rounded-3xl border border-lime/20 bg-gradient-to-br from-[#172a20] via-[#101d18] to-[#0a120f] p-5 text-center shadow-glow sm:p-7">
-    <div className="mx-auto grid h-24 max-w-[220px] place-items-center sm:h-24">
-      <div className="relative h-24 w-44 sm:w-52">
-        <div className="absolute left-1/2 top-0 h-20 w-20 -translate-x-1/2 rounded-full border border-lime/30 bg-[#111c18] shadow-[0_0_38px_rgba(196,255,59,.16)]">
-          <div className="absolute inset-3 grid place-items-center rounded-full border border-lime/20 bg-gradient-to-br from-lime/20 to-mint/10 text-2xl font-black text-lime">V</div>
-        </div>
-        <div className="absolute bottom-2 left-0 h-14 w-20 rounded-2xl border border-line bg-ink/80 p-2">
-          <div className="h-2 w-10 rounded bg-lime/50" />
-          <div className="mt-2 flex h-6 items-end gap-1">{[8,16,12,22,14].map((height,index)=><span key={index} className="w-2 rounded-t bg-mint/70" style={{height}} />)}</div>
-        </div>
-        <div className="absolute bottom-0 right-0 h-16 w-24 rounded-2xl border border-line bg-ink/90 p-2">
-          <div className="flex items-end gap-1 pt-1">{[12,22,16,30,22,36].map((height,index)=><span key={index} className="w-2 rounded-t bg-lime/70" style={{height}} />)}</div>
-        </div>
-      </div>
-    </div>
-    <h2 className="mt-1 text-xl font-black tracking-tight sm:text-2xl">{t("welcomeJoin")} <span className="text-lime">Voltix</span></h2>
-    <button onClick={onOpenAuth} className="mt-5 w-full rounded-2xl bg-lime py-3.5 text-sm font-black text-ink shadow-[0_16px_38px_rgba(196,255,59,.18)] transition hover:bg-mint sm:text-base">{t("loginSignup")}</button>
-  </section>;
+function HomeActionTile({ icon: Icon, label, onClick }: { icon: typeof Home; label: string; onClick: () => void }) {
+  return <button onClick={onClick} className="home-action-tile min-w-0 rounded-[22px] px-1.5 py-3 text-center">
+    <span className="mx-auto grid h-9 w-9 place-items-center rounded-2xl bg-[#22ff8a]/10 text-[#22ff8a] shadow-[0_0_20px_rgba(34,255,138,.12)]"><Icon size={18} /></span>
+    <span className="mt-2 block text-[10px] font-black leading-tight text-slate-200">{label}</span>
+  </button>;
 }
 
+function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome: number; history: CopyTradeHistory[]; balanceVisible: boolean }) {
+  const chartData=useMemo(()=>history.map(row=>Number(row.profit ?? 0)).filter(value=>Number.isFinite(value)),[history]);
+  const percent=history.length?chartData.reduce((sum,value)=>sum+value,0):0;
+  return <GlassCard className="rounded-[26px] p-5">
+    <div className="flex items-start justify-between gap-3">
+      <h3 className="text-base font-black text-white">AI Copy Trading Overview</h3>
+      <button className="flex shrink-0 items-center gap-1 rounded-full border border-[#22ff8a]/15 bg-white/[.04] px-3 py-1.5 text-[10px] font-black text-slate-300">This Week <ChevronDown size={13}/></button>
+    </div>
+    <div className="mt-5 grid grid-cols-[.8fr_1fr] items-end gap-4">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-[.14em] text-slate-500">Total Income</p>
+        <p className="mt-2 text-2xl font-black text-[#22ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
+        <p className="mt-1 text-xs font-bold text-slate-500">{history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT recorded` : "No chart data yet"}</p>
+      </div>
+      <IncomeChart data={chartData} />
+    </div>
+  </GlassCard>;
+}
+
+function IncomeChart({ data }: { data: number[] }) {
+  if (!data.length) return <div className="grid h-[96px] place-items-center rounded-2xl border border-white/[.06] bg-black/20 text-center text-[10px] font-bold text-slate-600">No chart data</div>;
+  const width=160, height=92;
+  const cumulative=data.reduce<number[]>((series,value,index)=>[...series,(series[index-1]??0)+value],[]);
+  const min=Math.min(...cumulative,0), max=Math.max(...cumulative,1);
+  const points=cumulative.map((value,index)=>`${(index/Math.max(cumulative.length-1,1))*width},${height-8-((value-min)/Math.max(max-min,1))*(height-18)}`).join(" ");
+  return <svg className="h-[96px] w-full drop-shadow-[0_0_12px_rgba(34,255,138,.38)]" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+    <defs><linearGradient id="incomeFill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#22ff8a" stopOpacity=".34"/><stop offset="1" stopColor="#22ff8a" stopOpacity="0"/></linearGradient></defs>
+    <polyline points={`0,${height} ${points} ${width},${height}`} fill="url(#incomeFill)" stroke="none" />
+    <polyline points={points} fill="none" stroke="#22ff8a" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
+  </svg>;
+}
+
+function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
+  const [loadingRow,setLoadingRow]=useState("");
+  const [error,setError]=useState("");
+  const nextTime=rows.find(row=>row.currentTradeTime)?.currentTradeTime ?? "--:--";
+  const start=async(row:VipTradeRow)=>{
+    setError("");
+    if(!row.available){setError(row.message || "Trade not available.");return;}
+    if(!row.eligible){setError(row.message || "You are not eligible for this trade.");return;}
+    setLoadingRow(row.id);
+    const result=await startTrade(row.id);
+    setLoadingRow("");
+    if(!result.ok){setError(result.message);return;}
+    notify("Copy trade started");
+  };
+  return <GlassCard className="overflow-hidden rounded-[26px]">
+    <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
+      <h3 className="text-base font-black text-white">VIP Trade Rows</h3>
+      <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[.14em] text-slate-600">Trade Time</p><p className="mt-1 text-xs font-black text-[#22ff8a]">{nextTime}</p></div>
+    </div>
+    <div className="space-y-2 px-3 pb-4">
+      {rows.length ? rows.map(row=><VipTradeRowItem key={row.id} row={row} loading={loadingRow===row.id} start={()=>start(row)} />) : <EmptyState title="No VIP trade rows available" icon={LineChart} />}
+    </div>
+    {error&&<p className="border-t border-[#22ff8a]/10 px-5 py-3 text-xs font-bold text-danger">{error}</p>}
+  </GlassCard>;
+}
+
+function vipAccent(row: VipTradeRow) {
+  const label=row.label.toLowerCase();
+  if(label.includes("7") || label.includes("10")) return "#ff7a1a";
+  if(label.includes("5") || label.includes("6")) return "#ffd54a";
+  if(label.includes("3") || label.includes("4")) return "#9b5cff";
+  if(label.includes("1") || label.includes("2")) return "#20c7ff";
+  return "#22ff8a";
+}
+
+function VipTradeRowItem({ row, loading, start }: { row: VipTradeRow; loading: boolean; start: () => void }) {
+  const accent=vipAccent(row);
+  const status=row.tradeStatus??(row.available?"Live":"Closed");
+  return <div className="vip-row flex items-center gap-2 rounded-[20px] px-3 py-3" style={{"--vip-accent":accent} as CSSProperties}>
+    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-xs font-black text-[#050807]" style={{background:`linear-gradient(145deg, ${accent}, ${accent}99)`,boxShadow:`0 0 22px ${accent}33`}}>VIP</div>
+    <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <p className="text-sm font-black text-white">{row.label}</p>
+        <span className="rounded-full border px-2 py-0.5 text-[9px] font-black" style={{borderColor:`${accent}33`,backgroundColor:`${accent}14`,color:accent}}>{status}</span>
+      </div>
+      <p className="mt-1 text-[11px] font-bold text-slate-400">{row.dailyPercentMin.toFixed(1)}% - {row.dailyPercentMax.toFixed(1)}% Daily Return</p>
+    </div>
+    <button onClick={start} disabled={loading} className="shrink-0 rounded-2xl px-3 py-2 text-[11px] font-black text-[#050807] disabled:opacity-50" style={{background:accent,boxShadow:`0 0 22px ${accent}2e`}}>{loading?"Wait":"Trade"}</button>
+  </div>;
+}
+
+function HomeAiSubscriptionCard({ currentUser, status, purchaseAi, onOpenAuth, notify }: { currentUser: CurrentUser | null; status: AiSubscriptionStatus | null; purchaseAi: () => Promise<{ok:boolean;message:string}>; onOpenAuth: () => void; notify: (message: string) => void }) {
+  const [loading,setLoading]=useState(false);
+  const active=Boolean(status?.subscription?.active);
+  const expiry=status?.subscription?.expiresAt ? new Date(status.subscription.expiresAt) : null;
+  const action=async()=>{
+    if(!currentUser){onOpenAuth();return;}
+    setLoading(true);
+    const result=await purchaseAi();
+    setLoading(false);
+    if(!result.ok) notify(result.message || "AI purchase failed");
+  };
+  return <GlassCard className="rounded-[26px] p-5">
+    <div className="grid grid-cols-[76px_1fr_auto] items-center gap-3">
+      <AiCube />
+      <div className="min-w-0">
+        <h3 className="text-base font-black text-white">AI Subscription</h3>
+        <p className={`mt-1 text-xs font-black ${active?"text-[#22ff8a]":"text-slate-500"}`}>{active?"Active":"Inactive"}</p>
+        <p className="mt-1 truncate text-[11px] text-slate-500">{active&&expiry?`Expiry ${formatDate(expiry)}`:"Purchase required for AI copy trade"}</p>
+      </div>
+      <button onClick={action} disabled={loading} className="rounded-2xl border border-[#22ff8a]/25 bg-[#22ff8a]/12 px-3 py-2 text-[11px] font-black text-[#22ff8a] disabled:opacity-50">{loading?"Wait":active?"Manage":"Purchase"}</button>
+    </div>
+  </GlassCard>;
+}
+
+function AiCube() {
+  return <div className="ai-cube-scene" aria-hidden="true"><div className="ai-cube"><span>AI</span></div></div>;
+}
+
+function MarketPulseCoinCard({ coin, localCurrency }: { coin: MarketCoin; localCurrency: ReturnType<typeof currencyConfigForCountry> }) {
+  const shown = coin.price < .001 ? coin.price.toFixed(8) : coin.price < 1 ? coin.price.toFixed(4) : coin.price.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return <article className="market-coin-card w-[132px] shrink-0 rounded-[22px] p-3">
+    <div className="flex items-center justify-between gap-2">
+      <CoinMark symbol={coin.symbol} color={coin.color} logoPath={coin.localLogoPath} size="sm" />
+      <span className={`text-[10px] font-black ${coin.change >= 0 ? "text-[#22ff8a]" : "text-danger"}`}>{coin.live?`${coin.change>=0?"+":""}${coin.change.toFixed(2)}%`:"--"}</span>
+    </div>
+    <p className="mt-3 text-sm font-black text-white">{coin.symbol}<span className="text-[10px] text-slate-500">/USDT</span></p>
+    <p className="mt-1 truncate text-[10px] text-slate-500">{coin.name}</p>
+    <p className="mt-3 text-sm font-black text-[#22ff8a]">{coin.live?`$${shown}`:"Loading"}</p>
+    {coin.live&&<p className="mt-1 text-[9px] text-slate-600">{formatLocalCurrency(coin.price, localCurrency)}</p>}
+    <div className="mt-2"><Sparkline data={coin.spark} positive={coin.change >= 0} /></div>
+  </article>;
+}
 function TradeActiveCard({ t = getTranslator("en"), onClick, trade, previewAmount }: { t?: ReturnType<typeof getTranslator>; onClick: () => void; trade: ActiveCopyTrade | null; previewAmount: number }) {
   const amount=trade?.amount??previewAmount;
-  return <button onClick={onClick} className="relative w-full overflow-hidden rounded-2xl border border-lime/25 bg-lime/[.07] p-5 text-left"><div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-lime/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="pulse-ring grid h-12 w-12 place-items-center rounded-full bg-lime text-ink"><Zap size={22} fill="currentColor" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="font-bold">Trade Active</h3><span className="rounded-full bg-lime/10 px-2 py-0.5 text-[9px] font-black text-lime">LIVE</span></div><p className="mt-1 text-xs text-slate-400">BTC/USDT - Copy Trade Income</p></div><ChevronRight className="text-slate-500" /></div><div className="relative mt-4 grid grid-cols-2 gap-3"><div><p className="text-[10px] uppercase tracking-widest text-slate-500">Trade amount</p><p className="mt-1 text-lg font-black text-white">${amount.toFixed(2)}</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-widest text-slate-500">Remaining</p><p className="mt-1 text-xl font-black text-lime">{trade?formatRemaining(trade.remainingTime??0):"--:--"}</p></div></div><div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-black/30"><div className={`h-full rounded-full bg-lime ${trade?"w-[38%]":"w-[8%]"}`} /></div></button>;
+  return <button onClick={onClick} className="glass-panel card-3d relative w-full overflow-hidden rounded-[28px] p-5 text-left"><div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-lime/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="pulse-ring grid h-12 w-12 place-items-center rounded-2xl bg-lime text-ink"><Zap size={22} fill="currentColor" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="font-black">Trade Active</h3><StatusBadge>{trade?"Live":"Ready"}</StatusBadge></div><p className="mt-1 text-xs text-slate-400">BTC/USDT - Copy Trade Income</p></div><ChevronRight className="text-slate-500" /></div><div className="relative mt-4 grid grid-cols-2 gap-3"><div><p className="text-[10px] font-bold uppercase text-slate-500">Trade amount</p><p className="mt-1 text-lg font-black text-white">${amount.toFixed(2)}</p></div><div className="text-right"><p className="text-[10px] font-bold uppercase text-slate-500">Remaining</p><p className="mt-1 text-xl font-black text-lime">{trade?formatRemaining(trade.remainingTime??0):"--:--"}</p></div></div><div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-black/30"><div className={`h-full rounded-full bg-lime green-glow ${trade?"w-[38%]":"w-[8%]"}`} /></div></button>;
 }
 
 function formatRemaining(seconds:number) {
@@ -882,9 +1053,8 @@ function formatRemaining(seconds:number) {
 }
 
 function TopCopyTraders({ t = getTranslator("en") }: { t?: ReturnType<typeof getTranslator> }) {
-  return <section className={`${card} overflow-hidden`}><div className="border-b border-line px-5 py-4"><h2 className="font-bold">{t("topCopyTraders")}</h2></div><div className="divide-y divide-line/60">{topCopyTraders.length?topCopyTraders.map((trader,index)=>{const assetIndex=index+1;return <div key={`${trader.country}-${trader.name}`} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-5"><img src={`/trader-flags/flag-${assetIndex}.png`} alt={`${trader.country} flag`} className="h-5 w-7 shrink-0 rounded object-cover ring-1 ring-white/10 sm:h-6 sm:w-8" /><img src={`/traders/trader-${assetIndex}.png`} alt={`${trader.name} profile`} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-lime/25 sm:h-10 sm:w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{trader.name}</p><p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-500">{trader.message}</p></div><div className="w-[42px] shrink-0 text-right sm:w-[54px]"><p className="text-xs font-black text-lime sm:text-sm">+{trader.monthlyReturn}%</p><p className="text-[9px] text-slate-500 sm:text-[10px]">/ month</p></div><img src={`/trader-charts/chart-${assetIndex}.png`} alt={`${trader.name} monthly profit chart`} className="h-[34px] w-[54px] shrink-0 rounded-md border border-line bg-black/20 object-cover" /></div>;}):<div className="px-5 py-10 text-center text-xs text-slate-500">{t("noCopyTraders")}</div>}</div></section>;
+  return <GlassCard className="overflow-hidden rounded-[28px]"><SectionHeader title={t("topCopyTraders")} />{topCopyTraders.length?<div className="divide-y divide-line/60">{topCopyTraders.map((trader,index)=>{const assetIndex=index+1;return <div key={`${trader.country}-${trader.name}`} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-5"><img src={`/trader-flags/flag-${assetIndex}.png`} alt={`${trader.country} flag`} className="h-5 w-7 shrink-0 rounded object-cover ring-1 ring-white/10 sm:h-6 sm:w-8" /><img src={`/traders/trader-${assetIndex}.png`} alt={`${trader.name} profile`} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-lime/25 sm:h-10 sm:w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{trader.name}</p><p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-500">{trader.message}</p></div><div className="w-[42px] shrink-0 text-right sm:w-[54px]"><p className="text-xs font-black text-lime sm:text-sm">+{trader.monthlyReturn}%</p><p className="text-[9px] text-slate-500 sm:text-[10px]">/ month</p></div><img src={`/trader-charts/chart-${assetIndex}.png`} alt={`${trader.name} monthly profit chart`} className="h-[34px] w-[54px] shrink-0 rounded-md border border-line bg-black/20 object-cover" /></div>;})}</div>:<EmptyState title={t("noCopyTraders")} icon={Users} />}</GlassCard>;
 }
-
 function CoinRow({ coin, action, localCurrency=currencyConfigForCountry() }: { coin: AppCoin&{volume?:number;live?:boolean}; action?: () => void; localCurrency?: ReturnType<typeof currencyConfigForCountry> }) {
   const shown = coin.price < .001 ? coin.price.toFixed(8) : coin.price < 1 ? coin.price.toFixed(4) : coin.price.toLocaleString("en-US", { maximumFractionDigits: 2 });
   return <button onClick={action} className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-5 py-4 text-left hover:bg-white/[.025]"><div className="flex min-w-0 items-center gap-3"><CoinMark symbol={coin.symbol} color={coin.color} logoPath={coin.localLogoPath} /><div><div className="font-bold">{coin.symbol}<span className="ml-1.5 text-[10px] font-normal text-slate-500">/USDT</span></div><p className="mt-1 text-xs text-slate-500">{coin.name}</p><p className="mt-1 text-[9px] text-slate-600">24h vol {coin.live&&coin.volume!==undefined?compact(coin.volume):"--"}</p></div></div><div className="hidden sm:block"><Sparkline data={coin.spark} positive={coin.change >= 0} /></div><div className="min-w-[88px] text-right"><p className="text-sm font-bold">{coin.live?`$${shown}`:"--"}</p>{coin.live&&<p className="mt-1 text-[11px] text-slate-500">{formatLocalCurrency(coin.price, localCurrency)}</p>}<p className={`mt-1 text-xs font-bold ${coin.change >= 0 ? "text-mint" : "text-danger"}`}>{coin.live?`${coin.change >= 0 ? "+" : ""}${coin.change.toFixed(2)}%`:"Live"}</p></div></button>;
