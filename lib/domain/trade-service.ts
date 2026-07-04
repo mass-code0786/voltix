@@ -1,62 +1,16 @@
-import { CodeStatus, Prisma, TradeStatus } from "@prisma/client";
+import { Prisma, TradeStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { MIN_COPY_TRADE_STAKE_USD, dailyTradeLimit, tradeTimeline } from "./trade-rules";
+import { MIN_COPY_TRADE_STAKE_USD, VIP_TRADE_ROWS, dailyTradeLimit, getVipDailyIncomePercent, getVipTradeRow, getVipTradeRowForRank, normalizeVipRank, tradeTimeline } from "./trade-rules";
 import { postBalancedJournal } from "./ledger";
-import { broadcastNotification, createNotification } from "./notification-service";
+import { createNotification } from "./notification-service";
 
 const COPY_TRADE_STAKE_RATE = new Prisma.Decimal("0.01");
 const MIN_COPY_TRADE_STAKE = new Prisma.Decimal(MIN_COPY_TRADE_STAKE_USD);
-const INVALID_CODE_MESSAGE = "Invalid copy trade code. Please use a valid code issued by the platform.";
-const DEFAULT_TRADE_WINDOW_MINUTES = 10;
-const DEFAULT_CODE_EXPIRY_MINUTES = 20;
-
-export async function expireOldTradeCodes(now = new Date()) {
-  await prisma.tradeCode.updateMany({
-    where: { status: CodeStatus.ACTIVE, expiresAt: { lte: now } },
-    data: { status: CodeStatus.EXPIRED },
-  });
-}
-
-export async function createTradeCode(input: {
-  code?: string;
-  vipRank: string;
-  returnPercent: Prisma.Decimal;
-  maxUsage: number;
-  createdBy: string;
-  now?: Date;
-}) {
-  const now = input.now ?? new Date();
-  const code = input.code?.trim().toUpperCase() || generateTradeCode();
-  const slot = await prisma.tradeSlot.findFirst({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
-  const tradeCode = await prisma.tradeCode.create({
-    data: {
-      code,
-      vipRank: input.vipRank.trim().toUpperCase() || "NONE",
-      returnPercent: input.returnPercent,
-      maxUsage: input.maxUsage,
-      expiresAt: new Date(now.getTime() + DEFAULT_CODE_EXPIRY_MINUTES * 60_000),
-      tradeWindowMinutes: DEFAULT_TRADE_WINDOW_MINUTES,
-      createdBy: input.createdBy,
-      slotId: slot?.id,
-    },
-  });
-  await broadcastNotification({
-    type: "ADMIN_TRADE_CODE",
-    title: "New trade code",
-    message: `Strategy code ${tradeCode.code} is available for copy trading.`,
-    metadata: { tradeCodeId: tradeCode.id, code: tradeCode.code, returnPercent: tradeCode.returnPercent.toString(), expiresAt: tradeCode.expiresAt?.toISOString() ?? null },
-  }).catch(() => null);
-  return tradeCode;
-}
-
-export async function getAdminTradeCodes(now = new Date()) {
-  await expireOldTradeCodes(now);
-  return prisma.tradeCode.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
-}
+const INELIGIBLE_TRADE_MESSAGE = "You are not eligible for this trade.";
+const TRADE_UNAVAILABLE_MESSAGE = "Trade not available.";
 
 export async function getCopyTradeStatus(userId: string, now = new Date()) {
   await settleDueCopyTrades(userId, now);
-  await expireOldTradeCodes(now);
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: { joinedAt: true, permanentExtraTrade: true, vipRank: true, bitexBalance: true },
@@ -81,6 +35,9 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   const limit = dailyTradeLimit({ joinedAt: user.joinedAt, now, permanentExtraTrade: user.permanentExtraTrade });
   const remaining = Math.max(0, limit - totalToday);
   const active = activeTrade ? serializeTrade(activeTrade, now) : null;
+  const tradeWindow = await getCurrentTradeWindow(now);
+  const normalizedVipRank = normalizeVipRank(user.vipRank);
+  const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
   return {
     activeTrade: active,
     remainingTime: active?.remainingTime ?? 0,
@@ -88,56 +45,118 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
       eligible: remaining > 0 && user.bitexBalance.gt(0),
       reason: remaining <= 0 ? "Daily trade limit reached" : user.bitexBalance.lte(0) ? "Please transfer funds to AI wallet before starting copy trade." : null,
     },
-    vipRank: user.vipRank,
+    vipRank: normalizedVipRank,
     todaysCompletedTrades: completedToday,
     todaysRemainingTrades: remaining,
+    tradeRows: VIP_TRADE_ROWS.map(row => ({
+      ...row,
+      eligible: row.vipRanks.includes(normalizedVipRank),
+      available: tradeWindow.status === "Live",
+      tradeAmount: Number(tradeAmount.toString()),
+      perTradePercent: Number(new Prisma.Decimal(row.dailyPercentMin).div(limit).toString()),
+      currentTradeTime: tradeWindow.time,
+      tradeStatus: tradeWindow.status,
+      message: tradeWindow.status === "Live" ? null : TRADE_UNAVAILABLE_MESSAGE,
+    })),
     history: history.map(trade => serializeTrade(trade, now)),
   };
 }
 
-export async function redeemTradeCode(input: { userId: string; code: string; now?: Date; ipAddress?: string; device?: string }) {
+export async function startVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string }) {
+  return executeVipCopyTrade({ ...input, actorType: "USER" });
+}
+
+export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Date }) {
+  const now = input.now ?? new Date();
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { vipRank: true } });
+  const row = getVipTradeRowForRank(user.vipRank);
+  if (!row) return { executed: false, reason: INELIGIBLE_TRADE_MESSAGE };
+  try {
+    const trade = await executeVipCopyTrade({ userId: input.userId, rowId: row.id, now, actorType: "SYSTEM" });
+    return { executed: true, tradeId: trade.id, rowId: row.id };
+  } catch (error) {
+    return { executed: false, reason: error instanceof Error ? error.message : "Auto copy trade failed" };
+  }
+}
+
+async function executeVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string; actorType: "USER" | "SYSTEM" }) {
   const now = input.now ?? new Date();
   return prisma.$transaction(async (tx) => {
-    const normalizedCode = input.code.trim().toUpperCase();
     const user = await tx.user.findUniqueOrThrow({ where: { id: input.userId } });
-    const code = await tx.tradeCode.findUnique({ where: { code: normalizedCode }, include: { slot: true } });
-    const fail = async (reason: string): Promise<never> => {
-      await tx.auditLog.create({ data: { actorId: input.userId, actorType: "USER", action: "COPY_TRADE_CODE_REJECTED", entityType: "TradeCode", entityId: code?.id ?? normalizedCode, ipAddress: input.ipAddress, metadata: { userId: input.userId, strategyCode: normalizedCode, result: "REJECTED", reason, device: input.device ?? null, attemptedAt: now.toISOString() } } });
-      throw new Error(INVALID_CODE_MESSAGE);
-    };
-    if (!code) return fail("NOT_FOUND");
-    if (code.status !== CodeStatus.ACTIVE) return fail(`STATUS_${code.status}`);
-    if (code.expiresAt && code.expiresAt <= now) return fail("EXPIRED");
-    if (code.vipRank !== user.vipRank) return fail("VIP_RANK_MISMATCH");
-    if (code.assignedUserId && code.assignedUserId !== input.userId) return fail("ASSIGNED_TO_OTHER_USER");
-    if (!code.slotId || !code.slot) return fail("NO_TRADE_SLOT");
-    if (code.usedCount >= code.maxUsage) return fail("USAGE_LIMIT_EXCEEDED");
-    const alreadyUsedByUser = await tx.copyTrade.findFirst({ where: { userId: input.userId, codeId: code.id }, select: { id: true } });
-    if (alreadyUsedByUser) return fail("USER_ALREADY_USED_CODE");
+    const row = getVipTradeRow(input.rowId);
+    if (!row) throw new Error(INELIGIBLE_TRADE_MESSAGE);
+    const normalizedVipRank = normalizeVipRank(user.vipRank);
+    if (!row.vipRanks.includes(normalizedVipRank)) throw new Error(INELIGIBLE_TRADE_MESSAGE);
+
+    const slot = await findOpenTradeSlot(now, tx);
+    if (!slot) throw new Error(TRADE_UNAVAILABLE_MESSAGE);
+    const activePackage = await tx.userPackage.findFirst({
+      where: { userId: input.userId, status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      select: { id: true },
+    });
+    if (!activePackage) throw new Error("Active package required.");
     if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to AI wallet before starting copy trade.");
     const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
     if (tradeAmount.lt(MIN_COPY_TRADE_STAKE)) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.`);
 
-    const dayStart = new Date(now); dayStart.setUTCHours(0, 0, 0, 0);
+    const dayStart = new Date(now);
+    dayStart.setUTCHours(0, 0, 0, 0);
     const tradesToday = await tx.copyTrade.count({ where: { userId: input.userId, startedAt: { gte: dayStart } } });
-    if (tradesToday >= dailyTradeLimit({ joinedAt: user.joinedAt, now, permanentExtraTrade: user.permanentExtraTrade })) throw new Error("Daily trade limit reached");
-
-    const claimed = await tx.tradeCode.updateMany({
-      where: { id: code.id, status: CodeStatus.ACTIVE, usedCount: { lt: code.maxUsage } },
-      data: { usedCount: { increment: 1 }, ...(code.usedCount + 1 >= code.maxUsage ? { status: CodeStatus.USED } : {}) },
+    const limit = dailyTradeLimit({ joinedAt: user.joinedAt, now, permanentExtraTrade: user.permanentExtraTrade });
+    if (tradesToday >= limit) throw new Error("Daily trade limit reached");
+    const slotStart = tradeSlotStart(slot.utcTime, now);
+    const slotEnd = new Date(slotStart.getTime() + slot.durationMinutes * 60_000);
+    const existingSlotTrade = await tx.copyTrade.findFirst({
+      where: { userId: input.userId, slotId: slot.id, startedAt: { gte: slotStart, lt: slotEnd } },
+      select: { id: true },
     });
-    if (claimed.count !== 1) return fail("CONCURRENT_REPLAY_OR_LIMIT");
+    if (existingSlotTrade) throw new Error("Trade already executed for this slot.");
+
     const locked = await tx.user.updateMany({
       where: { id: input.userId, bitexBalance: { gte: tradeAmount } },
       data: { bitexBalance: { decrement: tradeAmount } },
     });
     if (locked.count !== 1) throw new Error("Insufficient AI wallet balance");
 
-    const timeline = tradeTimeline(now, code.tradeWindowMinutes, 0);
+    const dailyPercent = new Prisma.Decimal(getVipDailyIncomePercent(normalizedVipRank));
+    const perTradePercent = dailyPercent.div(limit);
+    const timeline = tradeTimeline(now, slot.durationMinutes, slot.creditDelayMins);
     const trade = await tx.copyTrade.create({
-      data: { userId: input.userId, codeId: code.id, slotId: code.slotId, principalAmount: tradeAmount, returnPercent: code.returnPercent, status: TradeStatus.ACTIVE, startedAt: now, ...timeline },
+      data: {
+        userId: input.userId,
+        codeId: null,
+        slotId: slot.id,
+        principalAmount: tradeAmount,
+        returnPercent: perTradePercent,
+        status: TradeStatus.ACTIVE,
+        startedAt: now,
+        ...timeline,
+      },
     });
-    await tx.auditLog.create({ data: { actorId: input.userId, actorType: "USER", action: "COPY_TRADE_STARTED", entityType: "CopyTrade", entityId: trade.id, ipAddress: input.ipAddress, metadata: { userId: input.userId, strategyCode: code.code, tradeAmount: tradeAmount.toString(), profitPercent: code.returnPercent.toString(), startTime: now.toISOString(), completionTime: timeline.completesAt.toISOString(), result: "STARTED", device: input.device ?? null } } });
+    await tx.auditLog.create({
+      data: {
+        actorId: input.userId,
+        actorType: input.actorType,
+        action: input.actorType === "SYSTEM" ? "AI_COPY_TRADE_AUTO_STARTED" : "COPY_TRADE_STARTED",
+        entityType: "CopyTrade",
+        entityId: trade.id,
+        ipAddress: input.ipAddress,
+        metadata: {
+          userId: input.userId,
+          vipRank: normalizedVipRank,
+          tradeRowId: row.id,
+          tradeRowLabel: row.label,
+          tradeAmount: tradeAmount.toString(),
+          dailyPercent: dailyPercent.toString(),
+          perTradePercent: perTradePercent.toString(),
+          startTime: now.toISOString(),
+          completionTime: timeline.completesAt.toISOString(),
+          result: "STARTED",
+          activePackageId: activePackage.id,
+          device: input.device ?? null,
+        },
+      },
+    });
     return trade;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -175,7 +194,8 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
     const trade = await tx.copyTrade.findUniqueOrThrow({ where: { id: tradeId } });
     if (trade.status === "INCOME_CREDITED") return trade;
     if (trade.status !== "COMPLETED" || trade.creditDueAt > now) throw new Error("Trade income is not due");
-    const profitAmount = trade.principalAmount.mul(trade.returnPercent).div(100);
+    const incomeBase = trade.principalAmount.div(COPY_TRADE_STAKE_RATE);
+    const profitAmount = incomeBase.mul(trade.returnPercent).div(100);
     const bitexCredit = trade.principalAmount.add(profitAmount);
     const asset = await tx.asset.findUniqueOrThrow({ where: { symbol: "USDT" } });
     const [bitexAccount, revenueAccount] = await Promise.all([
@@ -199,18 +219,51 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
     if (progress.bitexTargetAmount.gt(0) && progress.bitexIncomeEarned.gte(progress.bitexTargetAmount)) {
       await tx.user.update({ where: { id: trade.userId }, data: { bitexUnlocked: true } });
     }
+    await tx.auditLog.create({
+      data: {
+        actorId: trade.userId,
+        actorType: "SYSTEM",
+        action: "COPY_TRADE_INCOME_POSTED",
+        entityType: "CopyTrade",
+        entityId: trade.id,
+        metadata: { tradeId: trade.id, incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString(), ledgerJournalId: journal.id, creditedAt: now.toISOString() },
+      },
+    });
     return tx.copyTrade.update({ where: { id: trade.id }, data: { status: "INCOME_CREDITED", incomeAmount: profitAmount, incomeCreditedAt: now } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-function generateTradeCode() {
-  return Math.random().toString(36).replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase().padEnd(6, "X");
+async function findOpenTradeSlot(now: Date, client: Prisma.TransactionClient | typeof prisma = prisma) {
+  const slots = await client.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
+  return slots.find(slot => isSlotOpen(slot.utcTime, slot.durationMinutes, now)) ?? null;
+}
+
+async function getCurrentTradeWindow(now: Date) {
+  const slots = await prisma.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
+  const openSlot = slots.find(slot => isSlotOpen(slot.utcTime, slot.durationMinutes, now));
+  if (openSlot) return { time: openSlot.utcTime, status: "Live" as const };
+  const upcoming = slots.find(slot => tradeSlotStart(slot.utcTime, now) > now);
+  if (upcoming) return { time: upcoming.utcTime, status: "Upcoming" as const };
+  return { time: slots.at(-1)?.utcTime ?? "--:--", status: "Closed" as const };
+}
+
+function isSlotOpen(utcTime: string, durationMinutes: number, now: Date) {
+  const start = tradeSlotStart(utcTime, now);
+  const end = new Date(start.getTime() + durationMinutes * 60_000);
+  return now >= start && now < end;
+}
+
+function tradeSlotStart(utcTime: string, now: Date) {
+  const [hours, minutes] = utcTime.split(":").map(value => Number(value));
+  const start = new Date(now);
+  start.setUTCHours(Number.isFinite(hours) ? hours : 0, Number.isFinite(minutes) ? minutes : 0, 0, 0);
+  return start;
 }
 
 function serializeTrade(trade: Awaited<ReturnType<typeof prisma.copyTrade.findFirst>> & { code?: { code: string } | null }, now: Date) {
   const amount = Number(trade!.principalAmount.toString());
   const returnPercent = Number(trade!.returnPercent.toString());
-  const profit = Number((((amount * returnPercent) / 100)).toFixed(8));
+  const profit = Number(((((amount / Number(COPY_TRADE_STAKE_RATE.toString())) * returnPercent) / 100)).toFixed(8));
   return {
     id: trade!.id,
     code: trade!.code?.code ?? "",

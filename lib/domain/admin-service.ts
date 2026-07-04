@@ -13,7 +13,7 @@ export async function getAdminOverview() {
     pendingWithdrawals,
     pendingKyc,
     pendingSupport,
-    activeCodes,
+    activeTrades,
     queuedIncomeCredits,
     recentAudit,
   ] = await Promise.all([
@@ -27,7 +27,7 @@ export async function getAdminOverview() {
     prisma.withdrawal.count({ where: { status: "PENDING" } }),
     prisma.kycRequest.count({ where: { status: "PENDING" } }),
     prisma.supportTicket.count({ where: { status: { in: ["OPEN", "PENDING"] } } }),
-    prisma.tradeCode.count({ where: { status: "ACTIVE" } }),
+    prisma.copyTrade.count({ where: { status: "ACTIVE" } }),
     prisma.copyTrade.count({ where: { status: "COMPLETED" } }),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 10, include: { actor: { select: { name: true, uid: true } } } }),
   ]);
@@ -44,7 +44,7 @@ export async function getAdminOverview() {
       totalWithdrawalAmount: decimalToNumber(withdrawalSum._sum.amount ?? 0),
       incomePaid: decimalToNumber(incomeSum._sum.amount ?? 0),
       pendingWithdrawals,
-      activeCodes,
+      activeTrades,
       queuedIncomeCredits,
     },
     recentActivity: recentAudit.map(log => [

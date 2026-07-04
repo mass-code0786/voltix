@@ -1,0 +1,2 @@
+ALTER TABLE "CopyTrade"
+ALTER COLUMN "returnPercent" TYPE DECIMAL(10, 6);

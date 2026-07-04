@@ -1,8 +1,8 @@
-import { CodeStatus, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { postBalancedJournal } from "./ledger";
 import { postBotSubscriptionCommission } from "./income-service";
-import { redeemTradeCode } from "./trade-service";
+import { autoExecuteVipCopyTrade } from "./trade-service";
 import { createNotification } from "./notification-service";
 
 const AI_PRICE = new Prisma.Decimal(15);
@@ -88,21 +88,7 @@ export async function runAiAutoCopyTradeJob(now = new Date()) {
 }
 
 async function autoExecuteAiCopyTrade(userId: string, now = new Date()) {
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { vipRank: true } });
-  const codes = await prisma.tradeCode.findMany({
-    where: {
-      status: CodeStatus.ACTIVE,
-      vipRank: user.vipRank,
-      expiresAt: { gt: now },
-      assignedUserId: null,
-    },
-    orderBy: { createdAt: "asc" },
-    take: 20,
-  });
-  const code = codes.find(item => item.usedCount < item.maxUsage);
-  if (!code) return { executed: false, reason: "No eligible AI strategy code" };
-  const trade = await redeemTradeCode({ userId, code: code.code, now });
-  return { executed: true, tradeId: trade.id, code: code.code };
+  return autoExecuteVipCopyTrade({ userId, now });
 }
 
 async function expireOldSubscriptions(now: Date) {

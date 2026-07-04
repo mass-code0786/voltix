@@ -1,6 +1,6 @@
 # Voltix Crypto Network
 
-Binance-inspired (not a clone) dark crypto dashboard with user and admin experiences, MLM configuration, one-time copy-trade codes, double-entry wallet modeling, and blockchain webhook boundaries.
+Binance-inspired (not a clone) dark crypto dashboard with user and admin experiences, MLM configuration, VIP-based copy trading, double-entry wallet modeling, and blockchain webhook boundaries.
 
 ## Run locally
 

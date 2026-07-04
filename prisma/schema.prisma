@@ -490,12 +490,12 @@ model CopyTrade {
   id               String      @id @default(cuid())
   userId           String
   user             User        @relation(fields: [userId], references: [id])
-  codeId           String
-  code             TradeCode   @relation(fields: [codeId], references: [id])
+  codeId           String?
+  code             TradeCode?  @relation(fields: [codeId], references: [id])
   slotId           String
   slot             TradeSlot   @relation(fields: [slotId], references: [id])
   principalAmount  Decimal     @db.Decimal(36, 18)
-  returnPercent    Decimal     @db.Decimal(5, 2)
+  returnPercent    Decimal     @db.Decimal(10, 6)
   incomeAmount     Decimal?    @db.Decimal(36, 18)
   status           TradeStatus @default(PENDING)
   startedAt        DateTime
@@ -511,7 +511,7 @@ model CopyTrade {
   @@index([status, completesAt])
   @@index([status, creditDueAt])
   @@index([userId, startedAt])
-  @@unique([userId, codeId])
+  @@index([codeId])
 }
 
 model Income {

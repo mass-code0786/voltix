@@ -30,8 +30,9 @@ type WithdrawalInput = { walletType: "SPOT" | "BITEX"; amount: number; address: 
 type DepositInput = { amount: number; network: string; txHash?: string };
 type DepositRecord = { id: string; amount: number; asset: string; network: string; txHash?: string | null; status: string; createdAt: string };
 type WithdrawalRecord = { id: string; walletType: "SPOT" | "BITEX"; amount: number; fee: number; receivable: number; asset: string; address: string; network: string; txHash?: string | null; status: string; rejectionReason?: string | null; createdAt: string };
-type ActiveCopyTrade = { code: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string };
+type ActiveCopyTrade = { code?: string; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string };
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
+type VipTradeRow = { id: string; label: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "Upcoming" | "Live" | "Closed"; message?: string | null };
 type AppCoin = typeof coins[number];
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath">> & { localLogoPath?: string | null };
@@ -290,6 +291,7 @@ export default function AppShell() {
   const [toast, setToast] = useState("");
   const [activeCopyTrade, setActiveCopyTrade] = useState<ActiveCopyTrade | null>(null);
   const [copyTradeHistory, setCopyTradeHistory] = useState<CopyTradeHistory[]>([]);
+  const [vipTradeRows, setVipTradeRows] = useState<VipTradeRow[]>([]);
   const [marketCoins, setMarketCoins] = useState(() => applyCoinSettings(coins).map((coin) => ({ ...coin, balance: 0 })));
   const [walletAssets, setWalletAssets] = useState<AppCoin[]>([]);
   const [assetTotals, setAssetTotals] = useState<AssetTotals>(emptyAssetTotals);
@@ -384,6 +386,7 @@ export default function AppShell() {
     if (!user) {
       setActiveCopyTrade(null);
       setCopyTradeHistory([]);
+      setVipTradeRows([]);
       return;
     }
     const response = await fetch("/api/copy-trade/status");
@@ -392,6 +395,7 @@ export default function AppShell() {
     const status = data?.status;
     setActiveCopyTrade(status?.activeTrade ? normalizeTrade(status.activeTrade) : null);
     setCopyTradeHistory(Array.isArray(status?.history) ? status.history.map(normalizeTrade) : []);
+    setVipTradeRows(Array.isArray(status?.tradeRows) ? status.tradeRows as VipTradeRow[] : []);
   }, []);
 
   const refreshAiSubscription = useCallback(async (user: CurrentUser | null) => {
@@ -486,6 +490,7 @@ export default function AppShell() {
         if (!currentUser) {
           setActiveCopyTrade(null);
           setCopyTradeHistory([]);
+          setVipTradeRows([]);
         }
       });
   }, [currentUser, refreshCopyTradeStatus]);
@@ -653,14 +658,14 @@ export default function AppShell() {
     return { ok: true, message: "" };
   }, [assetTotals, bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, notify, refreshAssets]);
 
-  const startCopyTrade = useCallback(async (rawCode: string) => {
-    const response = await fetch("/api/copy-trade/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: rawCode.toUpperCase() }) });
+  const startCopyTrade = useCallback(async (rowId: string) => {
+    const response = await fetch("/api/copy-trade/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rowId }) });
     const data = await response.json();
     if (!response.ok) return { ok: false, message: data.error || "Copy trade failed" };
     await refreshCopyTradeStatus(currentUser);
     await refreshWallet(currentUser);
     await refreshAssets(currentUser);
-    notify(`Strategy ${data.trade.code} verified. ${Number(data.trade.amount).toFixed(2)} USDT locked from AI.`);
+    notify(`${Number(data.trade.amount).toFixed(2)} USDT locked from AI.`);
     return { ok: true, message: "" };
   }, [currentUser, notify, refreshAssets, refreshCopyTradeStatus, refreshWallet]);
 
@@ -709,7 +714,7 @@ export default function AppShell() {
     home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
-    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} />,
+    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
     wallet: <WalletScreen notify={notify} assets={walletAssets} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
@@ -786,7 +791,8 @@ function initials(name?: string | null) {
 
 function normalizeTrade(raw: ActiveCopyTrade & { startedAt?: string; remainingTime?: number; status?: string }): CopyTradeHistory {
   return {
-    code: raw.code,
+    code: raw.code ?? "",
+    rowLabel: raw.rowLabel,
     amount: Number(raw.amount ?? 0),
     returnPercent: Number(raw.returnPercent ?? 0),
     profit: Number(raw.profit ?? 0),
@@ -866,9 +872,8 @@ function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; o
 }
 
 function TradeActiveCard({ t = getTranslator("en"), onClick, trade, previewAmount }: { t?: ReturnType<typeof getTranslator>; onClick: () => void; trade: ActiveCopyTrade | null; previewAmount: number }) {
-  const code=trade?.code??"Paste code";
   const amount=trade?.amount??previewAmount;
-  return <button onClick={onClick} className="relative w-full overflow-hidden rounded-2xl border border-lime/25 bg-lime/[.07] p-5 text-left"><div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-lime/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="pulse-ring grid h-12 w-12 place-items-center rounded-full bg-lime text-ink"><Zap size={22} fill="currentColor" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="font-bold">Trade Active</h3><span className="rounded-full bg-lime/10 px-2 py-0.5 text-[9px] font-black text-lime">LIVE</span></div><p className="mt-1 text-xs text-slate-400">BTC/USDT · Strategy code {code}</p></div><ChevronRight className="text-slate-500" /></div><div className="relative mt-4 grid grid-cols-2 gap-3"><div><p className="text-[10px] uppercase tracking-widest text-slate-500">Trade amount</p><p className="mt-1 text-lg font-black text-white">${amount.toFixed(2)}</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-widest text-slate-500">Remaining</p><p className="mt-1 text-xl font-black text-lime">{trade?formatRemaining(trade.remainingTime??0):"--:--"}</p></div></div><div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-black/30"><div className={`h-full rounded-full bg-lime ${trade?"w-[38%]":"w-[8%]"}`} /></div></button>;
+  return <button onClick={onClick} className="relative w-full overflow-hidden rounded-2xl border border-lime/25 bg-lime/[.07] p-5 text-left"><div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-lime/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="pulse-ring grid h-12 w-12 place-items-center rounded-full bg-lime text-ink"><Zap size={22} fill="currentColor" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="font-bold">Trade Active</h3><span className="rounded-full bg-lime/10 px-2 py-0.5 text-[9px] font-black text-lime">LIVE</span></div><p className="mt-1 text-xs text-slate-400">BTC/USDT - Copy Trade Income</p></div><ChevronRight className="text-slate-500" /></div><div className="relative mt-4 grid grid-cols-2 gap-3"><div><p className="text-[10px] uppercase tracking-widest text-slate-500">Trade amount</p><p className="mt-1 text-lg font-black text-white">${amount.toFixed(2)}</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-widest text-slate-500">Remaining</p><p className="mt-1 text-xl font-black text-lime">{trade?formatRemaining(trade.remainingTime??0):"--:--"}</p></div></div><div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-black/30"><div className={`h-full rounded-full bg-lime ${trade?"w-[38%]":"w-[8%]"}`} /></div></button>;
 }
 
 function formatRemaining(seconds:number) {
@@ -900,8 +905,8 @@ function TradeWorkspace({category}:{category:TradeCategory}) {
   return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category}/></div>;
 }
 
-function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,history,startTrade,completeTrade,purchaseAi,openLogin}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;history:CopyTradeHistory[];startTrade:(code:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void}) {
-  return <div className="space-y-5"><div><h2 className="text-2xl font-black">AI</h2></div><CandlestickChart/><AiPurchaseCard currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin}/><CopyTradeScreen activeTrade={activeTrade} bitexBalance={bitexBalance} history={history} startTrade={startTrade} completeTrade={completeTrade}/></div>;
+function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,tradeRows,startTrade,completeTrade,purchaseAi,openLogin}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void}) {
+  return <div className="space-y-5"><div><h2 className="text-2xl font-black">AI</h2></div><CandlestickChart/><AiPurchaseCard currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin}/><CopyTradeScreen activeTrade={activeTrade} bitexBalance={bitexBalance} tradeRows={tradeRows} startTrade={startTrade} completeTrade={completeTrade}/></div>;
 }
 
 function AiPurchaseCard({currentUser,status,purchaseAi,openLogin}:{currentUser:CurrentUser|null;status:AiSubscriptionStatus|null;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void}) {
@@ -966,15 +971,22 @@ function TradingCategoryPage({category: _category}:{category:Exclude<TradeCatego
   return <div className="space-y-5"><label className="flex w-fit items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Pair<select value={symbol} onChange={event=>setSymbol(event.target.value)} className="bg-transparent text-xs font-black text-white outline-none">{pairOptions.map(pair=><option key={pair} value={pair} className="bg-ink">{pair.replace("USDT","/USDT")}</option>)}</select></label><CandlestickChart symbol={symbol}/><OrderBookPanel symbol={symbol}/><section className={`${card} p-5`}><div className="flex items-center justify-between"><h3 className="font-bold">Order entry</h3><span className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold text-slate-400">{symbol.replace("USDT","/USDT")}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><button className="rounded-xl bg-mint py-3 text-xs font-black text-ink">Buy</button><button className="rounded-xl bg-danger py-3 text-xs font-black text-white">Sell</button></div></section></div>;
 }
 
-function CopyTradeScreen({activeTrade,bitexBalance,history,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;bitexBalance:number;history:CopyTradeHistory[];startTrade:(code:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void}) {
-  const [code,setCode]=useState(""); const [error,setError]=useState("");
-  const nextStake=bitexBalance*.01;
-  const start=async()=>{ if(!/^[A-Z0-9]{6}$/.test(code.toUpperCase())) { setError("Enter a valid 6-character code"); return; } const result=await startTrade(code); if(!result.ok){setError(result.message);return;} setError(""); setCode(""); };
-  return <div className="space-y-5"><section className={`${card} p-4 sm:p-5`}><div className="flex items-center justify-between"><label htmlFor="copy-trade-code" className="text-[11px] lowercase text-slate-500">paste copy trade code</label><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="mt-4"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="mt-3"><div className={`flex items-center overflow-hidden rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input id="copy-trade-code" maxLength={6} value={code} onChange={e=>setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,""))} placeholder="paste copy trade code" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-xs text-slate-200 outline-none placeholder:text-slate-600"/><button onClick={start} className="m-1 rounded-lg bg-lime px-5 py-2.5 text-xs font-black text-ink">Verify</button></div>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}</div>}</section>
-    <section className={`${card} overflow-hidden`}><div className="border-b border-line px-5 py-4"><h3 className="font-bold">Previous Copy Trade History</h3></div><div className="divide-y divide-line/70">{history.map(item=><div key={`${item.code}-${item.date}`} className="grid grid-cols-[auto_1fr_auto] gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0"><div className="flex items-center gap-2"><p className="text-sm font-black tracking-wider">{item.code}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${item.status==="Credited"?"bg-mint/10 text-mint":"bg-white/5 text-slate-400"}`}>{item.status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${item.amount.toFixed(2)} · Return: {item.returnPercent}%</p><p className="mt-1 truncate text-[10px] text-slate-500">{item.date}</p></div><p className="shrink-0 text-sm font-black text-mint">+${item.profit.toFixed(4)}</p></div>)}</div></section>
-  </div>;
+function CopyTradeScreen({activeTrade,bitexBalance,tradeRows,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void}) {
+  const [error,setError]=useState("");
+  const [loadingRow,setLoadingRow]=useState("");
+  const rows=tradeRows.length?tradeRows:[];
+  const start=async(row:VipTradeRow)=>{
+    setError("");
+    if(!row.available){setError("Trade not available.");return;}
+    if(!row.eligible){setError("You are not eligible for this trade.");return;}
+    setLoadingRow(row.id);
+    const result=await startTrade(row.id);
+    setLoadingRow("");
+    if(!result.ok){setError(result.message);return;}
+    setError("");
+  };
+  return <div className="space-y-5"><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="font-bold">Copy Trade Income</h3><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="p-4 sm:p-5"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="divide-y divide-line/70">{rows.map(row=>{const status=row.tradeStatus??(row.available?"Live":"Closed");return <div key={row.id} className="flex items-center gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black">{row.label}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${status==="Live"?"bg-lime/10 text-lime":status==="Upcoming"?"bg-[#f6c85f]/10 text-[#f6c85f]":"bg-white/5 text-slate-500"}`}>{status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade time: {row.currentTradeTime??"--:--"} UTC</p><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${Number(row.tradeAmount ?? bitexBalance*.01).toFixed(2)} | Daily {row.dailyPercentMin}% - {row.dailyPercentMax}%</p>{!row.available&&<p className="mt-1 text-[10px] text-danger">Trade not available.</p>}</div><button onClick={()=>start(row)} disabled={loadingRow===row.id} className="shrink-0 rounded-lg bg-lime px-4 py-2 text-xs font-black text-ink disabled:opacity-50">{loadingRow===row.id?"Wait":"Trade"}</button></div>})}</div>}{error&&<p className="border-t border-line px-5 py-3 text-xs text-danger">{error}</p>}</section></div>;
 }
-
 function WalletScreen({notify,assets,futuresBalance,bitexBalance,bitexIncomeEarned,bitexTarget,activity,section,action,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];futuresBalance:number;bitexBalance:number;bitexIncomeEarned:number;bitexTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string}>}) {
  const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotBalance=assets.find(c=>c.symbol==="USDT")?.balance??0; const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+bitexBalance;
 return <div className="space-y-5"><div><h2 className="text-2xl font-black">Asset</h2></div><div className="flex gap-1 overflow-x-auto rounded-xl border border-line bg-panel p-1 no-scrollbar">{(["overview","assets","ledger"] as const).map(item=><button key={item} onClick={()=>onSectionChange(item)} aria-current={section===item?"page":undefined} className={`min-w-[76px] flex-1 rounded-lg px-3 py-2.5 text-xs font-bold capitalize ${section===item?"bg-lime text-ink":"text-slate-500 hover:text-white"}`}>{item}</button>)}</div>
