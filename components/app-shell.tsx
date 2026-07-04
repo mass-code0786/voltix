@@ -14,7 +14,7 @@ import { Sparkline } from "./sparkline";
 import { CandlestickChart } from "./candlestick-chart";
 import { OrderBookPanel } from "./order-book";
 import { BrandLogo } from "./brand-logo";
-import { coins, teamMembers } from "@/lib/demo-data";
+import { coins } from "@/lib/demo-data";
 import { compact, inr, usd } from "@/lib/format";
 import { useLiveTickers } from "@/lib/use-market-data";
 import { currencyConfigForCountry, formatLocalCurrency } from "@/lib/local-currency";
@@ -27,8 +27,8 @@ type UserWallet = "SPOT" | "FUTURES" | "BITEX";
 type WalletActivity = readonly [typeof ArrowDownLeft, string, string, string];
 type WithdrawalInput = { walletType: "SPOT" | "BITEX"; amount: number; address: string; network: string };
 type DemoWithdrawal = { id: string; user: string; uid: string; walletType: "SPOT" | "BITEX"; amount: number; address: string; network: string; fee: number; receivable: number; status: "PENDING" | "COMPLETED" | "APPROVED" | "REJECTED"; rejectionReason?: string };
-type ActiveCopyTrade = { code: string; amount: number; returnPercent: number; profit: number };
-type CopyTradeHistory = ActiveCopyTrade & { date: string; status: "Completed" | "Credited" };
+type ActiveCopyTrade = { code: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string };
+type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
 type AppCoin = typeof coins[number];
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath">> & { localLogoPath?: string | null };
@@ -47,6 +47,42 @@ type WalletSnapshot = {
     targetAmount?: number;
     unlocked?: boolean;
   };
+};
+type TeamMember = {
+  id: string;
+  uid?: string | null;
+  name: string;
+  initials: string;
+  level: number;
+  packageAmount: number;
+  status: string;
+  joinedAt: string;
+};
+type TeamSnapshot = {
+  referralUid?: string | null;
+  referralLink?: string | null;
+  stats?: {
+    directTeamCount?: number;
+    totalNetworkCount?: number;
+    activeUsersCount?: number;
+    teamVolume?: number;
+  };
+  members?: TeamMember[];
+};
+type DashboardSnapshot = {
+  user?: {
+    name?: string | null;
+    uid?: string | null;
+    vipRank?: string | null;
+  };
+  summary?: {
+    totalPortfolio?: number;
+    todaysProfit?: number;
+    totalIncome?: number;
+    activePackageAmount?: number;
+  };
+  wallet?: WalletSnapshot;
+  team?: TeamSnapshot;
 };
 
 const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
@@ -67,27 +103,8 @@ const mobileTabs: { id: Tab; label: string; icon: typeof Home; section?: WalletS
 
 const card = "rounded-2xl border border-line bg-panel/80";
 const coinSettingsKey = "voltix.coin-settings";
-const topCopyTraders = [
-  { country: "USA", name: "Michael R.", monthlyReturn: 63, message: "Consistent copy trading helped me grow my portfolio steadily." },
-  { country: "UK", name: "Oliver B.", monthlyReturn: 68, message: "I follow smart strategies and focus on risk control." },
-  { country: "UAE", name: "Ahmed K.", monthlyReturn: 72, message: "My monthly results improved after using copy trading." },
-  { country: "India", name: "Arjun K.", monthlyReturn: 70, message: "Bitex copy trade makes strategy tracking simple." },
-  { country: "Singapore", name: "Wei L.", monthlyReturn: 78, message: "I prefer steady returns instead of risky decisions." },
-  { country: "Japan", name: "Ren S.", monthlyReturn: 69, message: "Copy trade helps me follow market moves faster." },
-  { country: "South Korea", name: "Min J.", monthlyReturn: 55, message: "My strategy is simple: discipline and patience." },
-  { country: "Germany", name: "Lukas M.", monthlyReturn: 45, message: "I track every trade and manage risk carefully." },
-  { country: "France", name: "Pierre D.", monthlyReturn: 59, message: "Monthly performance matters more than daily noise." },
-  { country: "Brazil", name: "Carlos B.", monthlyReturn: 60, message: "I focus on long-term growth with copy trading." },
-];
+const topCopyTraders: { country: string; name: string; monthlyReturn: number; message: string }[] = [];
 const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA","TRX","AVAX","DOT","LINK","TON","SHIB","LTC","BCH","ATOM","APT","ARB","OP","PEPE","NEAR","INJ","SEI","FIL"];
-const invalidCopyTradeCodeMessage = "Invalid copy trade code. Please use a valid code issued by the platform.";
-const demoTradeCodes: Record<string, { returnPercent: number; status: "ACTIVE" | "INACTIVE" | "EXPIRED" | "DELETED"; maxUsage: number; usedCount: number; createdBy: string; expiresAt: string }> = {
-  A7K92B: { returnPercent: 2.5, status: "ACTIVE", maxUsage: 1, usedCount: 1, createdBy: "system", expiresAt: "2026-06-21T20:10:00Z" },
-  Q4M8XZ: { returnPercent: 2.2, status: "ACTIVE", maxUsage: 50, usedCount: 12, createdBy: "system", expiresAt: "2026-06-22T20:10:00Z" },
-  B9T2KL: { returnPercent: 2.5, status: "ACTIVE", maxUsage: 10, usedCount: 0, createdBy: "system", expiresAt: "2026-06-22T20:10:00Z" },
-  P6V3RD: { returnPercent: 2.15, status: "EXPIRED", maxUsage: 1, usedCount: 0, createdBy: "system", expiresAt: "2026-06-20T14:10:00Z" },
-};
-const minCopyTradeStake = 1;
 const demoFuturesBalance = 350;
 const demoBitexBalance = 1284.65;
 const demoBitexTransferred = 2468.25;
@@ -152,12 +169,8 @@ export default function AppShell() {
   const [tradeMenuOpen, setTradeMenuOpen] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [toast, setToast] = useState("");
-  const [activeCopyTrade, setActiveCopyTrade] = useState<ActiveCopyTrade | null>({ code: "A7K92B", amount: 12.85, returnPercent: 2.5, profit: 0.32125 });
-  const [usedTradeCodes, setUsedTradeCodes] = useState<string[]>(["A7K92B"]);
-  const [copyTradeHistory, setCopyTradeHistory] = useState<CopyTradeHistory[]>([
-    { code: "R9C3WN", amount: 10, returnPercent: 2.4, profit: 0.24, date: "Jun 10, 2026 · 2:20 PM", status: "Completed" },
-    { code: "T6V2KL", amount: 8.5, returnPercent: 2.2, profit: 0.187, date: "Jun 9, 2026 · 6:30 PM", status: "Credited" },
-  ]);
+  const [activeCopyTrade, setActiveCopyTrade] = useState<ActiveCopyTrade | null>(null);
+  const [copyTradeHistory, setCopyTradeHistory] = useState<CopyTradeHistory[]>([]);
   const [walletCoins, setWalletCoins] = useState(() => applyCoinSettings(coins).map((coin) => ({ ...coin })));
   const [futuresBalance, setFuturesBalance] = useState(demoFuturesBalance);
   const [bitexBalance, setBitexBalance] = useState(demoBitexBalance);
@@ -175,6 +188,7 @@ export default function AppShell() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [walletActivity, setWalletActivity] = useState<WalletActivity[]>([
     [ArrowDownLeft, "USDT deposit", "+500.00 USDT", "Confirmed"],
     [ArrowUpRight, "BTC transfer", "-0.002 BTC", "Completed"],
@@ -237,6 +251,31 @@ export default function AppShell() {
     applyWalletSnapshot(data?.authenticated ? data.wallet as WalletSnapshot : null);
   }, [applyWalletSnapshot]);
 
+  const refreshDashboard = useCallback(async (user: CurrentUser | null) => {
+    if (!user) {
+      setDashboard(null);
+      return;
+    }
+    const response = await fetch("/api/dashboard");
+    if (!response.ok) throw new Error("Dashboard request failed");
+    const data = await response.json();
+    setDashboard(data?.authenticated ? data.dashboard as DashboardSnapshot : null);
+  }, []);
+
+  const refreshCopyTradeStatus = useCallback(async (user: CurrentUser | null) => {
+    if (!user) {
+      setActiveCopyTrade(null);
+      setCopyTradeHistory([]);
+      return;
+    }
+    const response = await fetch("/api/copy-trade/status");
+    if (!response.ok) throw new Error("Copy trade status request failed");
+    const data = await response.json();
+    const status = data?.status;
+    setActiveCopyTrade(status?.activeTrade ? normalizeTrade(status.activeTrade) : null);
+    setCopyTradeHistory(Array.isArray(status?.history) ? status.history.map(normalizeTrade) : []);
+  }, []);
+
   useEffect(() => {
     fetch("/api/coins")
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -260,6 +299,23 @@ export default function AppShell() {
         if (!currentUser) applyWalletSnapshot(null);
       });
   }, [applyWalletSnapshot, currentUser, refreshWallet]);
+
+  useEffect(() => {
+    refreshDashboard(currentUser)
+      .catch(() => {
+        if (!currentUser) setDashboard(null);
+      });
+  }, [currentUser, refreshDashboard]);
+
+  useEffect(() => {
+    refreshCopyTradeStatus(currentUser)
+      .catch(() => {
+        if (!currentUser) {
+          setActiveCopyTrade(null);
+          setCopyTradeHistory([]);
+        }
+      });
+  }, [currentUser, refreshCopyTradeStatus]);
 
   const syncNavigation = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -388,42 +444,24 @@ export default function AppShell() {
     return true;
   }, [bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, walletCoins]);
 
-  const startCopyTrade = useCallback((rawCode: string) => {
-    const code = rawCode.toUpperCase();
-    const strategyCode = demoTradeCodes[code];
-    if (!strategyCode || strategyCode.status !== "ACTIVE" || new Date(strategyCode.expiresAt) <= new Date() || strategyCode.usedCount >= strategyCode.maxUsage) return { ok: false, message: invalidCopyTradeCodeMessage };
-    if (usedTradeCodes.includes(code)) return { ok: false, message: invalidCopyTradeCodeMessage };
-    if (activeCopyTrade) return { ok: false, message: "A copy trade is already active" };
-    if (bitexBalance <= 0) return { ok: false, message: "Please transfer funds to Bitex wallet before starting copy trade." };
-    const amount = Number((bitexBalance * 0.01).toFixed(8));
-    if (amount < minCopyTradeStake) return { ok: false, message: `Copy trade stake must be at least $${minCopyTradeStake.toFixed(2)}.` };
-    const returnPercent = strategyCode.returnPercent;
-    const profit = Number(((amount * returnPercent) / 100).toFixed(8));
-    setBitexBalance((current) => current - amount);
-    setActiveCopyTrade({ code, amount, returnPercent, profit });
-    setUsedTradeCodes((current) => [...current, code]);
-    setWalletActivity((current) => [[LineChart, "Copy trade stake locked", `-${amount.toFixed(2)} USDT`, `Strategy code ${code}`], ...current]);
-    notify(`Strategy ${code} verified. ${amount.toFixed(2)} USDT locked from Bitex.`);
+  const startCopyTrade = useCallback(async (rawCode: string) => {
+    const response = await fetch("/api/copy-trade/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: rawCode.toUpperCase() }) });
+    const data = await response.json();
+    if (!response.ok) return { ok: false, message: data.error || "Copy trade failed" };
+    await refreshCopyTradeStatus(currentUser);
+    await refreshWallet(currentUser);
+    setWalletActivity((current) => [[LineChart, "Copy trade stake locked", `-${Number(data.trade.amount).toFixed(2)} USDT`, `Strategy code ${data.trade.code}`], ...current]);
+    notify(`Strategy ${data.trade.code} verified. ${Number(data.trade.amount).toFixed(2)} USDT locked from Bitex.`);
     return { ok: true, message: "" };
-  }, [activeCopyTrade, bitexBalance, notify, usedTradeCodes]);
+  }, [currentUser, notify, refreshCopyTradeStatus, refreshWallet]);
 
   const completeActiveCopyTrade = useCallback(() => {
-    if (!activeCopyTrade) return;
-    const credit = activeCopyTrade.amount + activeCopyTrade.profit;
-    setBitexBalance((current) => current + credit);
-    setBitexIncomeEarned((current) => current + activeCopyTrade.profit);
-    setCopyTradeHistory((current) => [{
-      ...activeCopyTrade,
-      date: new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }),
-      status: "Credited",
-    }, ...current]);
-    setWalletActivity((current) => [[CircleDollarSign, "Copy trade income", `+${activeCopyTrade.profit.toFixed(4)} BITEX`, `Principal returned, ${activeCopyTrade.code} credited`], ...current]);
-    setActiveCopyTrade(null);
-    notify(`${activeCopyTrade.code} completed. Profit credited to Bitex Wallet.`);
-  }, [activeCopyTrade, notify]);
+    refreshCopyTradeStatus(currentUser).catch(() => {});
+    refreshWallet(currentUser).catch(() => {});
+  }, [currentUser, refreshCopyTradeStatus, refreshWallet]);
 
   const screen = {
-    home: <HomeScreen onNavigate={navigate} onOpenCopyTrade={()=>navigate("bitex")} assets={walletCoins} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
+    home: <HomeScreen onNavigate={navigate} onOpenCopyTrade={()=>navigate("bitex")} assets={walletCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
     markets: <MarketsScreen coins={walletCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
     bitex: <BitexCopyTradePage activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} />,
@@ -459,7 +497,7 @@ export default function AppShell() {
                 <h1 className="font-bold">{tab==="team"?"Team":tabs.find((item) => item.id === tab)?.label}</h1>
               </div>
               <div className="flex items-center gap-2">
-                <button className="relative rounded-full border border-line bg-panel p-2.5 text-slate-300"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-panel bg-lime" /></button>
+                <button className="relative rounded-full border border-line bg-panel p-2.5 text-slate-300"><Bell size={18} /></button>
                 <button onClick={() => setMenu(!menu)} className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-lime to-mint text-sm font-black text-ink">{initials(currentUser?.name)}</button>
               </div>
             </div>
@@ -501,6 +539,18 @@ function initials(name?: string | null) {
   return parts.length ? parts.slice(0, 2).map(part => part[0]).join("").toUpperCase() : "AC";
 }
 
+function normalizeTrade(raw: ActiveCopyTrade & { startedAt?: string; remainingTime?: number; status?: string }): CopyTradeHistory {
+  return {
+    code: raw.code,
+    amount: Number(raw.amount ?? 0),
+    returnPercent: Number(raw.returnPercent ?? 0),
+    profit: Number(raw.profit ?? 0),
+    remainingTime: Number(raw.remainingTime ?? 0),
+    status: raw.status ?? "Completed",
+    date: raw.date ?? (raw.startedAt ? new Date(raw.startedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""),
+  };
+}
+
 function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerification,openHelp }: { close: () => void;notify:(message:string)=>void;user:CurrentUser|null;openLogin:()=>void;openRegister:()=>void;logout:()=>void;openVerification:()=>void;openHelp:()=>void }) {
   const uid=user?.uid?.trim();
   const copyUid=()=>{if(!uid){notify("UID unavailable");return;}navigator.clipboard?.writeText(uid);notify("UID copied");};
@@ -532,8 +582,9 @@ function AuthModal({mode,setMode,close,authenticated}:{mode:AuthMode;setMode:(mo
   return <div className="fixed inset-0 z-[90] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">{register?"Create account":"Login"}</h3><p className="mt-1 text-xs text-slate-500">{register?"Register with your details":"Access your Voltix account"}</p></div><button onClick={close}><X/></button></div><div className="mt-5 space-y-4">{register&&<FormField label="Full name" value={name} onChange={setName}/>}<FormField label="Email" value={email} onChange={setEmail}/><label className="block text-xs font-bold text-slate-400">Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label>{register&&<><label className="block text-xs font-bold text-slate-400">Confirm password<input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Country<select value={country} onChange={e=>setCountry(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none">{countries.map(item=><option key={item}>{item}</option>)}</select></label><FormField label="Referral UID" value={referralCode} onChange={setReferralCode} placeholder="Optional"/></>}{error&&<p className="text-xs text-danger">{error}</p>}</div><button disabled={loading} onClick={submit} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Please wait...":register?"Create account":"Login"}</button><button onClick={()=>{setError("");setMode(register?"login":"register");}} className="mt-3 w-full text-center text-xs font-bold text-lime">{register?"Already have an account? Login":"Create a new account"}</button></div></div>;
 }
 
-function HomeScreen({ onNavigate, onOpenCopyTrade, assets, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance, userCountry }: { onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenCopyTrade: () => void; assets: AppCoin[]; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number; userCountry: string }) {
-  const total = useMemo(() => assets.reduce((sum, c) => sum + c.price * c.balance, 0), [assets]);
+function HomeScreen({ onNavigate, onOpenCopyTrade, assets, dashboard, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance, userCountry }: { onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenCopyTrade: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number; userCountry: string }) {
+  const total = dashboard?.summary?.totalPortfolio ?? 0;
+  const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
   const live=useLiveTickers();
   const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
   const localCurrency=useMemo(()=>currencyConfigForCountry(userCountry),[userCountry]);
@@ -552,7 +603,7 @@ function HomeScreen({ onNavigate, onOpenCopyTrade, assets, balanceVisible, setBa
   return <div className="space-y-5">
     <section className="relative overflow-hidden rounded-3xl border border-lime/20 bg-gradient-to-br from-[#172a20] via-[#101d18] to-[#0a120f] p-5 shadow-glow sm:p-7">
       <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full border-[34px] border-lime/[.04]" />
-      <div className="relative flex items-start justify-between"><div><div className="flex items-center gap-2 text-xs font-medium text-slate-400">Total portfolio <button onClick={() => setBalanceVisible(!balanceVisible)} className="text-slate-500">{balanceVisible ? "Hide" : "Show"}</button></div><div className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{balanceVisible ? usd(total) : "$ ••••••"}</div><div className="mt-1 text-sm text-slate-400">{balanceVisible ? inr(total) : "? ••••••"} <span className="ml-2 font-bold text-mint">+3.26%</span></div></div><div className="rounded-xl bg-lime/10 p-3 text-lime"><LineChart size={24} /></div></div>
+      <div className="relative flex items-start justify-between"><div><div className="flex items-center gap-2 text-xs font-medium text-slate-400">Total portfolio <button onClick={() => setBalanceVisible(!balanceVisible)} className="text-slate-500">{balanceVisible ? "Hide" : "Show"}</button></div><div className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{balanceVisible ? usd(total) : "$ ••••••"}</div><div className="mt-1 text-sm text-slate-400">{balanceVisible ? inr(total) : "? ••••••"} <span className="ml-2 font-bold text-mint">{usd(todaysProfit)} today</span></div></div><div className="rounded-xl bg-lime/10 p-3 text-lime"><LineChart size={24} /></div></div>
       <div className="relative mt-7 grid grid-cols-4 gap-2">{shortcuts.map(({icon:Icon,label,onClick}) => <button key={label} onClick={onClick} className="flex flex-col items-center gap-2 rounded-xl bg-white/[.045] px-1 py-3 text-xs font-semibold hover:bg-white/[.08]"><Icon size={19} className="text-lime" />{label}</button>)}</div>
     </section>
 
@@ -571,11 +622,16 @@ function HomeScreen({ onNavigate, onOpenCopyTrade, assets, balanceVisible, setBa
 function TradeActiveCard({ onClick, trade, previewAmount }: { onClick: () => void; trade: ActiveCopyTrade | null; previewAmount: number }) {
   const code=trade?.code??"Paste code";
   const amount=trade?.amount??previewAmount;
-  return <button onClick={onClick} className="relative w-full overflow-hidden rounded-2xl border border-lime/25 bg-lime/[.07] p-5 text-left"><div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-lime/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="pulse-ring grid h-12 w-12 place-items-center rounded-full bg-lime text-ink"><Zap size={22} fill="currentColor" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="font-bold">Trade Active</h3><span className="rounded-full bg-lime/10 px-2 py-0.5 text-[9px] font-black text-lime">LIVE</span></div><p className="mt-1 text-xs text-slate-400">BTC/USDT · Strategy code {code}</p></div><ChevronRight className="text-slate-500" /></div><div className="relative mt-4 grid grid-cols-2 gap-3"><div><p className="text-[10px] uppercase tracking-widest text-slate-500">Trade amount</p><p className="mt-1 text-lg font-black text-white">${amount.toFixed(2)}</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-widest text-slate-500">Remaining</p><p className="mt-1 text-xl font-black text-lime">{trade?"12:48":"--:--"}</p></div></div><div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-black/30"><div className={`h-full rounded-full bg-lime ${trade?"w-[38%]":"w-[8%]"}`} /></div></button>;
+  return <button onClick={onClick} className="relative w-full overflow-hidden rounded-2xl border border-lime/25 bg-lime/[.07] p-5 text-left"><div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-lime/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="pulse-ring grid h-12 w-12 place-items-center rounded-full bg-lime text-ink"><Zap size={22} fill="currentColor" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="font-bold">Trade Active</h3><span className="rounded-full bg-lime/10 px-2 py-0.5 text-[9px] font-black text-lime">LIVE</span></div><p className="mt-1 text-xs text-slate-400">BTC/USDT · Strategy code {code}</p></div><ChevronRight className="text-slate-500" /></div><div className="relative mt-4 grid grid-cols-2 gap-3"><div><p className="text-[10px] uppercase tracking-widest text-slate-500">Trade amount</p><p className="mt-1 text-lg font-black text-white">${amount.toFixed(2)}</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-widest text-slate-500">Remaining</p><p className="mt-1 text-xl font-black text-lime">{trade?formatRemaining(trade.remainingTime??0):"--:--"}</p></div></div><div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-black/30"><div className={`h-full rounded-full bg-lime ${trade?"w-[38%]":"w-[8%]"}`} /></div></button>;
+}
+
+function formatRemaining(seconds:number) {
+  const safe=Math.max(0,Math.floor(seconds));
+  return `${String(Math.floor(safe/60)).padStart(2,"0")}:${String(safe%60).padStart(2,"0")}`;
 }
 
 function TopCopyTraders() {
-  return <section className={`${card} overflow-hidden`}><div className="border-b border-line px-5 py-4"><h2 className="font-bold">Top Copy Traders</h2></div><div className="divide-y divide-line/60">{topCopyTraders.map((trader,index)=>{const assetIndex=index+1;return <div key={`${trader.country}-${trader.name}`} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-5"><img src={`/trader-flags/flag-${assetIndex}.png`} alt={`${trader.country} flag`} className="h-5 w-7 shrink-0 rounded object-cover ring-1 ring-white/10 sm:h-6 sm:w-8" /><img src={`/traders/trader-${assetIndex}.png`} alt={`${trader.name} profile`} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-lime/25 sm:h-10 sm:w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{trader.name}</p><p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-500">{trader.message}</p></div><div className="w-[42px] shrink-0 text-right sm:w-[54px]"><p className="text-xs font-black text-lime sm:text-sm">+{trader.monthlyReturn}%</p><p className="text-[9px] text-slate-500 sm:text-[10px]">/ month</p></div><img src={`/trader-charts/chart-${assetIndex}.png`} alt={`${trader.name} monthly profit chart`} className="h-[34px] w-[54px] shrink-0 rounded-md border border-line bg-black/20 object-cover" /></div>;})}</div></section>;
+  return <section className={`${card} overflow-hidden`}><div className="border-b border-line px-5 py-4"><h2 className="font-bold">Top Copy Traders</h2></div><div className="divide-y divide-line/60">{topCopyTraders.length?topCopyTraders.map((trader,index)=>{const assetIndex=index+1;return <div key={`${trader.country}-${trader.name}`} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-5"><img src={`/trader-flags/flag-${assetIndex}.png`} alt={`${trader.country} flag`} className="h-5 w-7 shrink-0 rounded object-cover ring-1 ring-white/10 sm:h-6 sm:w-8" /><img src={`/traders/trader-${assetIndex}.png`} alt={`${trader.name} profile`} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-lime/25 sm:h-10 sm:w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{trader.name}</p><p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-500">{trader.message}</p></div><div className="w-[42px] shrink-0 text-right sm:w-[54px]"><p className="text-xs font-black text-lime sm:text-sm">+{trader.monthlyReturn}%</p><p className="text-[9px] text-slate-500 sm:text-[10px]">/ month</p></div><img src={`/trader-charts/chart-${assetIndex}.png`} alt={`${trader.name} monthly profit chart`} className="h-[34px] w-[54px] shrink-0 rounded-md border border-line bg-black/20 object-cover" /></div>;}):<div className="px-5 py-10 text-center text-xs text-slate-500">No copy trader records available</div>}</div></section>;
 }
 
 function CoinRow({ coin, action, localCurrency=currencyConfigForCountry() }: { coin: AppCoin&{volume?:number;live?:boolean}; action?: () => void; localCurrency?: ReturnType<typeof currencyConfigForCountry> }) {
@@ -598,7 +654,7 @@ function TradeWorkspace({category}:{category:TradeCategory}) {
   return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category}/></div>;
 }
 
-function BitexCopyTradePage({activeTrade,bitexBalance,history,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;bitexBalance:number;history:CopyTradeHistory[];startTrade:(code:string)=>{ok:boolean;message:string};completeTrade:()=>void}) {
+function BitexCopyTradePage({activeTrade,bitexBalance,history,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;bitexBalance:number;history:CopyTradeHistory[];startTrade:(code:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void}) {
   return <div className="space-y-5"><div><h2 className="text-2xl font-black">Bitex</h2></div><CandlestickChart/><CopyTradeScreen activeTrade={activeTrade} bitexBalance={bitexBalance} history={history} startTrade={startTrade} completeTrade={completeTrade}/></div>;
 }
 
@@ -619,10 +675,10 @@ function TradingCategoryPage({category: _category}:{category:Exclude<TradeCatego
   return <div className="space-y-5"><label className="flex w-fit items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Pair<select value={symbol} onChange={event=>setSymbol(event.target.value)} className="bg-transparent text-xs font-black text-white outline-none">{pairOptions.map(pair=><option key={pair} value={pair} className="bg-ink">{pair.replace("USDT","/USDT")}</option>)}</select></label><CandlestickChart symbol={symbol}/><OrderBookPanel symbol={symbol}/><section className={`${card} p-5`}><div className="flex items-center justify-between"><h3 className="font-bold">Order entry</h3><span className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold text-slate-400">{symbol.replace("USDT","/USDT")}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><button className="rounded-xl bg-mint py-3 text-xs font-black text-ink">Buy</button><button className="rounded-xl bg-danger py-3 text-xs font-black text-white">Sell</button></div></section></div>;
 }
 
-function CopyTradeScreen({activeTrade,bitexBalance,history,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;bitexBalance:number;history:CopyTradeHistory[];startTrade:(code:string)=>{ok:boolean;message:string};completeTrade:()=>void}) {
+function CopyTradeScreen({activeTrade,bitexBalance,history,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;bitexBalance:number;history:CopyTradeHistory[];startTrade:(code:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void}) {
   const [code,setCode]=useState(""); const [error,setError]=useState("");
   const nextStake=bitexBalance*.01;
-  const start=()=>{ if(!/^[A-Z0-9]{6}$/.test(code.toUpperCase())) { setError("Enter a valid 6-character code"); return; } const result=startTrade(code); if(!result.ok){setError(result.message);return;} setError(""); setCode(""); };
+  const start=async()=>{ if(!/^[A-Z0-9]{6}$/.test(code.toUpperCase())) { setError("Enter a valid 6-character code"); return; } const result=await startTrade(code); if(!result.ok){setError(result.message);return;} setError(""); setCode(""); };
   return <div className="space-y-5"><section className={`${card} p-4 sm:p-5`}><div className="flex items-center justify-between"><label htmlFor="copy-trade-code" className="text-[11px] lowercase text-slate-500">paste copy trade code</label><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="mt-4"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="mt-3"><div className={`flex items-center overflow-hidden rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input id="copy-trade-code" maxLength={6} value={code} onChange={e=>setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,""))} placeholder="paste copy trade code" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-xs text-slate-200 outline-none placeholder:text-slate-600"/><button onClick={start} className="m-1 rounded-lg bg-lime px-5 py-2.5 text-xs font-black text-ink">Verify</button></div>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}</div>}</section>
     <section className={`${card} overflow-hidden`}><div className="border-b border-line px-5 py-4"><h3 className="font-bold">Previous Copy Trade History</h3></div><div className="divide-y divide-line/70">{history.map(item=><div key={`${item.code}-${item.date}`} className="grid grid-cols-[auto_1fr_auto] gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0"><div className="flex items-center gap-2"><p className="text-sm font-black tracking-wider">{item.code}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${item.status==="Credited"?"bg-mint/10 text-mint":"bg-white/5 text-slate-400"}`}>{item.status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${item.amount.toFixed(2)} · Return: {item.returnPercent}%</p><p className="mt-1 truncate text-[10px] text-slate-500">{item.date}</p></div><p className="shrink-0 text-sm font-black text-mint">+${item.profit.toFixed(4)}</p></div>)}</div></section>
   </div>;
@@ -642,10 +698,38 @@ function ActivityRows({rows}:{rows:readonly WalletActivity[]}) { return <div cla
 
 function DepositModal({close,notify}:{close:()=>void;notify:(s:string)=>void}) { const addr=""; const copyAddress=()=>{if(!addr){notify("Deposit address unavailable");return;}navigator.clipboard?.writeText(addr);notify("Address copied");}; return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex justify-between"><div><h3 className="text-xl font-black">Deposit to Main/Spot wallet</h3><p className="mt-1 text-xs text-slate-500">Send only USDT on BNB Smart Chain</p></div><button onClick={close}><X/></button></div><div className="mx-auto my-6 grid h-44 w-44 place-items-center rounded-2xl bg-white p-3"><div className="grid h-full w-full grid-cols-5 gap-1 bg-ink p-2">{Array.from({length:25}).map((_,i)=><i key={i} className={`${[0,1,2,5,7,10,11,12,14,17,20,22,23,24].includes(i)?"bg-white":"bg-ink"}`}/>)}</div></div><p className="text-center text-[10px] uppercase tracking-widest text-slate-500">Your unique deposit address</p><button onClick={copyAddress} className="mt-3 flex w-full items-center gap-3 rounded-xl border border-line bg-ink p-3 text-left"><span className="min-w-0 flex-1 break-all text-xs text-slate-300">{addr || "Deposit address unavailable"}</span><Copy size={16} className="shrink-0 text-lime"/></button><div className="mt-4 rounded-xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. After 12 network confirmations, funds are credited only to the Main/Spot wallet.</div></div></div> }
 
-function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:CurrentUser|null}) { const referralLink=currentUser?.uid?.trim()?`voltix.app/join/${currentUser.uid.trim()}`:""; const [shareOpen,setShareOpen]=useState(false); const copyReferral=()=>{if(!referralLink){notify("Referral link unavailable");return;}navigator.clipboard?.writeText(referralLink);notify("Referral link copied");}; return <div className="space-y-5"><div><h2 className="text-2xl font-black">My Network</h2><p className="mt-1 text-sm text-slate-500">Grow your team and unlock rewards</p></div><section className="rounded-2xl border border-lime/20 bg-gradient-to-br from-[#18291f] to-panel px-4 py-3"><div className="flex min-w-0 items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Referral Link</p><p className="mt-1 truncate text-xs font-bold text-white sm:text-sm">{referralLink || "Referral link unavailable"}</p></div><div className="flex shrink-0 items-center gap-2"><button onClick={copyReferral} aria-label="Copy referral link" className="grid h-9 w-9 place-items-center rounded-xl bg-lime text-ink"><Copy size={15}/></button><button onClick={()=>referralLink&&setShareOpen(true)} aria-label="Share referral link" className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-white/5 text-lime"><Share2 size={15}/></button></div></div></section><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Direct team" value="5" /><Stat label="Total network" value="28" /><Stat label="Active" value="24" /><Stat label="Team volume" value="$8.4K" /></div><section className={`${card} p-5`}><div className="flex items-center justify-between"><h3 className="font-bold">Extra trade goal</h3><span className="text-xs font-bold text-[#f6c85f]">3 / 5</span></div><p className="mt-2 text-xs text-slate-500">Qualified directs with a $50+ active package</p><div className="mt-4 h-2 rounded-full bg-ink"><div className="h-full w-3/5 rounded-full bg-gradient-to-r from-[#f6c85f] to-lime"/></div></section><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line p-5"><div><h3 className="font-bold">Team members</h3><p className="mt-1 text-xs text-slate-500">Across all levels</p></div><button className="flex items-center gap-1 text-xs text-slate-400">All levels <ChevronDown size={14}/></button></div>{teamMembers.map((m,i)=><div key={m.name} className="flex items-center gap-3 border-b border-line/60 p-4 last:border-0"><div className={`grid h-10 w-10 place-items-center rounded-full text-xs font-black ${i<3?"bg-lime/10 text-lime":"bg-white/5 text-slate-400"}`}>{m.initials}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{m.name}</p><span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-500">L{m.level}</span></div><p className="mt-1 text-[10px] text-slate-500">Joined {m.joined}</p></div><div className="text-right"><p className="text-xs font-bold">${m.package}</p><p className="mt-1 text-[10px] text-mint">? {m.status}</p></div></div>)}</section>{shareOpen&&referralLink&&<ReferralShareSheet link={referralLink} close={()=>setShareOpen(false)} copied={()=>{copyReferral();setShareOpen(false);}}/>}</div> }
+function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:CurrentUser|null}) {
+  const [shareOpen,setShareOpen]=useState(false);
+  const [team,setTeam]=useState<TeamSnapshot | null>(null);
+  useEffect(()=>{
+    let active=true;
+    if(!currentUser){
+      setTeam(null);
+      return;
+    }
+    fetch("/api/team")
+      .then(response=>response.ok?response.json():Promise.reject())
+      .then(data=>{if(active)setTeam(data?.authenticated?data.team:null);})
+      .catch(()=>{if(active)setTeam(null);});
+    return()=>{active=false;};
+  },[currentUser]);
+  const stats=team?.stats ?? {};
+  const members=team?.members ?? [];
+  const referralLink=team?.referralLink ?? "";
+  const qualifiedDirects=members.filter(member=>member.level===1&&member.packageAmount>=50).length;
+  const progress=Math.min(100,(qualifiedDirects/5)*100);
+  const copyReferral=()=>{if(!referralLink){notify("Referral link unavailable");return;}navigator.clipboard?.writeText(referralLink);notify("Referral link copied");};
+  return <div className="space-y-5"><div><h2 className="text-2xl font-black">My Network</h2><p className="mt-1 text-sm text-slate-500">Grow your team and unlock rewards</p></div><section className="rounded-2xl border border-lime/20 bg-gradient-to-br from-[#18291f] to-panel px-4 py-3"><div className="flex min-w-0 items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Referral Link</p><p className="mt-1 truncate text-xs font-bold text-white sm:text-sm">{referralLink || "Referral link unavailable"}</p></div><div className="flex shrink-0 items-center gap-2"><button onClick={copyReferral} aria-label="Copy referral link" className="grid h-9 w-9 place-items-center rounded-xl bg-lime text-ink"><Copy size={15}/></button><button onClick={()=>referralLink&&setShareOpen(true)} aria-label="Share referral link" className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-white/5 text-lime"><Share2 size={15}/></button></div></div></section><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Direct team" value={String(stats.directTeamCount ?? 0)} /><Stat label="Total network" value={String(stats.totalNetworkCount ?? 0)} /><Stat label="Active" value={String(stats.activeUsersCount ?? 0)} /><Stat label="Team volume" value={usd(stats.teamVolume ?? 0)} /></div><section className={`${card} p-5`}><div className="flex items-center justify-between"><h3 className="font-bold">Extra trade goal</h3><span className="text-xs font-bold text-[#f6c85f]">{qualifiedDirects} / 5</span></div><p className="mt-2 text-xs text-slate-500">Qualified directs with a $50+ active package</p><div className="mt-4 h-2 rounded-full bg-ink"><div className="h-full rounded-full bg-gradient-to-r from-[#f6c85f] to-lime" style={{width:`${progress}%`}}/></div></section><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line p-5"><div><h3 className="font-bold">Team members</h3><p className="mt-1 text-xs text-slate-500">Across all levels</p></div><button className="flex items-center gap-1 text-xs text-slate-400">All levels <ChevronDown size={14}/></button></div>{members.length?members.map((m,i)=><div key={m.id} className="flex items-center gap-3 border-b border-line/60 p-4 last:border-0"><div className={`grid h-10 w-10 place-items-center rounded-full text-xs font-black ${i<3?"bg-lime/10 text-lime":"bg-white/5 text-slate-400"}`}>{m.initials}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{m.name}</p><span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-500">L{m.level}</span></div><p className="mt-1 text-[10px] text-slate-500">Joined {joinedLabel(m.joinedAt)}</p></div><div className="text-right"><p className="text-xs font-bold">{usd(m.packageAmount)}</p><p className="mt-1 text-[10px] text-mint">• {m.status}</p></div></div>):<div className="p-5 text-xs text-slate-500">No team members yet</div>}</section>{shareOpen&&referralLink&&<ReferralShareSheet link={referralLink} close={()=>setShareOpen(false)} copied={()=>{copyReferral();setShareOpen(false);}}/>}</div>
+}
+
+function joinedLabel(value:string) {
+  const joined=new Date(value);
+  if(Number.isNaN(joined.getTime())) return "recently";
+  return joined.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+}
 
 function ReferralShareSheet({link,close,copied}:{link:string;close:()=>void;copied:()=>void}) {
-  const url=`https://${link}`;
+  const url=/^https?:\/\//.test(link)?link:`https://${link}`;
   const encoded=encodeURIComponent(url);
   const openShare=(target:string)=>{window.open(target,"_blank","noopener,noreferrer");close();};
   return <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Share referral link"><button className="absolute inset-0" onClick={close} aria-label="Close share sheet"/><div className="relative w-full max-w-md rounded-t-3xl border border-line bg-[#101916] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl"><div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15"/><button onClick={close} aria-label="Close" className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400"><X size={16}/></button><div className="grid grid-cols-5 gap-3 pr-10"><ShareLogo label="WhatsApp" className="bg-[#25D366] text-ink" onClick={()=>openShare(`https://wa.me/?text=${encoded}`)}>W</ShareLogo><ShareLogo label="Telegram" className="bg-[#229ED9] text-white" onClick={()=>openShare(`https://t.me/share/url?url=${encoded}`)}>T</ShareLogo><ShareLogo label="Facebook" className="bg-[#1877F2] text-white" onClick={()=>openShare(`https://www.facebook.com/sharer/sharer.php?u=${encoded}`)}>f</ShareLogo><ShareLogo label="X/Twitter" className="bg-white text-ink" onClick={()=>openShare(`https://twitter.com/intent/tweet?url=${encoded}`)}>X</ShareLogo><button onClick={copied} aria-label="Copy Link" className="grid h-11 w-11 place-items-center rounded-full border border-line bg-white/5 text-lime"><Copy size={17}/></button></div></div></div>;

@@ -68,6 +68,25 @@ export async function getCurrentUser(client = prisma) {
   return user;
 }
 
+export async function getCurrentAdmin(client = prisma) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(sessionCookieName)?.value;
+  if (!token) return { user: null, response: Response.json({ error: "Login required" }, { status: 401 }) };
+  const session = await client.session.findUnique({
+    where: { tokenHash: hashSessionToken(token) },
+    include: { user: { select: { id: true, uid: true, name: true, email: true, role: true, status: true } } },
+  });
+  if (!session || session.expiresAt <= new Date() || session.user.status !== "ACTIVE") {
+    if (session) await client.session.deleteMany({ where: { id: session.id } });
+    return { user: null, response: Response.json({ error: "Login required" }, { status: 401 }) };
+  }
+  if (session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN") {
+    return { user: null, response: Response.json({ error: "Admin access required" }, { status: 403 }) };
+  }
+  const { status: _status, ...user } = session.user;
+  return { user, response: null };
+}
+
 export async function generateUniqueUid(client: Pick<typeof prisma, "user"> = prisma) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const uid = String(Math.floor(100000 + Math.random() * 900000));

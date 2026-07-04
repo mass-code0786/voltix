@@ -46,19 +46,3 @@ export const tradeSlots = [
   { utcHour: 12, utcMinute: 30, label: "Window 2", status: "active" },
   { utcHour: 14, utcMinute: 30, label: "Window 3", status: "upcoming" },
 ];
-
-export const incomeRows = [
-  { type: "Copy trade income", from: "Trade #T4821", amount: 24.50, time: "Today, 6:30 PM", icon: "chart" },
-  { type: "Level income", from: "Rahul S. · L2", amount: 8.40, time: "Today, 2:12 PM", icon: "team" },
-  { type: "Direct income", from: "Neha K. joined Pro", amount: 15, time: "Yesterday, 8:42 PM", icon: "user" },
-  { type: "Copy trade income", from: "Trade #T4790", amount: 22.75, time: "Yesterday, 6:30 PM", icon: "chart" },
-  { type: "Level income", from: "Vikram P. · L3", amount: 4.25, time: "Jun 9, 2026", icon: "team" },
-];
-
-export const teamMembers = [
-  { name: "Rahul Sharma", initials: "RS", level: 1, package: 250, status: "Active", joined: "2d ago" },
-  { name: "Neha Kapoor", initials: "NK", level: 1, package: 100, status: "Active", joined: "4d ago" },
-  { name: "Amit Patel", initials: "AP", level: 1, package: 50, status: "Active", joined: "5d ago" },
-  { name: "Sara Khan", initials: "SK", level: 2, package: 100, status: "Active", joined: "1w ago" },
-  { name: "Vikram Pillai", initials: "VP", level: 3, package: 50, status: "Active", joined: "2w ago" },
-];

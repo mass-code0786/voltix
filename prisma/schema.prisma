@@ -63,6 +63,7 @@ enum CodeStatus {
   ACTIVE
   INACTIVE
   EXPIRED
+  USED
   DELETED
 }
 
@@ -356,6 +357,7 @@ model TradeSlot {
 model TradeCode {
   id             String     @id @default(cuid())
   code           String     @unique @db.VarChar(6)
+  vipRank        String     @default("NONE")
   returnPercent  Decimal    @db.Decimal(5, 2)
   assignedUserId String?
   assignedUser   User?      @relation(fields: [assignedUserId], references: [id])
@@ -363,6 +365,7 @@ model TradeCode {
   slot           TradeSlot? @relation(fields: [slotId], references: [id])
   status         CodeStatus @default(ACTIVE)
   expiresAt      DateTime?
+  tradeWindowMinutes Int    @default(10)
   maxUsage       Int        @default(1)
   usedCount      Int        @default(0)
   trades         CopyTrade[]
