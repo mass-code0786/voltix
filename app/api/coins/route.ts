@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { catalogBySymbol, coinCatalog } from "@/lib/coin-list";
+import { getCurrentAdmin } from "@/lib/auth";
 
 export async function GET(){
   try{
@@ -14,6 +15,8 @@ export async function GET(){
 }
 
 export async function POST(request:Request){
+  const admin = await getCurrentAdmin();
+  if (admin.response) return admin.response;
   const body=await request.json() as {symbol?:string;name?:string;pair?:string;isActive?:boolean;displayOrder?:number};
   const symbol=(body.symbol??"").toUpperCase().replace(/[^A-Z0-9]/g,"");
   if(!symbol||!body.name?.trim())return NextResponse.json({error:"Symbol and name are required"},{status:400});

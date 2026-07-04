@@ -6,7 +6,11 @@ import { enabledTradingPairs } from "@/lib/coin-list";
 export async function GET() {
   await configureEnabledPairs();
   await marketData.refreshNow("api-request");
-  return NextResponse.json({source:"binance",updatedAt:new Date().toISOString(),tickers:marketData.getTickers()});
+  const tickers = marketData.getTickers();
+  if (!tickers.length) {
+    return NextResponse.json({ error: "Live prices unavailable" }, { status: 502 });
+  }
+  return NextResponse.json({source:"binance",updatedAt:new Date().toISOString(),tickers});
 }
 
 async function configureEnabledPairs(){

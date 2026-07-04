@@ -35,7 +35,6 @@ type AppCoin = typeof coins[number];
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath">> & { localLogoPath?: string | null };
 type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; vipRank?: string | null; role?: string | null };
-type AuthMode = "login" | "register";
 type WalletSnapshot = {
   balances?: {
     spot?: number;
@@ -305,7 +304,6 @@ export default function AppShell() {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [aiSubscription, setAiSubscription] = useState<AiSubscriptionStatus | null>(null);
@@ -440,6 +438,11 @@ export default function AppShell() {
     setUnreadNotifications(Number(data.unreadCount ?? 0));
   }, []);
 
+  const openAuthPage = useCallback((mode: "login" | "register" = "login") => {
+    const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.href = `/auth?mode=${mode}&returnTo=${encodeURIComponent(returnTo)}`;
+  }, []);
+
   useEffect(() => {
     fetch("/api/coins")
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -547,7 +550,7 @@ export default function AppShell() {
 
   const navigate = useCallback((nextTab: Tab, section?: WalletSection, action?: WalletAction) => {
     if (nextTab === "wallet" && !currentUser) {
-      setAuthMode("login");
+      openAuthPage("login");
       setMenu(false);
       setNotificationOpen(false);
       return;
@@ -559,11 +562,11 @@ export default function AppShell() {
     setNotificationOpen(false);
     updateUrl(nextTab, section, action);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [currentUser, updateUrl]);
+  }, [currentUser, openAuthPage, updateUrl]);
 
   const selectTab = useCallback((nextTab: Tab, section?: WalletSection) => {
     if (nextTab === "wallet" && !currentUser) {
-      setAuthMode("login");
+      openAuthPage("login");
       return;
     }
     if (nextTab === "trade") {
@@ -571,7 +574,7 @@ export default function AppShell() {
       return;
     }
     navigate(nextTab, section);
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, openAuthPage]);
 
   const openTrade = useCallback((category: TradeCategory) => {
     if(category==="copy"){
@@ -657,7 +660,7 @@ export default function AppShell() {
 
   const purchaseAi = useCallback(async () => {
     if (!currentUser) {
-      setAuthMode("login");
+      openAuthPage("login");
       return { ok: false, message: "Login required" };
     }
     try {
@@ -665,7 +668,7 @@ export default function AppShell() {
       const response = await fetch("/api/ai/subscription/purchase", { method: "POST" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        if (response.status === 401) setAuthMode("login");
+        if (response.status === 401) openAuthPage("login");
         return { ok: false, message: data.error || "AI purchase failed" };
       }
       await Promise.all([
@@ -679,7 +682,7 @@ export default function AppShell() {
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "AI purchase failed" };
     }
-  }, [currentUser, notify, refreshAiSubscription, refreshCopyTradeStatus, refreshDashboard, refreshWallet]);
+  }, [currentUser, notify, openAuthPage, refreshAiSubscription, refreshCopyTradeStatus, refreshDashboard, refreshWallet]);
 
   const completeActiveCopyTrade = useCallback(() => {
     refreshCopyTradeStatus(currentUser).catch(() => {});
@@ -697,10 +700,10 @@ export default function AppShell() {
   }, [currentUser, unreadNotifications]);
 
   const screen = {
-    home: <HomeScreen currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>setAuthMode("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
+    home: <HomeScreen currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
     markets: <MarketsScreen coins={marketCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
-    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>setAuthMode("login")} />,
+    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
     wallet: <WalletScreen notify={notify} assets={walletAssets} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
@@ -733,13 +736,13 @@ export default function AppShell() {
                 <h1 className="font-bold">{tab==="team"?"Team":tabs.find((item) => item.id === tab)?.label}</h1>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => { if (!currentUser) { setAuthMode("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }} className="relative rounded-full border border-line bg-panel p-2.5 text-slate-300" aria-label="Notifications"><Bell size={18} />{unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-lime px-1 text-[10px] font-black text-ink">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}</button>
+                <button onClick={() => { if (!currentUser) { openAuthPage("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }} className="relative rounded-full border border-line bg-panel p-2.5 text-slate-300" aria-label="Notifications"><Bell size={18} />{unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-lime px-1 text-[10px] font-black text-ink">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}</button>
                 <button onClick={() => { setMenu(!menu); setNotificationOpen(false); }} className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-lime to-mint text-sm font-black text-ink">{initials(currentUser?.name)}</button>
               </div>
             </div>
           </header>
           {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
-          {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);setAuthMode("login");}} openRegister={()=>{setMenu(false);setAuthMode("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
+          {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
           <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8">{screen}</div>
         </main>
       </div>
@@ -761,7 +764,6 @@ export default function AppShell() {
       {withdrawalOpen&&<WithdrawalModal balances={{SPOT:Number(assetTotals.total?.spot??0),BITEX:bitexBalance}} bitexUnlocked={bitexPrincipalLocked>0&&bitexIncomeEarned>=bitexPrincipalLocked*2} close={()=>setWithdrawalOpen(false)} withdraw={createWithdrawal}/>} 
       {verificationOpen&&<VerificationRequestModal close={()=>setVerificationOpen(false)} notify={notify} user={currentUser}/>} 
       {helpOpen&&<HelpCenterModal close={()=>setHelpOpen(false)} notify={notify}/>} 
-      {authMode&&<AuthModal mode={authMode} setMode={setAuthMode} close={()=>setAuthMode(null)} authenticated={async()=>{await refreshMe();setAuthMode(null);notify(authMode==="register"?"Registration complete":"Logged in");}}/>}
       {toast && <div className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 whitespace-nowrap rounded-full border border-lime/20 bg-[#17231e] px-5 py-3 text-xs font-bold shadow-2xl lg:bottom-8"><span className="mr-2 text-lime">?</span>{toast}</div>}
     </div>
   );
@@ -796,31 +798,6 @@ function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerif
   const uid=user?.uid?.trim();
   const copyUid=()=>{if(!uid){notify("UID unavailable");return;}navigator.clipboard?.writeText(uid);notify("UID copied");};
   return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">{user?.name?.trim() || "Account"}</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>{uid?`UID ${uid}`:"Not logged in"}</span>{uid&&<button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button>}<span>· {user?.vipRank || "Pro"} member</span></div></div>{user?<button onClick={logout} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Logout</button>:<><button onClick={openLogin} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Login</button><button onClick={openRegister} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Users size={17}/> Register</button></>}<button onClick={openVerification} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button><Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link></div></>;
-}
-
-function AuthModal({mode,setMode,close,authenticated}:{mode:AuthMode;setMode:(mode:AuthMode)=>void;close:()=>void;authenticated:()=>Promise<void>}) {
-  const [name,setName]=useState("");
-  const [email,setEmail]=useState("");
-  const [password,setPassword]=useState("");
-  const [confirmPassword,setConfirmPassword]=useState("");
-  const [country,setCountry]=useState("United States");
-  const [referralCode,setReferralCode]=useState("");
-  const [error,setError]=useState("");
-  const [loading,setLoading]=useState(false);
-  const countries=["United States","India","UAE","Bangladesh","Pakistan","Saudi Arabia","Nepal"];
-  const register=mode==="register";
-  const submit=async()=>{
-    setError("");
-    setLoading(true);
-    try{
-      const response=await fetch(register?"/api/auth/register":"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(register?{name,email,password,confirmPassword,country,referralCode}:{email,password})});
-      const data=await response.json();
-      if(!response.ok)throw new Error(data.error||"Authentication failed");
-      await authenticated();
-    }catch(err){setError(err instanceof Error?err.message:"Authentication failed");}
-    finally{setLoading(false);}
-  };
-  return <div className="fixed inset-0 z-[90] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">{register?"Create account":"Login"}</h3><p className="mt-1 text-xs text-slate-500">{register?"Register with your details":"Access your Voltix account"}</p></div><button onClick={close}><X/></button></div><div className="mt-5 space-y-4">{register&&<FormField label="Full name" value={name} onChange={setName}/>}<FormField label="Email" value={email} onChange={setEmail}/><label className="block text-xs font-bold text-slate-400">Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label>{register&&<><label className="block text-xs font-bold text-slate-400">Confirm password<input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Country<select value={country} onChange={e=>setCountry(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none">{countries.map(item=><option key={item}>{item}</option>)}</select></label><FormField label="Referral UID" value={referralCode} onChange={setReferralCode} placeholder="Optional"/></>}{error&&<p className="text-xs text-danger">{error}</p>}</div><button disabled={loading} onClick={submit} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Please wait...":register?"Create account":"Login"}</button><button onClick={()=>{setError("");setMode(register?"login":"register");}} className="mt-3 w-full text-center text-xs font-bold text-lime">{register?"Already have an account? Login":"Create a new account"}</button></div></div>;
 }
 
 function HomeScreen({ currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, assets, dashboard, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance, userCountry }: { currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number; userCountry: string }) {
