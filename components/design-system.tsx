@@ -31,10 +31,10 @@ type HeaderProps = {
 
 export function AppHeader({ title, subtitle, compactBrand = true, initials, unreadNotifications = 0, onMenuButton, onNotifications, onMenu }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-30 bg-[#050807]/88 px-[18px] pb-3 pt-[max(.9rem,env(safe-area-inset-top))] backdrop-blur-2xl sm:px-6 lg:border-b lg:border-white/[.06] lg:px-8">
+    <header className="sticky top-0 z-30 bg-[#050608]/72 px-[18px] pb-3 pt-[max(.9rem,env(safe-area-inset-top))] backdrop-blur-2xl sm:px-6 lg:border-b lg:border-white/[.06] lg:px-8">
       <div className="mx-auto flex h-[58px] max-w-6xl items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5 lg:hidden">
-          <button onClick={onMenuButton ?? onMenu} className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-[#22ff8a]/15 bg-white/[.035] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Open menu">
+          <button onClick={onMenuButton ?? onMenu} className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-[#18ff8a]/15 bg-white/[.035] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Open menu">
             <Menu size={19} />
           </button>
           <BrandLogo compact={compactBrand} />
@@ -45,14 +45,14 @@ export function AppHeader({ title, subtitle, compactBrand = true, initials, unre
         </div>
         <div className="hidden h-8 min-w-10 flex-1 rounded-full border border-white/[.04] bg-black/20 shadow-[inset_0_8px_22px_rgba(0,0,0,.35)] sm:block lg:hidden" aria-hidden="true" />
         <div className="flex shrink-0 items-center gap-2">
-          <button onClick={onNotifications} className="relative grid h-10 w-10 place-items-center rounded-2xl border border-[#22ff8a]/15 bg-white/[.045] text-slate-200 shadow-[0_0_28px_rgba(34,255,138,.08),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Notifications">
+          <button onClick={onNotifications} className="relative grid h-10 w-10 place-items-center rounded-2xl border border-[#18ff8a]/15 bg-white/[.045] text-slate-200 shadow-[0_0_28px_rgba(24,255,138,.08),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Notifications">
             <Bell size={18} />
-            <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border border-[#050807] bg-[#22ff8a] shadow-[0_0_12px_rgba(34,255,138,.7)]" />
-            {unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#22ff8a] px-1 text-[10px] font-black text-[#050807] shadow-[0_0_18px_rgba(34,255,138,.42)]">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}
+            <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border border-[#050608] bg-[#18ff8a] shadow-[0_0_12px_rgba(24,255,138,.7)]" />
+            {unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#18ff8a] px-1 text-[10px] font-black text-[#050608] shadow-[0_0_18px_rgba(24,255,138,.42)]">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}
           </button>
-          <button onClick={onMenu} className="relative grid h-12 w-12 place-items-center rounded-full border border-[#22ff8a]/55 bg-[linear-gradient(145deg,#baff68,#22ff8a_55%,#00b965)] text-sm font-black text-[#050807] shadow-[0_16px_36px_rgba(34,255,138,.24),inset_0_1px_0_rgba(255,255,255,.45)]" aria-label="Account menu">
+          <button onClick={onMenu} className="relative grid h-12 w-12 place-items-center rounded-full border border-[#18ff8a]/55 bg-[linear-gradient(145deg,#dfffe8,#18ff8a_55%,#008f55)] text-sm font-black text-[#050608] shadow-[0_16px_36px_rgba(24,255,138,.24),inset_0_1px_0_rgba(255,255,255,.45)]" aria-label="Account menu">
             {initials}
-            <span className="absolute bottom-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-[#050807] bg-[#22ff8a]" />
+            <span className="absolute bottom-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-[#050608] bg-[#18ff8a]" />
           </button>
         </div>
       </div>
@@ -71,13 +71,13 @@ type BottomNavProps<T extends string> = {
 export function BottomNav<T extends string>({ items, activeId, activeSection, labelFor, onSelect }: BottomNavProps<T>) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(.7rem,env(safe-area-inset-bottom))] pt-2 lg:hidden">
-      <div className="mx-auto flex h-[72px] max-w-md items-center justify-around rounded-[28px] border border-[#22ff8a]/16 bg-[#07110d]/82 px-2 shadow-[0_-18px_55px_rgba(0,0,0,.48),0_0_34px_rgba(34,255,138,.1),inset_0_1px_0_rgba(255,255,255,.07)] backdrop-blur-2xl">
+      <div className="mx-auto flex h-[72px] max-w-md items-center justify-around rounded-[28px] border border-[#18ff8a]/16 bg-[#0a1013]/82 px-2 shadow-[0_-18px_55px_rgba(0,0,0,.48),0_0_34px_rgba(24,255,138,.1),inset_0_1px_0_rgba(255,255,255,.07)] backdrop-blur-2xl">
         {items.map(({ id, label, icon: Icon, section }) => {
           const active = activeId === id && (!section || activeSection === section);
           const center = label.toLowerCase().includes("ai");
           return (
-            <button key={`${id}-${section ?? label}`} onClick={() => onSelect(id, section)} aria-current={active ? "page" : undefined} className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[10px] font-black transition ${active ? "text-[#22ff8a]" : "text-slate-500"}`}>
-              <span className={`${center ? "-mt-8 h-16 w-16 rounded-full border-[#22ff8a]/35 bg-[radial-gradient(circle_at_35%_25%,#d8ff6c,#22ff8a_45%,#047a48)] text-[#050807] shadow-[0_0_36px_rgba(34,255,138,.46)]" : `h-9 w-11 rounded-2xl ${active ? "border-[#22ff8a]/25 bg-[#22ff8a]/10 shadow-[0_0_22px_rgba(34,255,138,.18)]" : "border-transparent bg-transparent"}`} grid place-items-center border transition`}>
+            <button key={`${id}-${section ?? label}`} onClick={() => onSelect(id, section)} aria-current={active ? "page" : undefined} className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[10px] font-black transition ${active ? "text-[#18ff8a]" : "text-slate-500"}`}>
+              <span className={`${center ? "-mt-8 h-16 w-16 rounded-full border-[#18ff8a]/35 bg-[radial-gradient(circle_at_35%_25%,#dfffe8,#18ff8a_45%,#047a48)] text-[#050608] shadow-[0_0_36px_rgba(24,255,138,.46)]" : `h-9 w-11 rounded-2xl ${active ? "border-[#18ff8a]/25 bg-[#18ff8a]/10 shadow-[0_0_22px_rgba(24,255,138,.18)]" : "border-transparent bg-transparent"}`} grid place-items-center border transition`}>
                 {center ? <span className="text-xl font-black">V</span> : <Icon size={20} strokeWidth={active ? 2.5 : 1.9} />}
               </span>
               <span className={`truncate ${center ? "-mt-1" : ""}`}>{labelFor(id)}</span>

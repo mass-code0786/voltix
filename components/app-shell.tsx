@@ -867,8 +867,8 @@ function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; o
         <h2 className="mt-2 text-[28px] font-black leading-[1.02] text-white">VOLTIX</h2>
         <p className="mt-3 max-w-[11rem] text-xs leading-5 text-slate-500">AI copy trading and wallet tools in one premium dashboard.</p>
         <div className="mt-5 grid grid-cols-2 gap-2">
-          <button onClick={onOpenAuth} className="rounded-2xl bg-[#22ff8a] px-4 py-3 text-xs font-black text-[#050807] shadow-[0_14px_34px_rgba(34,255,138,.22)]">Login</button>
-          <button onClick={onOpenAuth} className="rounded-2xl border border-[#22ff8a]/25 bg-white/[.045] px-4 py-3 text-xs font-black text-[#22ff8a]">Sign up</button>
+          <button onClick={onOpenAuth} className="rounded-2xl bg-[#18ff8a] px-4 py-3 text-xs font-black text-[#050608] shadow-[0_14px_34px_rgba(24,255,138,.24)]">Login</button>
+          <button onClick={onOpenAuth} className="rounded-2xl border border-[#18ff8a]/25 bg-white/[.045] px-4 py-3 text-xs font-black text-[#18ff8a]">Sign up</button>
         </div>
       </div>
       <VoltixVIllustration />
@@ -883,17 +883,17 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
         <p className="text-sm font-semibold text-slate-400">Welcome Back,</p>
         <div className="mt-1 flex min-w-0 items-center gap-2">
           <h2 className="truncate text-[25px] font-black leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
-          <CheckCircle2 size={18} className="shrink-0 text-[#22ff8a]" fill="rgba(34,255,138,.18)" />
+          <CheckCircle2 size={18} className="shrink-0 text-[#18ff8a]" fill="rgba(24,255,138,.18)" />
         </div>
         <div className="mt-2 flex items-center gap-2">
           <span className="rounded-full border border-[#9b5cff]/35 bg-[#9b5cff]/12 px-2.5 py-1 text-[10px] font-black text-[#c9aeff]">{currentUser.vipRank || "VIP 0"}</span>
-          <span className="rounded-full border border-[#22ff8a]/20 bg-[#22ff8a]/10 px-2.5 py-1 text-[10px] font-black text-[#22ff8a]">Verified</span>
+          <span className="rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 px-2.5 py-1 text-[10px] font-black text-[#18ff8a]">Verified</span>
         </div>
         <p className="mt-5 text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">Total Balance</p>
-        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-1 text-left text-[30px] font-black leading-none text-[#22ff8a] drop-shadow-[0_0_14px_rgba(34,255,138,.3)]">
+        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-1 text-left text-[30px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
           {balanceVisible ? usd(total) : "$ ******"}
         </button>
-        <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-[11px] font-black ${todaysProfit >= 0 ? "border-[#22ff8a]/20 bg-[#22ff8a]/10 text-[#22ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
+        <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-[11px] font-black ${todaysProfit >= 0 ? "border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
           {balanceVisible ? `${todaysProfit >= 0 ? "+" : ""}${usd(todaysProfit)} today` : "Balance hidden"}
         </div>
       </div>
@@ -904,15 +904,21 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
 
 function VoltixVIllustration() {
   return <div className="voltix-v-scene" aria-hidden="true">
+    <div className="voltix-v-halo" />
     <div className="voltix-v-orbit" />
+    <div className="voltix-v-orbit voltix-v-orbit-alt" />
+    <span className="voltix-particle voltix-particle-a" />
+    <span className="voltix-particle voltix-particle-b" />
+    <span className="voltix-particle voltix-particle-c" />
     <div className="voltix-v-letter">V</div>
     <div className="voltix-v-platform" />
+    <div className="voltix-v-reflection" />
   </div>;
 }
 
 function HomeActionTile({ icon: Icon, label, onClick }: { icon: typeof Home; label: string; onClick: () => void }) {
   return <button onClick={onClick} className="home-action-tile min-w-0 rounded-[22px] px-1.5 py-3 text-center">
-    <span className="mx-auto grid h-9 w-9 place-items-center rounded-2xl bg-[#22ff8a]/10 text-[#22ff8a] shadow-[0_0_20px_rgba(34,255,138,.12)]"><Icon size={18} /></span>
+    <span className="home-action-icon mx-auto grid h-9 w-9 place-items-center rounded-2xl text-[#18ff8a]"><Icon size={18} /></span>
     <span className="mt-2 block text-[10px] font-black leading-tight text-slate-200">{label}</span>
   </button>;
 }
@@ -920,15 +926,15 @@ function HomeActionTile({ icon: Icon, label, onClick }: { icon: typeof Home; lab
 function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome: number; history: CopyTradeHistory[]; balanceVisible: boolean }) {
   const chartData=useMemo(()=>history.map(row=>Number(row.profit ?? 0)).filter(value=>Number.isFinite(value)),[history]);
   const percent=history.length?chartData.reduce((sum,value)=>sum+value,0):0;
-  return <GlassCard className="rounded-[26px] p-5">
+  return <GlassCard className="home-depth-card rounded-[26px] p-5">
     <div className="flex items-start justify-between gap-3">
       <h3 className="text-base font-black text-white">AI Copy Trading Overview</h3>
-      <button className="flex shrink-0 items-center gap-1 rounded-full border border-[#22ff8a]/15 bg-white/[.04] px-3 py-1.5 text-[10px] font-black text-slate-300">This Week <ChevronDown size={13}/></button>
+      <button className="flex shrink-0 items-center gap-1 rounded-full border border-[#18ff8a]/15 bg-white/[.04] px-3 py-1.5 text-[10px] font-black text-slate-300">This Week <ChevronDown size={13}/></button>
     </div>
     <div className="mt-5 grid grid-cols-[.8fr_1fr] items-end gap-4">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[.14em] text-slate-500">Total Income</p>
-        <p className="mt-2 text-2xl font-black text-[#22ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
+        <p className="mt-2 text-2xl font-black text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
         <p className="mt-1 text-xs font-bold text-slate-500">{history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT recorded` : "No chart data yet"}</p>
       </div>
       <IncomeChart data={chartData} />
@@ -942,10 +948,10 @@ function IncomeChart({ data }: { data: number[] }) {
   const cumulative=data.reduce<number[]>((series,value,index)=>[...series,(series[index-1]??0)+value],[]);
   const min=Math.min(...cumulative,0), max=Math.max(...cumulative,1);
   const points=cumulative.map((value,index)=>`${(index/Math.max(cumulative.length-1,1))*width},${height-8-((value-min)/Math.max(max-min,1))*(height-18)}`).join(" ");
-  return <svg className="h-[96px] w-full drop-shadow-[0_0_12px_rgba(34,255,138,.38)]" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-    <defs><linearGradient id="incomeFill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#22ff8a" stopOpacity=".34"/><stop offset="1" stopColor="#22ff8a" stopOpacity="0"/></linearGradient></defs>
+  return <svg className="h-[96px] w-full drop-shadow-[0_0_12px_rgba(24,255,138,.38)]" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+    <defs><linearGradient id="incomeFill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#18ff8a" stopOpacity=".34"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></linearGradient></defs>
     <polyline points={`0,${height} ${points} ${width},${height}`} fill="url(#incomeFill)" stroke="none" />
-    <polyline points={points} fill="none" stroke="#22ff8a" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
+    <polyline points={points} fill="none" stroke="#18ff8a" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
   </svg>;
 }
 
@@ -963,15 +969,15 @@ function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; s
     if(!result.ok){setError(result.message);return;}
     notify("Copy trade started");
   };
-  return <GlassCard className="overflow-hidden rounded-[26px]">
+  return <GlassCard className="home-depth-card overflow-hidden rounded-[26px]">
     <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
       <h3 className="text-base font-black text-white">VIP Trade Rows</h3>
-      <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[.14em] text-slate-600">Trade Time</p><p className="mt-1 text-xs font-black text-[#22ff8a]">{nextTime}</p></div>
+      <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[.14em] text-slate-600">Trade Time</p><p className="mt-1 text-xs font-black text-[#18ff8a]">{nextTime}</p></div>
     </div>
     <div className="space-y-2 px-3 pb-4">
       {rows.length ? rows.map(row=><VipTradeRowItem key={row.id} row={row} loading={loadingRow===row.id} start={()=>start(row)} />) : <EmptyState title="No VIP trade rows available" icon={LineChart} />}
     </div>
-    {error&&<p className="border-t border-[#22ff8a]/10 px-5 py-3 text-xs font-bold text-danger">{error}</p>}
+    {error&&<p className="border-t border-[#18ff8a]/10 px-5 py-3 text-xs font-bold text-danger">{error}</p>}
   </GlassCard>;
 }
 
@@ -980,8 +986,8 @@ function vipAccent(row: VipTradeRow) {
   if(label.includes("7") || label.includes("10")) return "#ff7a1a";
   if(label.includes("5") || label.includes("6")) return "#ffd54a";
   if(label.includes("3") || label.includes("4")) return "#9b5cff";
-  if(label.includes("1") || label.includes("2")) return "#20c7ff";
-  return "#22ff8a";
+  if(label.includes("1") || label.includes("2")) return "#18c8ff";
+  return "#18ff8a";
 }
 
 function VipTradeRowItem({ row, loading, start }: { row: VipTradeRow; loading: boolean; start: () => void }) {
@@ -1011,21 +1017,21 @@ function HomeAiSubscriptionCard({ currentUser, status, purchaseAi, onOpenAuth, n
     setLoading(false);
     if(!result.ok) notify(result.message || "AI purchase failed");
   };
-  return <GlassCard className="rounded-[26px] p-5">
+  return <GlassCard className="home-depth-card rounded-[26px] p-5">
     <div className="grid grid-cols-[76px_1fr_auto] items-center gap-3">
       <AiCube />
       <div className="min-w-0">
         <h3 className="text-base font-black text-white">AI Subscription</h3>
-        <p className={`mt-1 text-xs font-black ${active?"text-[#22ff8a]":"text-slate-500"}`}>{active?"Active":"Inactive"}</p>
+        <p className={`mt-1 text-xs font-black ${active?"text-[#18ff8a]":"text-slate-500"}`}>{active?"Active":"Inactive"}</p>
         <p className="mt-1 truncate text-[11px] text-slate-500">{active&&expiry?`Expiry ${formatDate(expiry)}`:"Purchase required for AI copy trade"}</p>
       </div>
-      <button onClick={action} disabled={loading} className="rounded-2xl border border-[#22ff8a]/25 bg-[#22ff8a]/12 px-3 py-2 text-[11px] font-black text-[#22ff8a] disabled:opacity-50">{loading?"Wait":active?"Manage":"Purchase"}</button>
+      <button onClick={action} disabled={loading} className="rounded-2xl border border-[#18ff8a]/25 bg-[#18ff8a]/12 px-3 py-2 text-[11px] font-black text-[#18ff8a] disabled:opacity-50">{loading?"Wait":active?"Manage":"Purchase"}</button>
     </div>
   </GlassCard>;
 }
 
 function AiCube() {
-  return <div className="ai-cube-scene" aria-hidden="true"><div className="ai-cube"><span>AI</span></div></div>;
+  return <div className="ai-cube-scene" aria-hidden="true"><div className="ai-cube"><i /><b /><span>AI</span></div></div>;
 }
 
 function MarketPulseCoinCard({ coin, localCurrency }: { coin: MarketCoin; localCurrency: ReturnType<typeof currencyConfigForCountry> }) {
@@ -1033,11 +1039,11 @@ function MarketPulseCoinCard({ coin, localCurrency }: { coin: MarketCoin; localC
   return <article className="market-coin-card w-[132px] shrink-0 rounded-[22px] p-3">
     <div className="flex items-center justify-between gap-2">
       <CoinMark symbol={coin.symbol} color={coin.color} logoPath={coin.localLogoPath} size="sm" />
-      <span className={`text-[10px] font-black ${coin.change >= 0 ? "text-[#22ff8a]" : "text-danger"}`}>{coin.live?`${coin.change>=0?"+":""}${coin.change.toFixed(2)}%`:"--"}</span>
+      <span className={`text-[10px] font-black ${coin.change >= 0 ? "text-[#18ff8a]" : "text-danger"}`}>{coin.live?`${coin.change>=0?"+":""}${coin.change.toFixed(2)}%`:"--"}</span>
     </div>
     <p className="mt-3 text-sm font-black text-white">{coin.symbol}<span className="text-[10px] text-slate-500">/USDT</span></p>
     <p className="mt-1 truncate text-[10px] text-slate-500">{coin.name}</p>
-    <p className="mt-3 text-sm font-black text-[#22ff8a]">{coin.live?`$${shown}`:"Loading"}</p>
+    <p className="mt-3 text-sm font-black text-[#18ff8a]">{coin.live?`$${shown}`:"Loading"}</p>
     {coin.live&&<p className="mt-1 text-[9px] text-slate-600">{formatLocalCurrency(coin.price, localCurrency)}</p>}
     <div className="mt-2"><Sparkline data={coin.spark} positive={coin.change >= 0} /></div>
   </article>;
