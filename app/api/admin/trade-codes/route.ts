@@ -9,7 +9,6 @@ const createCodeSchema = z.object({
   vipRank: z.string().trim().min(1).default("NONE"),
   returnPercent: z.coerce.number().min(2).max(2.5),
   maxUsage: z.coerce.number().int().min(1).default(1),
-  createdBy: z.string().trim().min(1).default("admin"),
 });
 
 export async function GET() {
@@ -47,7 +46,7 @@ export async function POST(request: Request) {
       vipRank: parsed.data.vipRank,
       returnPercent: new Prisma.Decimal(parsed.data.returnPercent),
       maxUsage: parsed.data.maxUsage,
-      createdBy: parsed.data.createdBy,
+      createdBy: `${admin.user?.name ?? "Admin"} / ${admin.user?.uid ?? admin.user?.id ?? "admin"}`,
     });
     return NextResponse.json({
       code: {

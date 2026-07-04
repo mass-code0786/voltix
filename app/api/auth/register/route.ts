@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createSession, generateUniqueUid, hashPassword } from "@/lib/auth";
 import { ensureUserWalletAccounts } from "@/lib/domain/user-wallets";
 import { prisma } from "@/lib/prisma";
+import { normalizeLanguage } from "@/lib/profile-options";
 
 const registerSchema = z.object({
   name: z.string().trim().min(2, "Full name is required"),
@@ -11,6 +12,7 @@ const registerSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   confirmPassword: z.string(),
   country: z.string().trim().min(2, "Country is required"),
+  language: z.string().trim().optional(),
   referralCode: z.string().trim().optional(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords do not match",
@@ -24,6 +26,7 @@ export async function POST(request: Request) {
   }
 
   const { name, email, password, country, referralCode } = parsed.data;
+  const language = normalizeLanguage(parsed.data.language);
   const sponsorCode = referralCode?.toUpperCase();
   const sponsor = sponsorCode ? await prisma.user.findUnique({ where: { uid: sponsorCode }, select: { id: true } }) : null;
   if (sponsorCode && !sponsor) return NextResponse.json({ error: "Invalid referral or sponsor code" }, { status: 400 });
@@ -37,11 +40,12 @@ export async function POST(request: Request) {
           uid,
           name,
           country,
+          language,
           passwordHash: await hashPassword(password),
           referredById: sponsor?.id,
           extraTradeTrialEndsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
         },
-        select: { id: true, uid: true, name: true, email: true, country: true, vipRank: true },
+        select: { id: true, uid: true, name: true, email: true, country: true, language: true, vipRank: true },
       });
       await ensureUserWalletAccounts(tx, created.id);
       return created;

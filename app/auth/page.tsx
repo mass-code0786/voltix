@@ -4,10 +4,10 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
+import { SearchableSelect } from "@/components/searchable-select";
+import { countryOptions, languageOptions } from "@/lib/profile-options";
 
 type AuthMode = "login" | "register";
-
-const countries = ["United States", "India", "UAE", "Bangladesh", "Pakistan", "Saudi Arabia", "Nepal"];
 
 export default function AuthPage() {
   const router = useRouter();
@@ -16,6 +16,7 @@ export default function AuthPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [country, setCountry] = useState("United States");
+  const [language, setLanguage] = useState("en");
   const [referralCode, setReferralCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -53,7 +54,7 @@ export default function AuthPage() {
     try {
       const endpoint = mode === "register" ? "/api/auth/register" : "/api/auth/login";
       const body = mode === "register"
-        ? { name, email, country, referralCode, password, confirmPassword }
+        ? { name, email, country, language, referralCode, password, confirmPassword }
         : { email, password };
       const response = await fetch(endpoint, {
         method: "POST",
@@ -89,8 +90,8 @@ export default function AuthPage() {
           <BrandLogo compact />
           <h1 className="mt-8 text-4xl font-black tracking-tight">{isRegister ? "Register" : "Login"}</h1>
           <div className="mt-7 grid grid-cols-2 rounded-2xl border border-line bg-panel p-1">
-            <button onClick={() => switchMode("login")} className={`rounded-xl py-3 text-sm font-black transition ${!isRegister ? "bg-lime text-ink" : "text-slate-500"}`}>Login</button>
-            <button onClick={() => switchMode("register")} className={`rounded-xl py-3 text-sm font-black transition ${isRegister ? "bg-lime text-ink" : "text-slate-500"}`}>Register</button>
+            <button onClick={() => switchMode("login")} className={`rounded-xl py-2.5 text-sm font-black transition ${!isRegister ? "bg-lime text-ink" : "text-slate-500"}`}>Login</button>
+            <button onClick={() => switchMode("register")} className={`rounded-xl py-2.5 text-sm font-black transition ${isRegister ? "bg-lime text-ink" : "text-slate-500"}`}>Register</button>
           </div>
         </section>
 
@@ -100,11 +101,8 @@ export default function AuthPage() {
             <AuthInput label="Email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" />
             {isRegister && (
               <>
-                <label className="block text-xs font-bold text-slate-400">Country
-                  <select value={country} onChange={event => setCountry(event.target.value)} className="mt-2 w-full rounded-2xl border border-line bg-[#111c18] px-4 py-4 text-sm font-bold text-white outline-none focus:border-lime/50">
-                    {countries.map(item => <option key={item}>{item}</option>)}
-                  </select>
-                </label>
+                <SearchableSelect label="Country" options={countryOptions} value={country} onChange={setCountry} placeholder="Search country" />
+                <SearchableSelect label="Language" options={languageOptions} value={language} onChange={setLanguage} placeholder="Search language" />
                 <AuthInput label="Referral UID (optional)" value={referralCode} onChange={setReferralCode} autoComplete="off" />
               </>
             )}
@@ -124,7 +122,7 @@ export default function AuthPage() {
 
           {error && <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-xs font-bold text-danger">{error}</p>}
 
-          <button disabled={loading} className="mt-7 w-full rounded-2xl bg-lime py-4 text-sm font-black text-ink shadow-[0_16px_38px_rgba(196,255,59,.18)] transition hover:bg-mint disabled:opacity-60">
+          <button disabled={loading} className="mt-7 w-full rounded-2xl bg-lime py-3 text-sm font-black text-ink shadow-[0_16px_38px_rgba(196,255,59,.18)] transition hover:bg-mint disabled:opacity-60">
             {loading ? "Please wait..." : isRegister ? "Create Account" : "Login"}
           </button>
 
@@ -143,7 +141,7 @@ export default function AuthPage() {
 function AuthInput({ label, value, onChange, autoComplete, inputMode }: { label: string; value: string; onChange: (value: string) => void; autoComplete?: string; inputMode?: "email" }) {
   return (
     <label className="block text-xs font-bold text-slate-400">{label}
-      <input value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} inputMode={inputMode} className="mt-2 w-full rounded-2xl border border-line bg-[#111c18] px-4 py-4 text-sm font-bold text-white outline-none transition focus:border-lime/50" />
+      <input value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} inputMode={inputMode} className="mt-2 w-full rounded-2xl border border-line bg-[#111c18] px-4 py-2.5 text-sm font-bold text-white outline-none transition focus:border-lime/50" />
     </label>
   );
 }
@@ -151,7 +149,7 @@ function AuthInput({ label, value, onChange, autoComplete, inputMode }: { label:
 function PasswordInput({ label, value, onChange, visible, setVisible, autoComplete }: { label: string; value: string; onChange: (value: string) => void; visible: boolean; setVisible: (value: boolean) => void; autoComplete: string }) {
   return (
     <label className="block text-xs font-bold text-slate-400">{label}
-      <span className="mt-2 flex items-center rounded-2xl border border-line bg-[#111c18] px-4 py-4 transition focus-within:border-lime/50">
+      <span className="mt-2 flex items-center rounded-2xl border border-line bg-[#111c18] px-4 py-2.5 transition focus-within:border-lime/50">
         <input type={visible ? "text" : "password"} value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none" />
         <button type="button" onClick={() => setVisible(!visible)} aria-label={visible ? "Hide password" : "Show password"} className="text-slate-500">
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}

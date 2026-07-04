@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { normalizeLanguage } from "@/lib/profile-options";
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   country: z.string().trim().min(1, "Country is required"),
+  language: z.string().trim().optional(),
   profileImageUrl: z.string().trim().optional(),
 });
 
@@ -24,6 +26,7 @@ async function profilePayload(userId: string, request: Request) {
       name: true,
       email: true,
       country: true,
+      language: true,
       profileImageUrl: true,
       vipRank: true,
       joinedAt: true,
@@ -43,6 +46,7 @@ async function profilePayload(userId: string, request: Request) {
     uid: user.uid,
     email: user.email,
     country: user.country,
+    language: user.language,
     vipRank: user.vipRank,
     referralUid: user.uid,
     referralLink: referralLink(request, user.uid),
@@ -71,6 +75,7 @@ export async function PATCH(request: Request) {
     data: {
       name: parsed.data.name,
       country: parsed.data.country,
+      language: normalizeLanguage(parsed.data.language),
       profileImageUrl: parsed.data.profileImageUrl || null,
     },
   });

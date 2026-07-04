@@ -15,6 +15,8 @@ import {
   UserRound,
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
+import { SearchableSelect } from "@/components/searchable-select";
+import { countryOptions, languageOptions } from "@/lib/profile-options";
 
 type Profile = {
   avatar: string | null;
@@ -23,14 +25,13 @@ type Profile = {
   uid: string;
   email: string;
   country: string;
+  language: string;
   vipRank: string;
   referralUid: string | null;
   referralLink: string | null;
   memberSince: string;
   kycStatus: "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED";
 };
-
-const countries = ["United States", "India", "United Kingdom", "Canada", "Australia", "United Arab Emirates", "Singapore"];
 
 function initials(name: string) {
   return name
@@ -55,8 +56,7 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [language, setLanguage] = useState("English");
-  const [darkMode, setDarkMode] = useState(true);
+  const [language, setLanguage] = useState("en");
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -87,6 +87,7 @@ export default function ProfilePage() {
         setProfile(data);
         setName(data.fullName ?? "");
         setCountry(data.country ?? "United States");
+        setLanguage(data.language ?? "en");
         setProfileImageUrl(data.profileImageUrl ?? "");
       })
       .catch(err => {
@@ -116,7 +117,7 @@ export default function ProfilePage() {
     const response = await fetch("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, country, profileImageUrl }),
+      body: JSON.stringify({ name, country, language, profileImageUrl }),
     });
     const data = await response.json().catch(() => ({}));
     setSavingProfile(false);
@@ -222,12 +223,7 @@ export default function ProfilePage() {
               <SectionTitle icon={UserRound} title="Profile" />
               <div className="mt-5 space-y-4">
                 <Field label="Full Name" value={name} onChange={setName} />
-                <label className="block text-xs font-bold text-slate-400">
-                  Country
-                  <select value={country} onChange={event => setCountry(event.target.value)} className="mt-2 w-full rounded-2xl border border-line bg-ink px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-lime/50">
-                    {countries.map(item => <option key={item} value={item}>{item}</option>)}
-                  </select>
-                </label>
+                <SearchableSelect label="Country" options={countryOptions} value={country} onChange={setCountry} placeholder="Search country" />
                 <Field label="Profile Picture URL" value={profileImageUrl} onChange={setProfileImageUrl} placeholder="https://..." />
               </div>
               <button disabled={savingProfile} className="mt-5 w-full rounded-2xl bg-lime py-4 text-sm font-black text-ink disabled:opacity-60">
@@ -268,28 +264,13 @@ export default function ProfilePage() {
             <section className="rounded-3xl border border-line bg-panel/80 p-5">
               <SectionTitle icon={Globe2} title="Preferences" />
               <div className="mt-5 space-y-3">
-                <label className="flex items-center justify-between rounded-2xl border border-line bg-ink p-4">
-                  <span>
-                    <span className="block text-sm font-bold">Dark Mode</span>
-                    <span className="text-xs text-slate-500">Future ready</span>
-                  </span>
-                  <input type="checkbox" checked={darkMode} onChange={event => setDarkMode(event.target.checked)} className="h-5 w-5 accent-lime" />
-                </label>
-                <label className="block text-xs font-bold text-slate-400">
-                  Language
-                  <select value={language} onChange={event => setLanguage(event.target.value)} className="mt-2 w-full rounded-2xl border border-line bg-ink px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-lime/50">
-                    <option>English</option>
-                  </select>
-                </label>
+                <SearchableSelect label="Language" options={languageOptions} value={language} onChange={setLanguage} placeholder="Search language" />
               </div>
             </section>
 
             <section className="rounded-3xl border border-line bg-panel/80 p-5">
               <button onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-line py-4 text-sm font-black text-slate-200">
                 <LogOut size={17} /> Logout
-              </button>
-              <button disabled className="mt-3 w-full rounded-2xl border border-danger/30 py-4 text-sm font-black text-danger/60">
-                Delete Account - Coming Soon
               </button>
             </section>
 

@@ -1,4 +1,4 @@
-import { usdInr } from "./demo-data";
+import { usdInr } from "./market-defaults";
 
 export const usd = (value: number, digits = 2) => new Intl.NumberFormat("en-US", {
   style: "currency", currency: "USD", maximumFractionDigits: digits,

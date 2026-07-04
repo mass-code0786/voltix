@@ -10,10 +10,10 @@ npm run dev
 ```
 
 - User app: `http://localhost:3000`
-- Admin demo: `http://localhost:3000/admin`
+- Admin console: `http://localhost:3000/admin`
 - Health: `http://localhost:3000/api/health`
 
-The UI works with bundled demo data. PostgreSQL is only required when enabling persistence.
+The public market UI has catalog fallbacks. PostgreSQL is required for authenticated account, wallet, and admin records.
 
 ## Database
 
@@ -34,4 +34,4 @@ npm run db:push
 - Trade completion and income credit should run as separate retryable workers. `CopyTrade.status`, due timestamps, and journal idempotency make both jobs restart-safe.
 - All admin mutations should require MFA, RBAC, CSRF protection, rate limits, and immutable audit events.
 
-This repository is a product demo and architecture starter, not a licensed exchange or audited custody system. Legal review, security audit, key management, chain-specific reconciliation, sanctions controls, and KYC/AML integrations are required before handling real funds.
+This repository is an architecture starter, not a licensed exchange or audited custody system. Legal review, security audit, key management, chain-specific reconciliation, sanctions controls, and KYC/AML integrations are required before handling real funds.
