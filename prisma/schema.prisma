@@ -124,6 +124,7 @@ model User {
   uid                   String           @unique @db.VarChar(12)
   name                  String
   country               String           @default("United States")
+  profileImageUrl       String?
   passwordHash          String
   vipRank               String           @default("NONE")
   role                  Role             @default(USER)
