@@ -96,8 +96,9 @@ export async function getAdminDeposits() {
       money(deposit.amount),
       "$0.00",
       money(deposit.amount),
-      deposit.txHash,
+      deposit.txHash ?? "",
       deposit.status,
+      deposit.id,
     ]),
   };
 }
@@ -117,7 +118,7 @@ export async function getAdminWithdrawals() {
     money(withdrawal.feeAmount),
     withdrawal.status,
     withdrawal.rejectionReason ?? "",
-    withdrawal.status === "PENDING" ? "Review" : "",
+    withdrawal.id,
   ]);
   return {
     spotRows: rows.filter(row => row[1] === "SPOT"),

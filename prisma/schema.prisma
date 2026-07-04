@@ -45,6 +45,9 @@ enum JournalStatus {
 }
 
 enum DepositStatus {
+  PENDING
+  APPROVED
+  REJECTED
   DETECTED
   CONFIRMING
   CONFIRMED
@@ -80,6 +83,8 @@ enum IncomeType {
   LEVEL
   MATCHING
   COPY_TRADE
+  VIP_SALARY
+  BOT_COMMISSION
   BONUS
 }
 
@@ -272,10 +277,10 @@ model Deposit {
   network       ChainNetwork   @relation(fields: [networkId], references: [id])
   addressId     String
   address       DepositAddress @relation(fields: [addressId], references: [id])
-  txHash        String
+  txHash        String?
   eventIndex    Int            @default(0)
   amount        Decimal        @db.Decimal(36, 18)
-  blockNumber   BigInt
+  blockNumber   BigInt?
   confirmations Int            @default(0)
   status        DepositStatus  @default(DETECTED)
   creditedAt    DateTime?

@@ -26,13 +26,15 @@ type WalletAction = "deposit" | null;
 type UserWallet = "SPOT" | "FUTURES" | "BITEX";
 type WalletActivity = readonly [typeof ArrowDownLeft, string, string, string];
 type WithdrawalInput = { walletType: "SPOT" | "BITEX"; amount: number; address: string; network: string };
-type DemoWithdrawal = { id: string; user: string; uid: string; walletType: "SPOT" | "BITEX"; amount: number; address: string; network: string; fee: number; receivable: number; status: "PENDING" | "COMPLETED" | "APPROVED" | "REJECTED"; rejectionReason?: string };
+type DepositInput = { amount: number; network: string; txHash?: string };
+type DepositRecord = { id: string; amount: number; asset: string; network: string; txHash?: string | null; status: string; createdAt: string };
+type WithdrawalRecord = { id: string; walletType: "SPOT" | "BITEX"; amount: number; fee: number; receivable: number; asset: string; address: string; network: string; txHash?: string | null; status: string; rejectionReason?: string | null; createdAt: string };
 type ActiveCopyTrade = { code: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string };
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
 type AppCoin = typeof coins[number];
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath">> & { localLogoPath?: string | null };
-type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; vipRank?: string | null };
+type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; vipRank?: string | null; role?: string | null };
 type AuthMode = "login" | "register";
 type WalletSnapshot = {
   balances?: {
@@ -179,21 +181,12 @@ export default function AppShell() {
   const [bitexIncomeEarned, setBitexIncomeEarned] = useState(demoBitexIncomeEarned);
   const [transferOpen, setTransferOpen] = useState<{ from: UserWallet; to: UserWallet } | null>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
-  const [withdrawals, setWithdrawals] = useState<DemoWithdrawal[]>([
-    { id: "WDR-92021", user: "Amit Patel", uid: "39017462", walletType: "SPOT", amount: 100, address: "0xb17...91e0", network: "BSC", fee: 7, receivable: 93, status: "COMPLETED" },
-    { id: "WDR-92022", user: "Neha Kapoor", uid: "61840293", walletType: "BITEX", amount: 200, address: "TR7k...82Qa", network: "TRON", fee: 0, receivable: 200, status: "PENDING" },
-    { id: "WDR-92023", user: "Rahul Sharma", uid: "50291847", walletType: "BITEX", amount: 75, address: "0xa91...53bc", network: "ETH", fee: 0, receivable: 75, status: "REJECTED", rejectionReason: "2x target evidence incomplete" },
-  ]);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
-  const [walletActivity, setWalletActivity] = useState<WalletActivity[]>([
-    [ArrowDownLeft, "USDT deposit", "+500.00 USDT", "Confirmed"],
-    [ArrowUpRight, "BTC transfer", "-0.002 BTC", "Completed"],
-    [CircleDollarSign, "Copy trade income", "+24.50 BITEX", "Credited to Bitex"],
-  ]);
+  const [walletActivity, setWalletActivity] = useState<WalletActivity[]>([]);
   const [userCountry, setUserCountry] = useState("United States");
 
   const notify = (message: string) => {
@@ -276,6 +269,39 @@ export default function AppShell() {
     setCopyTradeHistory(Array.isArray(status?.history) ? status.history.map(normalizeTrade) : []);
   }, []);
 
+  const refreshPaymentHistory = useCallback(async (user: CurrentUser | null) => {
+    if (!user) {
+      setWalletActivity([]);
+      return;
+    }
+    const [depositResponse, withdrawalResponse] = await Promise.all([
+      fetch("/api/deposits"),
+      fetch("/api/withdrawals"),
+    ]);
+    if (!depositResponse.ok || !withdrawalResponse.ok) throw new Error("Payment history request failed");
+    const [depositData, withdrawalData] = await Promise.all([depositResponse.json(), withdrawalResponse.json()]);
+    const deposits = Array.isArray(depositData?.deposits) ? depositData.deposits as DepositRecord[] : [];
+    const withdrawals = Array.isArray(withdrawalData?.withdrawals) ? withdrawalData.withdrawals as WithdrawalRecord[] : [];
+    setWalletActivity([
+      ...deposits.map(deposit => ({
+        icon: ArrowDownLeft,
+        title: "USDT deposit request",
+        amount: `+${Number(deposit.amount).toFixed(2)} ${deposit.asset}`,
+        status: deposit.status,
+        createdAt: deposit.createdAt,
+      })),
+      ...withdrawals.map(withdrawal => ({
+        icon: withdrawal.status === "PENDING" ? FileClock : ArrowUpRight,
+        title: `${withdrawal.walletType} withdrawal request`,
+        amount: `-${Number(withdrawal.amount).toFixed(2)} ${withdrawal.asset}`,
+        status: withdrawal.status,
+        createdAt: withdrawal.createdAt,
+      })),
+    ]
+      .sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime())
+      .map(item=>[item.icon, item.title, item.amount, item.status] as WalletActivity));
+  }, []);
+
   useEffect(() => {
     fetch("/api/coins")
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -316,6 +342,13 @@ export default function AppShell() {
         }
       });
   }, [currentUser, refreshCopyTradeStatus]);
+
+  useEffect(() => {
+    refreshPaymentHistory(currentUser)
+      .catch(() => {
+        if (!currentUser) setWalletActivity([]);
+      });
+  }, [currentUser, refreshPaymentHistory]);
 
   const syncNavigation = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -421,28 +454,33 @@ export default function AppShell() {
     return true;
   }, [bitexBalance, futuresBalance, walletCoins]);
 
-  const createWithdrawal = useCallback(({ walletType, amount, address, network }: WithdrawalInput) => {
+  const createDeposit = useCallback(async ({ amount, network, txHash }: DepositInput) => {
+    const response = await fetch("/api/deposits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, network, txHash }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, message: data.error || "Deposit request failed" };
+    await refreshPaymentHistory(currentUser);
+    notify("Deposit request submitted");
+    setWalletAction(null);
+    updateUrl("wallet", walletSection, null, true);
+    return { ok: true, message: "" };
+  }, [currentUser, notify, refreshPaymentHistory, updateUrl, walletSection]);
+
+  const createWithdrawal = useCallback(async ({ walletType, amount, address, network }: WithdrawalInput) => {
     const spotBalance = walletCoins.find((coin) => coin.symbol === "USDT")?.balance ?? 0;
     const bitexUnlocked = bitexPrincipalLocked > 0 && bitexIncomeEarned >= bitexPrincipalLocked * 2;
-    if (walletType === "SPOT" && (amount <= 0 || amount > spotBalance)) return false;
-    if (walletType === "BITEX" && (!bitexUnlocked || amount <= 0 || amount > bitexBalance)) return false;
+    if (walletType === "SPOT" && (amount <= 0 || amount > spotBalance)) return { ok: false, message: "Insufficient Spot wallet balance" };
+    if (walletType === "BITEX" && (!bitexUnlocked || amount <= 0 || amount > bitexBalance)) return { ok: false, message: !bitexUnlocked ? "Bitex withdrawal will unlock after completing 2x copy trade income." : "Insufficient Bitex wallet balance" };
     const fee = walletType === "SPOT" ? 2 + amount * .05 : 0;
     const received = amount - fee;
-    if (received <= 0) return false;
-    const id = `WDR-${Math.floor(92030 + Math.random() * 800)}`;
-    if (walletType === "SPOT") {
-      setWalletCoins((current) => current.map((coin) => coin.symbol === "USDT" ? { ...coin, balance: coin.balance - amount } : coin));
-      setWalletActivity((current) => [[ArrowUpRight, "Spot withdrawal", `-${amount.toFixed(2)} USDT`, `${received.toFixed(2)} sent instantly, ${fee.toFixed(2)} fee`], ...current]);
-      setWithdrawals((current) => [{ id, user: currentUser?.name?.trim() || "Current user", uid: currentUser?.uid?.trim() || "Unavailable", walletType, amount, address, network, fee, receivable: received, status: "COMPLETED" }, ...current]);
-      notify(`${received.toFixed(2)} USDT sent instantly after ${fee.toFixed(2)} USDT withdrawal fee`);
-    } else {
-      setWithdrawals((current) => [{ id, user: currentUser?.name?.trim() || "Current user", uid: currentUser?.uid?.trim() || "Unavailable", walletType, amount, address, network, fee, receivable: received, status: "PENDING" }, ...current]);
-      setWalletActivity((current) => [[FileClock, "Bitex withdrawal request", `${amount.toFixed(2)} USDT`, "Pending admin approval"], ...current]);
-      notify("Bitex withdrawal request sent to admin");
-    }
+    if (received <= 0) return { ok: false, message: "Withdrawal amount must exceed the total fee" };
+    const response = await fetch("/api/withdrawals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletType, amount, address, network }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, message: data.error || "Withdrawal request failed" };
+    await refreshPaymentHistory(currentUser);
+    notify("Withdrawal request sent to admin");
     setWithdrawalOpen(false);
-    return true;
-  }, [bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, walletCoins]);
+    return { ok: true, message: "" };
+  }, [bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, notify, refreshPaymentHistory, walletCoins]);
 
   const startCopyTrade = useCallback(async (rawCode: string) => {
     const response = await fetch("/api/copy-trade/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: rawCode.toUpperCase() }) });
@@ -466,7 +504,7 @@ export default function AppShell() {
     trade: <TradeWorkspace category={tradeCategory} />,
     bitex: <BitexCopyTradePage activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
-    wallet: <WalletScreen notify={notify} assets={walletCoins} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} />,
+    wallet: <WalletScreen notify={notify} assets={walletCoins} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
 
   return (
@@ -684,19 +722,19 @@ function CopyTradeScreen({activeTrade,bitexBalance,history,startTrade,completeTr
   </div>;
 }
 
-function WalletScreen({notify,assets,futuresBalance,bitexBalance,bitexIncomeEarned,bitexTarget,activity,section,action,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction}:{notify:(s:string)=>void;assets:AppCoin[];futuresBalance:number;bitexBalance:number;bitexIncomeEarned:number;bitexTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void}) {
+function WalletScreen({notify,assets,futuresBalance,bitexBalance,bitexIncomeEarned,bitexTarget,activity,section,action,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];futuresBalance:number;bitexBalance:number;bitexIncomeEarned:number;bitexTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string}>}) {
  const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotBalance=assets.find(c=>c.symbol==="USDT")?.balance??0; const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+bitexBalance;
 return <div className="space-y-5"><div><h2 className="text-2xl font-black">Asset</h2></div><div className="flex gap-1 overflow-x-auto rounded-xl border border-line bg-panel p-1 no-scrollbar">{(["overview","assets","ledger"] as const).map(item=><button key={item} onClick={()=>onSectionChange(item)} aria-current={section===item?"page":undefined} className={`min-w-[76px] flex-1 rounded-lg px-3 py-2.5 text-xs font-bold capitalize ${section===item?"bg-lime text-ink":"text-slate-500 hover:text-white"}`}>{item}</button>)}</div>
  {section==="overview"&&<><section className="rounded-2xl border border-lime/20 bg-gradient-to-br from-[#193024] to-panel px-3 py-3 sm:p-5"><p className="text-[11px] text-slate-400">Est. Total Value</p><h3 className="mt-1 text-2xl font-black sm:text-3xl">{total.toFixed(2)} USDT</h3><p className="mt-0.5 text-xs text-slate-400">{inr(total)}</p><div className="mt-3 flex w-full gap-[6px]"><button onClick={onOpenDeposit} className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[10px] bg-lime px-2 py-1 text-[11px] font-black leading-none text-ink"><Plus size={12}/>Add Funds</button><button onClick={onOpenWithdrawal} className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[10px] border border-line bg-white/5 px-2 py-1 text-[11px] font-bold leading-none"><Send size={12} className="text-lime"/>Send</button><button onClick={onOpenTransfer} className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[10px] border border-line bg-white/5 px-2 py-1 text-[11px] font-bold leading-none"><ArrowLeftRight size={12} className="text-lime"/>Transfer</button></div></section><section className={`${card} divide-y divide-line/70 overflow-hidden`}><WalletBalanceRow label="Spot Wallet" balance={spotBalance}/><WalletBalanceRow label="Futures Wallet" balance={futuresBalance}/><WalletBalanceRow label="Bitex Wallet" balance={bitexBalance}/></section><section className={`${card} p-5`}><div className="flex justify-between"><h3 className="font-bold">Recent activity</h3><button onClick={()=>onSectionChange("ledger")} className="text-xs text-lime">Full ledger</button></div><ActivityRows rows={activity.slice(0,3)}/></section></>}
  {section==="assets"&&<section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line p-5"><h3 className="font-bold">Your assets</h3><span className="text-xs text-slate-500">{activeAssets.length} coins</span></div>{activeAssets.map(c=><div key={c.symbol} className="flex items-center gap-3 border-b border-line/60 px-5 py-4 last:border-0"><CoinMark symbol={c.symbol} color={c.color} logoPath={c.localLogoPath}/><div className="flex-1"><p className="font-bold">{c.symbol}</p><p className="text-xs text-slate-500">{c.name}</p></div><div className="text-right"><p className="text-sm font-bold">{compact(c.balance)}</p><p className="mt-1 text-xs text-slate-500">{usd(c.balance*c.price)} · {inr(c.balance*c.price)}</p></div></div>)}</section>}
- {section==="ledger"&&<section className={`${card} p-5`}><div className="flex justify-between"><div><h3 className="font-bold">Wallet ledger</h3><p className="mt-1 text-xs text-slate-500">All balance movements and Bitex income credits</p></div><button onClick={()=>notify("Ledger export prepared")} className="text-xs text-lime">Export</button></div><ActivityRows rows={activity}/></section>}{action==="deposit"&&<DepositModal close={onCloseAction} notify={notify}/>}</div>;
+ {section==="ledger"&&<section className={`${card} p-5`}><div className="flex justify-between"><div><h3 className="font-bold">Wallet ledger</h3><p className="mt-1 text-xs text-slate-500">All balance movements and Bitex income credits</p></div><button onClick={()=>notify("Ledger export prepared")} className="text-xs text-lime">Export</button></div><ActivityRows rows={activity}/></section>}{action==="deposit"&&<DepositModal close={onCloseAction} notify={notify} createDeposit={onCreateDeposit}/>}</div>;
 }
 
 function WalletBalanceRow({label,balance}:{label:string;balance:number}) { return <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5"><p className="text-sm font-bold">{label}</p><p className="text-sm font-black">{balance.toFixed(2)} USDT</p></div> }
 
-function ActivityRows({rows}:{rows:readonly WalletActivity[]}) { return <div className="mt-4 space-y-4">{rows.map(([I,t,a,s],index)=><div className="flex items-center gap-3" key={`${t}-${a}-${index}`}><div className="rounded-xl bg-white/5 p-2.5 text-slate-400"><I size={17}/></div><div className="flex-1"><p className="text-sm font-semibold">{t}</p><p className="text-[10px] text-mint">{s}</p></div><p className="text-xs font-bold">{a}</p></div>)}</div> }
+function ActivityRows({rows}:{rows:readonly WalletActivity[]}) { return <div className="mt-4 space-y-4">{rows.length?rows.map(([I,t,a,s],index)=><div className="flex items-center gap-3" key={`${t}-${a}-${index}`}><div className="rounded-xl bg-white/5 p-2.5 text-slate-400"><I size={17}/></div><div className="flex-1"><p className="text-sm font-semibold">{t}</p><p className="text-[10px] text-mint">{s}</p></div><p className="text-xs font-bold">{a}</p></div>):<p className="py-6 text-center text-xs text-slate-500">No records available</p>}</div> }
 
-function DepositModal({close,notify}:{close:()=>void;notify:(s:string)=>void}) { const addr=""; const copyAddress=()=>{if(!addr){notify("Deposit address unavailable");return;}navigator.clipboard?.writeText(addr);notify("Address copied");}; return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex justify-between"><div><h3 className="text-xl font-black">Deposit to Main/Spot wallet</h3><p className="mt-1 text-xs text-slate-500">Send only USDT on BNB Smart Chain</p></div><button onClick={close}><X/></button></div><div className="mx-auto my-6 grid h-44 w-44 place-items-center rounded-2xl bg-white p-3"><div className="grid h-full w-full grid-cols-5 gap-1 bg-ink p-2">{Array.from({length:25}).map((_,i)=><i key={i} className={`${[0,1,2,5,7,10,11,12,14,17,20,22,23,24].includes(i)?"bg-white":"bg-ink"}`}/>)}</div></div><p className="text-center text-[10px] uppercase tracking-widest text-slate-500">Your unique deposit address</p><button onClick={copyAddress} className="mt-3 flex w-full items-center gap-3 rounded-xl border border-line bg-ink p-3 text-left"><span className="min-w-0 flex-1 break-all text-xs text-slate-300">{addr || "Deposit address unavailable"}</span><Copy size={16} className="shrink-0 text-lime"/></button><div className="mt-4 rounded-xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. After 12 network confirmations, funds are credited only to the Main/Spot wallet.</div></div></div> }
+function DepositModal({close,notify,createDeposit}:{close:()=>void;notify:(s:string)=>void;createDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string}>}) { const addr=""; const [amount,setAmount]=useState(""); const [network,setNetwork]=useState("BSC"); const [txHash,setTxHash]=useState(""); const [error,setError]=useState(""); const [submitting,setSubmitting]=useState(false); const copyAddress=()=>{if(!addr){notify("Deposit address unavailable");return;}navigator.clipboard?.writeText(addr);notify("Address copied");}; const value=Number(amount); const submit=async()=>{if(value<=0){setError("Enter a valid deposit amount");return;}setSubmitting(true);const result=await createDeposit({amount:value,network,txHash});setSubmitting(false);if(!result.ok)setError(result.message||"Deposit request failed");}; return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex justify-between"><div><h3 className="text-xl font-black">Deposit to Main/Spot wallet</h3><p className="mt-1 text-xs text-slate-500">Send only USDT on BNB Smart Chain</p></div><button onClick={close}><X/></button></div><div className="mx-auto my-6 grid h-44 w-44 place-items-center rounded-2xl bg-white p-3"><div className="grid h-full w-full grid-cols-5 gap-1 bg-ink p-2">{Array.from({length:25}).map((_,i)=><i key={i} className={`${[0,1,2,5,7,10,11,12,14,17,20,22,23,24].includes(i)?"bg-white":"bg-ink"}`}/>)}</div></div><p className="text-center text-[10px] uppercase tracking-widest text-slate-500">Your unique deposit address</p><button onClick={copyAddress} className="mt-3 flex w-full items-center gap-3 rounded-xl border border-line bg-ink p-3 text-left"><span className="min-w-0 flex-1 break-all text-xs text-slate-300">{addr || "Deposit address unavailable"}</span><Copy size={16} className="shrink-0 text-lime"/></button><label className="mt-4 block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");}} placeholder="0.00" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>setNetwork(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label><label className="mt-4 block text-xs font-bold text-slate-400">Tx hash optional<input value={txHash} onChange={e=>{setTxHash(e.target.value);setError("");}} placeholder="Transaction hash" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<div className="mt-4 rounded-xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. After 12 network confirmations, funds are credited only to the Main/Spot wallet.</div><button onClick={submit} disabled={submitting} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">{submitting?"Submitting...":"Submit Deposit Request"}</button></div></div> }
 
 function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:CurrentUser|null}) {
   const [shareOpen,setShareOpen]=useState(false);
@@ -757,7 +795,7 @@ function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{in
   return <div className="fixed inset-0 z-[70] bg-[#0a120f] sm:grid sm:place-items-center sm:bg-black/70 sm:p-4 sm:backdrop-blur-sm"><div className="flex min-h-full w-full flex-col bg-[#111c18] sm:min-h-0 sm:max-w-md sm:rounded-3xl sm:border sm:border-line"><header className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="text-xl font-black">Transfer</h3><button onClick={close} aria-label="Close transfer"><X/></button></header>{confirming?<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="rounded-xl border border-line bg-ink/60 p-4 text-xs leading-5 text-slate-400"><p>Review this transfer before continuing. Bitex funds cannot be transferred back to Spot or Futures.</p></section><div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Transfer amount" value={`${value.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${value.toFixed(2)} USDT`}/></div></div><div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={()=>setConfirming(false)} className="rounded-xl border border-line py-4 text-sm font-black text-slate-300">Cancel</button><button onClick={continueTransfer} className="rounded-xl bg-lime py-4 text-sm font-black text-ink">Continue</button></div></>:<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="relative rounded-2xl border border-line bg-ink/60 p-4"><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">From<select value={from} onChange={e=>changeFrom(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{sourceWallets.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><div className="my-4 border-t border-line"/><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">To<select value={to} onChange={e=>changeTo(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{destinations.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><button onClick={swap} disabled={to==="BITEX"} className="absolute right-5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-panel text-lime disabled:opacity-30" aria-label="Swap wallets"><ArrowLeftRight size={18} className="rotate-90"/></button></section><label className="block text-xs font-bold text-slate-400">Coin<select className="mt-2 w-full rounded-xl border border-line bg-ink p-4 text-sm font-bold text-white"><option>USDT</option></select></label><div><div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400">Amount</label><span className="text-[11px] text-slate-500">Available {balances[from].toFixed(2)} USDT</span></div><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);resetReview();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-4 text-lg font-bold outline-none"/><button onClick={()=>{setAmount(balances[from].toFixed(2));resetReview();}} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}</div></div><div className="fixed inset-x-0 bottom-0 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={review} className="w-full rounded-xl bg-lime py-4 text-sm font-black text-ink">Confirm Transfer</button></div></>}</div></div>
 }
 
-function WithdrawalModal({balances,bitexUnlocked,close,withdraw}:{balances:Record<"SPOT"|"BITEX",number>;bitexUnlocked:boolean;close:()=>void;withdraw:(input:WithdrawalInput)=>boolean}) {
+function WithdrawalModal({balances,bitexUnlocked,close,withdraw}:{balances:Record<"SPOT"|"BITEX",number>;bitexUnlocked:boolean;close:()=>void;withdraw:(input:WithdrawalInput)=>Promise<{ok:boolean;message:string}>}) {
   const [walletType,setWalletType]=useState<"SPOT"|"BITEX">("SPOT");
   const [address,setAddress]=useState("");
   const [network,setNetwork]=useState("BSC");
@@ -770,8 +808,8 @@ function WithdrawalModal({balances,bitexUnlocked,close,withdraw}:{balances:Recor
   const totalFee=fixedFee+percentageFee;
   const received=Math.max(0,value-totalFee);
   const locked=walletType==="BITEX"&&!bitexUnlocked;
-  const submit=()=>{if(locked){setError("Bitex withdrawal will unlock after completing 2x copy trade income.");return;}if(!address.trim()){setError("Enter an external wallet or exchange address");return;}if(value<=0){setError("Enter a valid withdrawal amount");return;}if(value>available){setError(`Insufficient ${walletType} wallet balance`);return;}if(received<=0){setError("Withdrawal amount must exceed the total fee");return;}if(!withdraw({walletType,amount:value,address,network}))setError("Withdrawal could not be completed");};
-  return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Send</h3><p className="mt-1 text-xs text-slate-500">Spot is instant. Bitex is manual after 2x income.</p></div><button onClick={close} aria-label="Close withdrawal"><X/></button></div><label className="mt-5 block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={e=>{setWalletType(e.target.value as "SPOT"|"BITEX");setError("");}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="SPOT">Spot Wallet</option><option value="BITEX">Bitex Wallet</option></select></label>{locked&&<div className="mt-3 rounded-xl border border-[#624e1a] bg-[#2a2412] p-3 text-xs leading-5 text-[#c9b98d]">Bitex withdrawal will unlock after completing 2x copy trade income.</div>}<label className="mt-4 block text-xs font-bold text-slate-400">Amount</label><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3.5 outline-none"/><button onClick={()=>setAmount(available.toFixed(2))} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div><p className="mt-1 text-[10px] text-slate-500">Available: {available.toFixed(2)} USDT</p><label className="mt-4 block text-xs font-bold text-slate-400">External wallet or exchange address<input value={address} onChange={e=>{setAddress(e.target.value);setError("");}} placeholder="0x... or exchange deposit address" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>setNetwork(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Wallet" value={`${walletType[0]}${walletType.slice(1).toLowerCase()} Wallet`}/><LineItem label="Amount" value={`${value.toFixed(2)} USDT`}/>{walletType==="SPOT"&&<><LineItem label="Fixed fee" value={`${fixedFee.toFixed(2)} USDT`}/><LineItem label="5% fee" value={`${percentageFee.toFixed(2)} USDT`}/></>}<LineItem label="Total fee" value={`${totalFee.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${received.toFixed(2)} USDT`}/><LineItem label="Status" value={walletType==="SPOT"?"Completed instantly":"Pending admin approval"}/></div><button onClick={submit} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink">Confirm Send</button></div></div>
+  const submit=async()=>{if(locked){setError("Bitex withdrawal will unlock after completing 2x copy trade income.");return;}if(!address.trim()){setError("Enter an external wallet or exchange address");return;}if(value<=0){setError("Enter a valid withdrawal amount");return;}if(value>available){setError(`Insufficient ${walletType} wallet balance`);return;}if(received<=0){setError("Withdrawal amount must exceed the total fee");return;}const result=await withdraw({walletType,amount:value,address,network});if(!result.ok)setError(result.message||"Withdrawal request failed");};
+  return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Send</h3><p className="mt-1 text-xs text-slate-500">Withdrawals are manual after balance validation.</p></div><button onClick={close} aria-label="Close withdrawal"><X/></button></div><label className="mt-5 block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={e=>{setWalletType(e.target.value as "SPOT"|"BITEX");setError("");}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="SPOT">Spot Wallet</option><option value="BITEX">Bitex Wallet</option></select></label>{locked&&<div className="mt-3 rounded-xl border border-[#624e1a] bg-[#2a2412] p-3 text-xs leading-5 text-[#c9b98d]">Bitex withdrawal will unlock after completing 2x copy trade income.</div>}<label className="mt-4 block text-xs font-bold text-slate-400">Amount</label><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3.5 outline-none"/><button onClick={()=>setAmount(available.toFixed(2))} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div><p className="mt-1 text-[10px] text-slate-500">Available: {available.toFixed(2)} USDT</p><label className="mt-4 block text-xs font-bold text-slate-400">External wallet or exchange address<input value={address} onChange={e=>{setAddress(e.target.value);setError("");}} placeholder="0x... or exchange deposit address" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>setNetwork(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Wallet" value={`${walletType[0]}${walletType.slice(1).toLowerCase()} Wallet`}/><LineItem label="Amount" value={`${value.toFixed(2)} USDT`}/>{walletType==="SPOT"&&<><LineItem label="Fixed fee" value={`${fixedFee.toFixed(2)} USDT`}/><LineItem label="5% fee" value={`${percentageFee.toFixed(2)} USDT`}/></>}<LineItem label="Total fee" value={`${totalFee.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${received.toFixed(2)} USDT`}/><LineItem label="Status" value="Pending admin approval"/></div><button onClick={submit} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink">Confirm Send</button></div></div>
 }
 
 function VerificationRequestModal({close,notify,user}:{close:()=>void;notify:(message:string)=>void;user:CurrentUser|null}) {
