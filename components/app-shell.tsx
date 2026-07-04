@@ -144,7 +144,20 @@ type AiSubscriptionStatus = {
 };
 type KycSnapshot = {
   status: "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED";
-  request: { id: string; name: string; documentType: string; documentNumber: string; documentImagePath?: string | null; rejectionReason?: string | null; createdAt: string } | null;
+  request: {
+    id: string;
+    fullName: string;
+    dateOfBirth?: string | null;
+    country?: string | null;
+    address?: string | null;
+    governmentIdType: string;
+    governmentIdNumber: string;
+    frontIdImageUrl?: string | null;
+    backIdImageUrl?: string | null;
+    selfieImageUrl?: string | null;
+    rejectionReason?: string | null;
+    submittedAt: string;
+  } | null;
 };
 type SupportTicket = {
   id: string;
@@ -533,6 +546,12 @@ export default function AppShell() {
   }, []);
 
   const navigate = useCallback((nextTab: Tab, section?: WalletSection, action?: WalletAction) => {
+    if (nextTab === "wallet" && !currentUser) {
+      setAuthMode("login");
+      setMenu(false);
+      setNotificationOpen(false);
+      return;
+    }
     setTab(nextTab);
     setWalletSection(section ?? "overview");
     setWalletAction(action ?? null);
@@ -540,15 +559,19 @@ export default function AppShell() {
     setNotificationOpen(false);
     updateUrl(nextTab, section, action);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [updateUrl]);
+  }, [currentUser, updateUrl]);
 
   const selectTab = useCallback((nextTab: Tab, section?: WalletSection) => {
+    if (nextTab === "wallet" && !currentUser) {
+      setAuthMode("login");
+      return;
+    }
     if (nextTab === "trade") {
       setTradeMenuOpen(true);
       return;
     }
     navigate(nextTab, section);
-  }, [navigate]);
+  }, [currentUser, navigate]);
 
   const openTrade = useCallback((category: TradeCategory) => {
     if(category==="copy"){
@@ -674,7 +697,7 @@ export default function AppShell() {
   }, [currentUser, unreadNotifications]);
 
   const screen = {
-    home: <HomeScreen onNavigate={navigate} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
+    home: <HomeScreen currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>setAuthMode("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
     markets: <MarketsScreen coins={marketCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
     bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>setAuthMode("login")} />,
@@ -800,7 +823,7 @@ function AuthModal({mode,setMode,close,authenticated}:{mode:AuthMode;setMode:(mo
   return <div className="fixed inset-0 z-[90] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">{register?"Create account":"Login"}</h3><p className="mt-1 text-xs text-slate-500">{register?"Register with your details":"Access your Voltix account"}</p></div><button onClick={close}><X/></button></div><div className="mt-5 space-y-4">{register&&<FormField label="Full name" value={name} onChange={setName}/>}<FormField label="Email" value={email} onChange={setEmail}/><label className="block text-xs font-bold text-slate-400">Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label>{register&&<><label className="block text-xs font-bold text-slate-400">Confirm password<input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Country<select value={country} onChange={e=>setCountry(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none">{countries.map(item=><option key={item}>{item}</option>)}</select></label><FormField label="Referral UID" value={referralCode} onChange={setReferralCode} placeholder="Optional"/></>}{error&&<p className="text-xs text-danger">{error}</p>}</div><button disabled={loading} onClick={submit} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Please wait...":register?"Create account":"Login"}</button><button onClick={()=>{setError("");setMode(register?"login":"register");}} className="mt-3 w-full text-center text-xs font-bold text-lime">{register?"Already have an account? Login":"Create a new account"}</button></div></div>;
 }
 
-function HomeScreen({ onNavigate, onOpenCopyTrade, assets, dashboard, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance, userCountry }: { onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenCopyTrade: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number; userCountry: string }) {
+function HomeScreen({ currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, assets, dashboard, balanceVisible, setBalanceVisible, activeCopyTrade, bitexBalance, userCountry }: { currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; bitexBalance: number; userCountry: string }) {
   const total = dashboard?.summary?.totalPortfolio ?? 0;
   const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
   const live=useLiveTickers();
@@ -819,11 +842,11 @@ function HomeScreen({ onNavigate, onOpenCopyTrade, assets, dashboard, balanceVis
     { icon: Users, label: "Team", onClick: () => onNavigate("team") },
   ];
   return <div className="space-y-5">
-    <section className="relative overflow-hidden rounded-3xl border border-lime/20 bg-gradient-to-br from-[#172a20] via-[#101d18] to-[#0a120f] p-5 shadow-glow sm:p-7">
+    {currentUser ? <section className="relative overflow-hidden rounded-3xl border border-lime/20 bg-gradient-to-br from-[#172a20] via-[#101d18] to-[#0a120f] p-5 shadow-glow sm:p-7">
       <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full border-[34px] border-lime/[.04]" />
       <div className="relative flex items-start justify-between"><div><div className="flex items-center gap-2 text-xs font-medium text-slate-400">Total portfolio <button onClick={() => setBalanceVisible(!balanceVisible)} className="text-slate-500">{balanceVisible ? "Hide" : "Show"}</button></div><div className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{balanceVisible ? usd(total) : "$ ••••••"}</div><div className="mt-1 text-sm text-slate-400">{balanceVisible ? inr(total) : "? ••••••"} <span className="ml-2 font-bold text-mint">{usd(todaysProfit)} today</span></div></div><div className="rounded-xl bg-lime/10 p-3 text-lime"><LineChart size={24} /></div></div>
       <div className="relative mt-7 grid grid-cols-4 gap-2">{shortcuts.map(({icon:Icon,label,onClick}) => <button key={label} onClick={onClick} className="flex flex-col items-center gap-2 rounded-xl bg-white/[.045] px-1 py-3 text-xs font-semibold hover:bg-white/[.08]"><Icon size={19} className="text-lime" />{label}</button>)}</div>
-    </section>
+    </section> : <WelcomeCard onOpenAuth={onOpenAuth} />}
 
     <div className="grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
       <div className="space-y-5">
@@ -835,6 +858,27 @@ function HomeScreen({ onNavigate, onOpenCopyTrade, assets, dashboard, balanceVis
       </div>
     </div>
   </div>;
+}
+
+function WelcomeCard({ onOpenAuth }: { onOpenAuth: () => void }) {
+  return <section className="relative overflow-hidden rounded-3xl border border-lime/20 bg-gradient-to-br from-[#172a20] via-[#101d18] to-[#0a120f] p-5 text-center shadow-glow sm:p-7">
+    <div className="mx-auto grid h-24 max-w-[220px] place-items-center sm:h-24">
+      <div className="relative h-24 w-44 sm:w-52">
+        <div className="absolute left-1/2 top-0 h-20 w-20 -translate-x-1/2 rounded-full border border-lime/30 bg-[#111c18] shadow-[0_0_38px_rgba(196,255,59,.16)]">
+          <div className="absolute inset-3 grid place-items-center rounded-full border border-lime/20 bg-gradient-to-br from-lime/20 to-mint/10 text-2xl font-black text-lime">V</div>
+        </div>
+        <div className="absolute bottom-2 left-0 h-14 w-20 rounded-2xl border border-line bg-ink/80 p-2">
+          <div className="h-2 w-10 rounded bg-lime/50" />
+          <div className="mt-2 flex h-6 items-end gap-1">{[8,16,12,22,14].map((height,index)=><span key={index} className="w-2 rounded-t bg-mint/70" style={{height}} />)}</div>
+        </div>
+        <div className="absolute bottom-0 right-0 h-16 w-24 rounded-2xl border border-line bg-ink/90 p-2">
+          <div className="flex items-end gap-1 pt-1">{[12,22,16,30,22,36].map((height,index)=><span key={index} className="w-2 rounded-t bg-lime/70" style={{height}} />)}</div>
+        </div>
+      </div>
+    </div>
+    <h2 className="mt-1 text-xl font-black tracking-tight sm:text-2xl">Welcome to join <span className="text-lime">Voltix</span></h2>
+    <button onClick={onOpenAuth} className="mt-5 w-full rounded-2xl bg-lime py-3.5 text-sm font-black text-ink shadow-[0_16px_38px_rgba(196,255,59,.18)] transition hover:bg-mint sm:text-base">Login / Sign up</button>
+  </section>;
 }
 
 function TradeActiveCard({ onClick, trade, previewAmount }: { onClick: () => void; trade: ActiveCopyTrade | null; previewAmount: number }) {
@@ -1039,16 +1083,43 @@ function WithdrawalModal({balances,bitexUnlocked,close,withdraw}:{balances:Recor
 }
 
 function VerificationRequestModal({close,notify,user}:{close:()=>void;notify:(message:string)=>void;user:CurrentUser|null}) {
-  const [name,setName]=useState(user?.name?.trim() ?? "");
-  const [documentType,setDocumentType]=useState("Aadhaar Card");
-  const [documentNumber,setDocumentNumber]=useState("");
-  const [documentImagePath,setDocumentImagePath]=useState("");
+  const [fullName,setFullName]=useState(user?.name?.trim() ?? "");
+  const [dateOfBirth,setDateOfBirth]=useState("");
+  const [country,setCountry]=useState(user?.country?.trim() ?? "");
+  const [address,setAddress]=useState("");
+  const [governmentIdType,setGovernmentIdType]=useState("Aadhaar Card");
+  const [governmentIdNumber,setGovernmentIdNumber]=useState("");
+  const [frontIdImageUrl,setFrontIdImageUrl]=useState("");
+  const [backIdImageUrl,setBackIdImageUrl]=useState("");
+  const [selfieImageUrl,setSelfieImageUrl]=useState("");
   const [kyc,setKyc]=useState<KycSnapshot|null>(null);
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
-  useEffect(()=>{let active=true;if(!user){setKyc(null);return;}fetch("/api/kyc").then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(active)setKyc(data as KycSnapshot);}).catch(()=>{if(active)setKyc(null);});return()=>{active=false};},[user]);
-  const submit=async()=>{setError("");if(!user){setError("Login required");notify("Login required");return;}if(!name.trim()||!documentNumber.trim()){setError("Complete all verification fields");return;}setLoading(true);const response=await fetch("/api/kyc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,documentType,documentNumber,documentImagePath})});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Verification request failed");return;}notify("Verification request submitted");close();};
-  return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Verification Request</h3><p className="mt-1 text-xs text-slate-500">Submit identity details for review.</p></div><button onClick={close}><X/></button></div>{kyc&&<div className="mt-4 rounded-xl border border-line bg-ink/70 p-3 text-xs text-slate-400">Status: <span className="font-bold text-lime">{kyc.status}</span>{kyc.request?.rejectionReason&&<span> · {kyc.request.rejectionReason}</span>}</div>}<div className="mt-5 space-y-4"><FormField label="Full name" value={name} onChange={setName}/><label className="block text-xs font-bold text-slate-400">UID<input value={user?.uid?.trim() || "Unavailable"} readOnly className="mt-2 w-full rounded-xl border border-line bg-ink/70 p-3 text-slate-500 outline-none"/></label><label className="block text-xs font-bold text-slate-400">Document type<select value={documentType} onChange={e=>setDocumentType(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option>Aadhaar Card</option><option>PAN Card</option><option>Passport</option><option>Driving License</option></select></label><FormField label="Document number" value={documentNumber} onChange={setDocumentNumber} placeholder="Enter document number"/><label className="block text-xs font-bold text-slate-400">Upload document/image<span className="mt-2 flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-line bg-ink/60 px-4 py-6 text-xs font-normal text-slate-500 hover:border-lime/40"><input type="file" accept="image/*,.pdf" className="hidden" onChange={e=>setDocumentImagePath(e.target.files?.[0]?.name??"")}/>{documentImagePath||"Choose image or PDF"}</span></label></div>{error&&<p className="mt-3 text-xs text-danger">{error}</p>}<button onClick={submit} disabled={loading} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Submitting...":"Submit request"}</button></div></div>;
+  useEffect(()=>{let active=true;if(!user){setKyc(null);return;}fetch("/api/kyc").then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(!active)return;const snapshot=data as KycSnapshot;setKyc(snapshot);const request=snapshot.request;if(request){setFullName(request.fullName??"");setDateOfBirth(request.dateOfBirth??"");setCountry(request.country??user.country??"");setAddress(request.address??"");setGovernmentIdType(request.governmentIdType??"Aadhaar Card");setGovernmentIdNumber(request.governmentIdNumber??"");setFrontIdImageUrl(request.frontIdImageUrl??"");setBackIdImageUrl(request.backIdImageUrl??"");setSelfieImageUrl(request.selfieImageUrl??"");}}).catch(()=>{if(active)setKyc(null);});return()=>{active=false};},[user]);
+  const locked=kyc?.status==="APPROVED"||kyc?.status==="PENDING";
+  const submit=async()=>{setError("");if(!user){setError("Login required");notify("Login required");return;}if(locked){setError(kyc?.status==="APPROVED"?"Verification is already approved":"Verification request is pending");return;}if(!fullName.trim()||!dateOfBirth.trim()||!country.trim()||!address.trim()||!governmentIdNumber.trim()||!frontIdImageUrl.trim()||!backIdImageUrl.trim()||!selfieImageUrl.trim()){setError("Complete all verification fields");return;}setLoading(true);const response=await fetch("/api/kyc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,dateOfBirth,country,address,governmentIdType,governmentIdNumber,frontIdImageUrl,backIdImageUrl,selfieImageUrl})});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Verification request failed");return;}notify("Verification request submitted");close();};
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4">
+      <div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl">
+        <div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Verification Request</h3><p className="mt-1 text-xs text-slate-500">Submit identity details for review.</p></div><button onClick={close}><X/></button></div>
+        {kyc&&<div className="mt-4 rounded-xl border border-line bg-ink/70 p-3 text-xs text-slate-400">Status: <span className="font-bold text-lime">{kyc.status}</span>{kyc.request?.rejectionReason&&<span> · {kyc.request.rejectionReason}</span>}</div>}
+        <div className="mt-5 max-h-[62vh] space-y-4 overflow-y-auto pr-1">
+          <FormField label="Full name" value={fullName} onChange={setFullName} readOnly={locked}/>
+          <FormField label="Date of birth" value={dateOfBirth} onChange={setDateOfBirth} placeholder="YYYY-MM-DD" readOnly={locked}/>
+          <FormField label="Country" value={country} onChange={setCountry} readOnly={locked}/>
+          <FormField label="Address" value={address} onChange={setAddress} readOnly={locked}/>
+          <label className="block text-xs font-bold text-slate-400">UID<input value={user?.uid?.trim() || "Unavailable"} readOnly className="mt-2 w-full rounded-xl border border-line bg-ink/70 p-3 text-slate-500 outline-none"/></label>
+          <label className="block text-xs font-bold text-slate-400">Government ID type<select value={governmentIdType} disabled={locked} onChange={e=>setGovernmentIdType(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white disabled:text-slate-500"><option>Aadhaar Card</option><option>PAN Card</option><option>Passport</option><option>Driving License</option></select></label>
+          <FormField label="Government ID number" value={governmentIdNumber} onChange={setGovernmentIdNumber} placeholder="Enter document number" readOnly={locked}/>
+          <FormField label="Front ID image URL" value={frontIdImageUrl} onChange={setFrontIdImageUrl} placeholder="https://..." readOnly={locked}/>
+          <FormField label="Back ID image URL" value={backIdImageUrl} onChange={setBackIdImageUrl} placeholder="https://..." readOnly={locked}/>
+          <FormField label="Selfie image URL" value={selfieImageUrl} onChange={setSelfieImageUrl} placeholder="https://..." readOnly={locked}/>
+        </div>
+        {error&&<p className="mt-3 text-xs text-danger">{error}</p>}
+        <button onClick={submit} disabled={loading||locked} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Submitting...":locked?kyc?.status==="APPROVED"?"Approved":"Pending review":"Submit request"}</button>
+      </div>
+    </div>
+  );
 }
 
 function HelpCenterModal({close,notify}:{close:()=>void;notify:(message:string)=>void}) {
@@ -1064,7 +1135,7 @@ function HelpCenterModal({close,notify}:{close:()=>void;notify:(message:string)=
 
 function SupportTicketForm({close,submitted}:{close:()=>void;submitted:()=>void}) { const [subject,setSubject]=useState(""); const [message,setMessage]=useState(""); const [error,setError]=useState(""); const [loading,setLoading]=useState(false); const submit=async()=>{setError("");if(!subject.trim()||!message.trim()){setError("Complete all ticket fields");return;}setLoading(true);const response=await fetch("/api/support",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subject,message})});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Support ticket failed");return;}submitted();}; return <div className="flex-1 overflow-y-auto p-5"><button onClick={close} className="text-xs font-bold text-lime">Back to chat</button><h4 className="mt-4 text-lg font-black">Raise Ticket</h4><div className="mt-5 space-y-4"><FormField label="Subject" value={subject} onChange={setSubject} placeholder="Brief issue summary"/><label className="block text-xs font-bold text-slate-400">Message<textarea value={message} onChange={e=>setMessage(e.target.value)} rows={5} className="mt-2 w-full resize-none rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label></div>{error&&<p className="mt-3 text-xs text-danger">{error}</p>}<button onClick={submit} disabled={loading} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Submitting...":"Submit Ticket"}</button></div> }
 
-function FormField({label,value,onChange,placeholder}:{label:string;value:string;onChange:(value:string)=>void;placeholder?:string}) { return <label className="block text-xs font-bold text-slate-400">{label}<input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label> }
+function FormField({label,value,onChange,placeholder,readOnly}:{label:string;value:string;onChange:(value:string)=>void;placeholder?:string;readOnly?:boolean}) { return <label className="block text-xs font-bold text-slate-400">{label}<input value={value} readOnly={readOnly} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50 read-only:text-slate-500"/></label> }
 
 function LineItem({label,value}:{label:string;value:string}) { return <div className="flex justify-between text-xs"><span className="text-slate-500">{label}</span><span className="font-bold">{value}</span></div> }
 

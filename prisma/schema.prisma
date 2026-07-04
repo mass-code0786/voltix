@@ -113,6 +113,7 @@ enum NotificationType {
   COPY_TRADE_INCOME
   REFERRAL_INCOME
   AI_SUBSCRIPTION_PURCHASE
+  KYC_STATUS
   ADMIN_TRADE_CODE
   ADMIN_BROADCAST
 }
@@ -151,6 +152,7 @@ model User {
   trades                CopyTrade[]
   incomes               Income[]
   kycRequests           KycRequest[]
+  reviewedKycRequests   KycRequest[]     @relation("KycReviewer")
   supportTickets        SupportTicket[]
   notifications         Notification[]
   auditLogs             AuditLog[]       @relation("AuditActor")
@@ -393,22 +395,28 @@ model AiSubscription {
 }
 
 model KycRequest {
-  id                String    @id @default(cuid())
-  userId            String
-  user              User      @relation(fields: [userId], references: [id])
-  name              String
-  documentType      String
-  documentNumber    String
-  documentImagePath String?
-  status            KycStatus @default(PENDING)
-  reviewedById      String?
-  reviewedAt        DateTime?
-  rejectionReason   String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id])
+  fullName           String
+  dateOfBirth        DateTime?
+  country            String?
+  address            String?
+  governmentIdType   String
+  governmentIdNumber String
+  frontIdImageUrl    String?
+  backIdImageUrl     String?
+  selfieImageUrl     String?
+  status             KycStatus @default(PENDING)
+  rejectionReason    String?
+  submittedAt        DateTime  @default(now())
+  reviewedAt         DateTime?
+  reviewedById       String?
+  reviewedBy         User?     @relation("KycReviewer", fields: [reviewedById], references: [id])
+  updatedAt          DateTime  @updatedAt
 
-  @@index([userId, createdAt])
-  @@index([status, createdAt])
+  @@index([userId, submittedAt])
+  @@index([status, submittedAt])
 }
 
 model SupportTicket {

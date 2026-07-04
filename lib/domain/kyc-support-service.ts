@@ -1,12 +1,18 @@
 import { KycStatus, SupportTicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { createNotification } from "./notification-service";
 
 type KycInput = {
   userId: string;
-  name: string;
-  documentType: string;
-  documentNumber: string;
-  documentImagePath?: string | null;
+  fullName: string;
+  dateOfBirth: Date;
+  country: string;
+  address: string;
+  governmentIdType: string;
+  governmentIdNumber: string;
+  frontIdImageUrl: string;
+  backIdImageUrl: string;
+  selfieImageUrl: string;
 };
 
 type TicketInput = {
@@ -16,7 +22,7 @@ type TicketInput = {
 };
 
 export async function getUserKyc(userId: string) {
-  const request = await prisma.kycRequest.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } });
+  const request = await prisma.kycRequest.findFirst({ where: { userId }, orderBy: { submittedAt: "desc" } });
   return {
     status: request?.status ?? "NOT_SUBMITTED",
     request: request ? serializeKyc(request) : null,
@@ -24,13 +30,26 @@ export async function getUserKyc(userId: string) {
 }
 
 export async function submitUserKyc(input: KycInput) {
+  const activeRequest = await prisma.kycRequest.findFirst({
+    where: { userId: input.userId, status: { in: ["PENDING", "APPROVED"] } },
+    orderBy: { submittedAt: "desc" },
+    select: { status: true },
+  });
+  if (activeRequest?.status === "PENDING") throw new Error("KYC request is already pending");
+  if (activeRequest?.status === "APPROVED") throw new Error("KYC is already approved");
+
   const request = await prisma.kycRequest.create({
     data: {
       userId: input.userId,
-      name: input.name,
-      documentType: input.documentType,
-      documentNumber: input.documentNumber,
-      documentImagePath: input.documentImagePath || null,
+      fullName: input.fullName,
+      dateOfBirth: input.dateOfBirth,
+      country: input.country,
+      address: input.address,
+      governmentIdType: input.governmentIdType,
+      governmentIdNumber: input.governmentIdNumber,
+      frontIdImageUrl: input.frontIdImageUrl,
+      backIdImageUrl: input.backIdImageUrl,
+      selfieImageUrl: input.selfieImageUrl,
       status: "PENDING",
     },
   });
@@ -42,17 +61,17 @@ export async function submitUserKyc(input: KycInput) {
 
 export async function getAdminKycRows() {
   const requests = await prisma.kycRequest.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: { submittedAt: "desc" },
     take: 100,
     include: { user: { select: { name: true, uid: true } } },
   });
   return {
     rows: requests.map(request => [
-      request.name || request.user.name,
+      request.fullName || request.user.name,
       request.user.uid,
-      request.documentType,
-      request.documentNumber,
-      formatDate(request.createdAt),
+      request.governmentIdType,
+      request.governmentIdNumber,
+      formatDate(request.submittedAt),
       request.status,
       request.id,
     ]),
@@ -60,17 +79,27 @@ export async function getAdminKycRows() {
 }
 
 export async function reviewKyc(input: { id: string; adminUserId: string; status: Extract<KycStatus, "APPROVED" | "REJECTED">; reason?: string }) {
-  const request = await prisma.kycRequest.update({
-    where: { id: input.id },
-    data: {
-      status: input.status,
-      reviewedById: input.adminUserId,
-      reviewedAt: new Date(),
-      rejectionReason: input.status === "REJECTED" ? input.reason ?? "Rejected by admin" : null,
-    },
-  });
-  await prisma.auditLog.create({
-    data: { actorId: input.adminUserId, actorType: "ADMIN", action: `KYC_${input.status}`, entityType: "KycRequest", entityId: request.id, metadata: { userId: request.userId, reason: request.rejectionReason } },
+  const request = await prisma.$transaction(async tx => {
+    const reviewed = await tx.kycRequest.update({
+      where: { id: input.id },
+      data: {
+        status: input.status,
+        reviewedById: input.adminUserId,
+        reviewedAt: new Date(),
+        rejectionReason: input.status === "REJECTED" ? input.reason ?? "Rejected by admin" : null,
+      },
+    });
+    await tx.auditLog.create({
+      data: { actorId: input.adminUserId, actorType: "ADMIN", action: `KYC_${input.status}`, entityType: "KycRequest", entityId: reviewed.id, metadata: { userId: reviewed.userId, reason: reviewed.rejectionReason } },
+    });
+    await createNotification(tx, {
+      userId: reviewed.userId,
+      type: "KYC_STATUS",
+      title: input.status === "APPROVED" ? "KYC approved" : "KYC rejected",
+      message: input.status === "APPROVED" ? "Your identity verification has been approved." : `Your identity verification was rejected. ${reviewed.rejectionReason ?? ""}`.trim(),
+      metadata: { kycRequestId: reviewed.id, status: reviewed.status },
+    });
+    return reviewed;
   });
   return serializeKyc(request);
 }
@@ -125,18 +154,29 @@ export async function updateSupportTicket(input: { id: string; adminUserId: stri
   return serializeTicket(ticket);
 }
 
-function serializeKyc(request: { id: string; name: string; documentType: string; documentNumber: string; documentImagePath: string | null; status: KycStatus; rejectionReason: string | null; createdAt: Date; updatedAt: Date; reviewedAt: Date | null }) {
+function serializeKyc(request: { id: string; fullName: string; dateOfBirth: Date | null; country: string | null; address: string | null; governmentIdType: string; governmentIdNumber: string; frontIdImageUrl: string | null; backIdImageUrl: string | null; selfieImageUrl: string | null; status: KycStatus; rejectionReason: string | null; submittedAt: Date; updatedAt: Date; reviewedAt: Date | null; reviewedById: string | null }) {
   return {
     id: request.id,
-    name: request.name,
-    documentType: request.documentType,
-    documentNumber: request.documentNumber,
-    documentImagePath: request.documentImagePath,
+    fullName: request.fullName,
+    name: request.fullName,
+    dateOfBirth: request.dateOfBirth?.toISOString().slice(0, 10) ?? null,
+    country: request.country,
+    address: request.address,
+    governmentIdType: request.governmentIdType,
+    governmentIdNumber: request.governmentIdNumber,
+    frontIdImageUrl: request.frontIdImageUrl,
+    backIdImageUrl: request.backIdImageUrl,
+    selfieImageUrl: request.selfieImageUrl,
+    documentType: request.governmentIdType,
+    documentNumber: request.governmentIdNumber,
+    documentImagePath: request.frontIdImageUrl,
     status: request.status,
     rejectionReason: request.rejectionReason,
-    createdAt: request.createdAt.toISOString(),
+    submittedAt: request.submittedAt.toISOString(),
+    createdAt: request.submittedAt.toISOString(),
     updatedAt: request.updatedAt.toISOString(),
     reviewedAt: request.reviewedAt?.toISOString() ?? null,
+    reviewedBy: request.reviewedById,
   };
 }
 
