@@ -60,7 +60,7 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
   if (!input.idempotencyKey.trim()) throw new Error("Idempotency key is required");
   if (!input.address.trim()) throw new Error("External wallet address is required");
   if (input.amount.lte(0)) throw new Error("Withdrawal amount must be positive");
-  if (input.walletType !== "SPOT" && input.walletType !== "BITEX") throw new Error("Only Spot and Bitex withdrawals are supported");
+  if (input.walletType !== "SPOT" && input.walletType !== "BITEX") throw new Error("Only Spot and AI withdrawals are supported");
 
   const feeAmount = calculateWithdrawalFee(input.walletType, input.amount);
   const receivableAmount = input.amount.sub(feeAmount);
@@ -83,9 +83,9 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
     if (input.walletType === "SPOT" && user.spotBalance.lt(input.amount)) throw new Error("Insufficient Spot wallet balance");
     if (input.walletType === "BITEX") {
       if (user.bitexPrincipal.gt(0) && user.bitexIncomeEarned.lt(user.bitexPrincipal.mul(2))) {
-        throw new Error("Bitex withdrawal will unlock after completing 2x copy trade income.");
+        throw new Error("AI withdrawal will unlock after completing 2x copy trade income.");
       }
-      if (user.bitexBalance.lt(input.amount)) throw new Error("Insufficient Bitex wallet balance");
+      if (user.bitexBalance.lt(input.amount)) throw new Error("Insufficient AI wallet balance");
     }
 
     const withdrawal = await tx.withdrawal.create({
@@ -174,7 +174,7 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
   return prisma.$transaction(async (tx) => {
     const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: input.withdrawalId }, include: { asset: true, network: true } });
     if (withdrawal.status !== "PENDING") throw new Error("Withdrawal has already been actioned");
-    if (withdrawal.walletType !== "SPOT" && withdrawal.walletType !== "BITEX") throw new Error("Only Spot and Bitex withdrawals are supported");
+    if (withdrawal.walletType !== "SPOT" && withdrawal.walletType !== "BITEX") throw new Error("Only Spot and AI withdrawals are supported");
     const feeAmount = calculateWithdrawalFee(withdrawal.walletType, withdrawal.amount);
     const receivableAmount = withdrawal.amount.sub(feeAmount);
     if (receivableAmount.lte(0)) throw new Error("Withdrawal amount must exceed the total fee");

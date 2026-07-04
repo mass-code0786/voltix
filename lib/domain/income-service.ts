@@ -32,8 +32,10 @@ export async function getAdminIncomeHistory() {
 
 export async function runIncomeScheduler(now = new Date()) {
   await settleDueCopyTrades(undefined, now);
+  const { runAiAutoCopyTradeJob } = await import("./ai-subscription-service");
+  const ai = await runAiAutoCopyTradeJob(now);
   const vip = await runVipSalaryJob(now);
-  return { copyTradesSettled: true, vipSalary: vip };
+  return { copyTradesSettled: true, aiAutoCopy: ai, vipSalary: vip };
 }
 
 export async function postFirstDepositReferralIncome(depositId: string, adminUserId?: string) {
@@ -83,18 +85,18 @@ export async function postFirstDepositReferralIncome(depositId: string, adminUse
 }
 
 export async function postBotSubscriptionCommission(input: { buyerUserId: string; purchaseId: string; amount: Prisma.Decimal }) {
-  if (input.amount.lte(0)) throw new Error("Bot purchase amount must be positive");
+  if (input.amount.lte(0)) throw new Error("AI purchase amount must be positive");
   return prisma.$transaction(async (tx) => {
     const buyer = await tx.user.findUniqueOrThrow({ where: { id: input.buyerUserId }, select: { referredById: true } });
     if (!buyer.referredById) return { posted: false };
     await postIncome(tx, {
       userId: buyer.referredById,
       type: "BOT_COMMISSION",
-      sourceType: "BOT_SUBSCRIPTION",
+      sourceType: "AI_SUBSCRIPTION",
       sourceId: input.purchaseId,
       amount: input.amount.mul(BOT_DIRECT_RATE),
-      memo: "Direct referral bot subscription commission",
-      auditAction: "BOT_COMMISSION_PAID",
+      memo: "Direct referral AI subscription commission",
+      auditAction: "AI_COMMISSION_PAID",
       metadata: { buyerUserId: input.buyerUserId, purchaseId: input.purchaseId },
     });
     return { posted: true };

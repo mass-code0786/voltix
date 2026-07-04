@@ -123,6 +123,7 @@ model User {
   deposits              Deposit[]
   withdrawals           Withdrawal[]
   packages              UserPackage[]
+  aiSubscriptions       AiSubscription[]
   assignedCodes         TradeCode[]
   trades                CopyTrade[]
   incomes               Income[]
@@ -217,6 +218,7 @@ model LedgerJournal {
   memo           String
   status         JournalStatus @default(PENDING)
   entries        LedgerEntry[]
+  aiSubscriptions AiSubscription[]
   postedAt       DateTime?
   createdAt      DateTime      @default(now())
 
@@ -346,6 +348,22 @@ model UserPackage {
   expiresAt   DateTime?
 
   @@index([userId, status])
+}
+
+model AiSubscription {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  amountUsd       Decimal  @db.Decimal(18, 2)
+  startsAt        DateTime @default(now())
+  expiresAt       DateTime
+  active          Boolean  @default(true)
+  ledgerJournalId String   @unique
+  ledgerJournal   LedgerJournal @relation(fields: [ledgerJournalId], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([userId, active, expiresAt])
+  @@index([expiresAt])
 }
 
 model TradeSlot {

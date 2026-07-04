@@ -78,7 +78,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
     remainingTime: active?.remainingTime ?? 0,
     eligibility: {
       eligible: remaining > 0 && user.bitexBalance.gt(0),
-      reason: remaining <= 0 ? "Daily trade limit reached" : user.bitexBalance.lte(0) ? "Please transfer funds to Bitex wallet before starting copy trade." : null,
+      reason: remaining <= 0 ? "Daily trade limit reached" : user.bitexBalance.lte(0) ? "Please transfer funds to AI wallet before starting copy trade." : null,
     },
     vipRank: user.vipRank,
     todaysCompletedTrades: completedToday,
@@ -106,7 +106,7 @@ export async function redeemTradeCode(input: { userId: string; code: string; now
     if (code.usedCount >= code.maxUsage) return fail("USAGE_LIMIT_EXCEEDED");
     const alreadyUsedByUser = await tx.copyTrade.findFirst({ where: { userId: input.userId, codeId: code.id }, select: { id: true } });
     if (alreadyUsedByUser) return fail("USER_ALREADY_USED_CODE");
-    if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to Bitex wallet before starting copy trade.");
+    if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to AI wallet before starting copy trade.");
     const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
     if (tradeAmount.lt(MIN_COPY_TRADE_STAKE)) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.`);
 
@@ -123,7 +123,7 @@ export async function redeemTradeCode(input: { userId: string; code: string; now
       where: { id: input.userId, bitexBalance: { gte: tradeAmount } },
       data: { bitexBalance: { decrement: tradeAmount } },
     });
-    if (locked.count !== 1) throw new Error("Insufficient Bitex wallet balance");
+    if (locked.count !== 1) throw new Error("Insufficient AI wallet balance");
 
     const timeline = tradeTimeline(now, code.tradeWindowMinutes, 0);
     const trade = await tx.copyTrade.create({
@@ -174,7 +174,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: trade.userId, assetId: asset.id, type: "BITEX" } } }),
       tx.walletAccount.findFirstOrThrow({ where: { userId: null, assetId: asset.id, type: "FEE" } }),
     ]);
-    const journal = await postBalancedJournal(tx, { referenceType: "COPY_TRADE_INCOME", referenceId: trade.id, idempotencyKey: `copy-income:${trade.id}`, memo: "Copy trade principal returned and income credited to Bitex", lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: bitexCredit }, { accountId: bitexAccount.id, direction: "CREDIT", amount: bitexCredit }] });
+    const journal = await postBalancedJournal(tx, { referenceType: "COPY_TRADE_INCOME", referenceId: trade.id, idempotencyKey: `copy-income:${trade.id}`, memo: "Copy trade principal returned and income credited to AI", lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: bitexCredit }, { accountId: bitexAccount.id, direction: "CREDIT", amount: bitexCredit }] });
     await tx.income.create({ data: { userId: trade.userId, type: "COPY_TRADE", sourceType: "COPY_TRADE", sourceId: trade.id, amount: profitAmount, copyTradeId: trade.id, ledgerJournalId: journal.id } });
     const progress = await tx.user.update({
       where: { id: trade.userId },
