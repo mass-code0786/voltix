@@ -142,9 +142,8 @@ export function BrandLogo({ compact = false }: BrandLogoProps) {
           fontWeight="800"
           letterSpacing="1.38"
         >
-          VOLTIX
+          VOLTI<tspan fill="#D9FFF2">X</tspan>
         </text>
-        <rect x="38.3" y="8.3" width="76.5" height="5.4" rx="2.7" fill="#FFFFFF" opacity=".08" />
       </g>
     </svg>
   );

@@ -861,7 +861,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, a
 }
 function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; onOpenAuth: () => void }) {
   return <GlassCard className="home-hero-card relative h-[162px] overflow-hidden rounded-[24px] p-[18px]">
-    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_108px] items-center gap-1">
+    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_120px] items-center gap-1">
       <div className="min-w-0">
         <p className="text-[13px] font-semibold text-slate-400">Welcome to join Voltix</p>
         <h2 className="mt-1 text-[25px] font-black leading-[1.02] text-white">VOLTIX</h2>
@@ -878,11 +878,11 @@ function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; o
 
 function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible, setBalanceVisible }: { currentUser: CurrentUser; total: number; todaysProfit: number; balanceVisible: boolean; setBalanceVisible: (value: boolean) => void }) {
   return <GlassCard className="home-hero-card relative h-[162px] overflow-hidden rounded-[24px] p-[18px]">
-    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_108px] items-center gap-1">
+    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_120px] items-center gap-1">
       <div className="min-w-0">
         <p className="text-[13px] font-semibold text-slate-400">Welcome Back,</p>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-          <h2 className="truncate text-[24px] font-black leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
+          <h2 className="truncate text-[22px] font-black leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
           <CheckCircle2 size={15} className="shrink-0 text-[#18ff8a]" fill="rgba(24,255,138,.18)" />
         </div>
         <div className="mt-1.5 flex items-center gap-1.5">
@@ -890,7 +890,7 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
           <span className="rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 px-2 py-0.5 text-[9px] font-black text-[#18ff8a]">Verified</span>
         </div>
         <p className="mt-2 text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>
-        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-0.5 text-left text-[36px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
+        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-0.5 text-left text-[34px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
           {balanceVisible ? usd(total) : "$ ******"}
         </button>
         <div className={`mt-1.5 inline-flex rounded-full border px-2.5 py-0.5 text-[13px] font-black leading-none ${todaysProfit >= 0 ? "border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
@@ -904,6 +904,10 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
 
 function VoltixVIllustration() {
   return <div className="voltix-v-scene" aria-hidden="true">
+    <div className="voltix-core-grid" />
+    <span className="voltix-beam voltix-beam-a" />
+    <span className="voltix-beam voltix-beam-b" />
+    <span className="voltix-beam voltix-beam-c" />
     <div className="voltix-v-halo" />
     <div className="voltix-v-orbit" />
     <div className="voltix-v-orbit voltix-v-orbit-alt" />
@@ -912,6 +916,7 @@ function VoltixVIllustration() {
     <span className="voltix-particle voltix-particle-c" />
     <div className="voltix-v-letter">V</div>
     <div className="voltix-v-platform" />
+    <div className="voltix-platform-ring" />
     <div className="voltix-v-reflection" />
   </div>;
 }
@@ -928,14 +933,14 @@ function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome:
   const percent=history.length?chartData.reduce((sum,value)=>sum+value,0):0;
   return <GlassCard className="home-depth-card h-[145px] rounded-[20px] p-4">
     <div className="flex items-start justify-between gap-3">
-      <h3 className="text-[20px] font-black leading-tight text-white">AI Copy Trading Overview</h3>
-      <button className="flex shrink-0 items-center gap-1 rounded-full border border-[#18ff8a]/15 bg-white/[.04] px-2.5 py-1 text-[9px] font-black text-slate-300">This Week <ChevronDown size={11}/></button>
+      <h3 className="text-[20px] font-bold leading-tight text-white">AI Copy Trading Overview</h3>
+      <button className="flex shrink-0 items-center gap-1 rounded-full border border-[#18ff8a]/15 bg-white/[.04] px-2.5 py-1 text-[13px] font-black text-slate-300">This Week <ChevronDown size={11}/></button>
     </div>
     <div className="mt-2.5 grid grid-cols-[.78fr_1fr] items-end gap-3">
       <div>
-        <p className="text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Income</p>
-        <p className="mt-1 text-[32px] font-black leading-none text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
-        <p className="mt-0.5 text-[10px] font-bold text-slate-500">{history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT` : "No chart data yet"}</p>
+        <p className="text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">Total Income</p>
+        <p className="mt-1 text-[30px] font-black leading-none text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
+        <p className="mt-0.5 text-[12px] font-bold text-slate-500">{history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT` : "No chart data yet"}</p>
       </div>
       <IncomeChart data={chartData} />
     </div>
@@ -943,7 +948,7 @@ function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome:
 }
 
 function IncomeChart({ data }: { data: number[] }) {
-  if (!data.length) return <div className="grid h-[82px] place-items-center rounded-2xl border border-white/[.06] bg-black/20 text-center text-[9px] font-bold text-slate-600">No chart data</div>;
+  if (!data.length) return <div className="grid h-[82px] place-items-center rounded-2xl border border-white/[.06] bg-black/20 text-center text-[12px] font-bold text-slate-600">No chart data</div>;
   const width=160, height=82;
   const cumulative=data.reduce<number[]>((series,value,index)=>[...series,(series[index-1]??0)+value],[]);
   const min=Math.min(...cumulative,0), max=Math.max(...cumulative,1);

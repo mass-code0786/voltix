@@ -137,51 +137,83 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .voltix-v-scene {
   position: relative;
-  height: 108px;
-  width: 108px;
+  height: 120px;
+  width: 120px;
   perspective: 560px;
   transform-style: preserve-3d;
   filter: drop-shadow(0 14px 22px rgba(0,0,0,.44));
   animation: float-premium 5.4s ease-in-out infinite;
 }
 
+.voltix-core-grid {
+  position: absolute;
+  left: 50%;
+  top: 19px;
+  height: 72px;
+  width: 104px;
+  transform: translateX(-50%) rotateX(64deg);
+  border-radius: 50%;
+  background-image:
+    linear-gradient(rgba(24,255,138,.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24,255,138,.12) 1px, transparent 1px);
+  background-size: 12px 12px;
+  opacity: .42;
+  mask: radial-gradient(ellipse, #000 42%, transparent 74%);
+}
+
+.voltix-beam {
+  position: absolute;
+  bottom: 26px;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(to top, rgba(24,255,138,.48), rgba(156,255,217,.18), transparent);
+  filter: blur(.25px);
+  opacity: .6;
+}
+
+.voltix-beam-a { left: 34px; height: 58px; }
+.voltix-beam-b { left: 59px; height: 76px; opacity: .78; }
+.voltix-beam-c { right: 32px; height: 50px; opacity: .48; }
+
 .voltix-v-halo {
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  background: radial-gradient(circle at 50% 38%, rgba(24,255,138,.25), rgba(24,255,138,.06) 38%, transparent 68%);
-  filter: blur(5px);
+  background: radial-gradient(circle at 50% 42%, rgba(24,255,138,.34), rgba(24,255,138,.08) 38%, transparent 70%);
+  filter: blur(6px);
 }
 
 .voltix-v-orbit {
   position: absolute;
   left: 50%;
-  top: 5px;
-  height: 70px;
-  width: 70px;
+  top: 7px;
+  height: 76px;
+  width: 76px;
   transform: translateX(-50%) rotateX(62deg) rotateZ(-18deg);
   border: 2px solid rgba(24,255,138,.28);
   border-radius: 50%;
   box-shadow: 0 0 34px rgba(24,255,138,.28), inset 0 0 20px rgba(24,255,138,.13);
+  animation: orbit-soft 4.8s ease-in-out infinite;
 }
 
 .voltix-v-orbit-alt {
-  top: 18px;
-  height: 52px;
-  width: 86px;
+  top: 20px;
+  height: 56px;
+  width: 96px;
   transform: translateX(-50%) rotateX(72deg) rotateZ(24deg);
   border-color: rgba(24,200,255,.24);
   box-shadow: 0 0 30px rgba(24,200,255,.14);
+  animation-delay: .7s;
 }
 
 .voltix-v-letter {
   position: absolute;
   left: 50%;
-  top: 9px;
+  top: 13px;
   display: grid;
-  height: 68px;
-  width: 58px;
-  transform: translateX(-50%) rotateY(-18deg) rotateX(8deg);
+  height: 72px;
+  width: 62px;
+  transform: translateX(-50%) rotateY(-20deg) rotateX(8deg);
   place-items: center;
   color: transparent;
   font-size: 50px;
@@ -211,15 +243,28 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .voltix-v-platform {
   position: absolute;
-  bottom: 10px;
+  bottom: 12px;
   left: 50%;
-  height: 78px;
-  width: 78px;
+  height: 82px;
+  width: 92px;
   transform: translateX(-50%) rotateX(64deg);
   border: 1px solid rgba(24,255,138,.38);
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(24,255,138,.32), rgba(24,255,138,.07) 52%, rgba(0,0,0,.2) 72%);
+  background:
+    radial-gradient(ellipse at center, rgba(0,0,0,.72) 0 28%, rgba(24,255,138,.22) 30%, rgba(24,255,138,.08) 52%, rgba(0,0,0,.24) 72%);
   box-shadow: 0 0 32px rgba(24,255,138,.38);
+}
+
+.voltix-platform-ring {
+  position: absolute;
+  left: 50%;
+  bottom: 29px;
+  height: 24px;
+  width: 78px;
+  transform: translateX(-50%) rotateX(65deg);
+  border: 1px solid rgba(156,255,217,.5);
+  border-radius: 50%;
+  box-shadow: 0 0 18px rgba(24,255,138,.36), inset 0 0 10px rgba(24,255,138,.18);
 }
 
 .voltix-v-reflection {
@@ -244,9 +289,9 @@ button { -webkit-tap-highlight-color: transparent; }
   animation: particle-pulse 2.8s ease-in-out infinite;
 }
 
-.voltix-particle-a { right: 12px; top: 17px; }
-.voltix-particle-b { left: 14px; top: 52px; animation-delay: .55s; background: #18c8ff; box-shadow: 0 0 12px rgba(24,200,255,.82); }
-.voltix-particle-c { right: 22px; bottom: 26px; animation-delay: 1.1s; }
+.voltix-particle-a { right: 12px; top: 19px; }
+.voltix-particle-b { left: 13px; top: 58px; animation-delay: .55s; background: #18c8ff; box-shadow: 0 0 12px rgba(24,200,255,.82); }
+.voltix-particle-c { right: 24px; bottom: 31px; animation-delay: 1.1s; }
 
 .home-action-tile {
   border: 1px solid rgba(24,255,138,.16);
@@ -355,6 +400,11 @@ button { -webkit-tap-highlight-color: transparent; }
   50% { opacity: 1; transform: scale(1.25); }
 }
 
+@keyframes orbit-soft {
+  0%, 100% { opacity: .58; filter: brightness(1); }
+  50% { opacity: .9; filter: brightness(1.18); }
+}
+
 @media (max-width: 340px) {
   .home-hero-card { padding: .8rem; }
   .voltix-v-scene { width: 104px; transform: scale(.86); transform-origin: right center; }
@@ -368,9 +418,9 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 
   .voltix-v-scene {
-    height: 100px;
-    width: 100px;
-    transform: scale(.92);
+    height: 108px;
+    width: 108px;
+    transform: scale(.9);
     transform-origin: right center;
   }
 }
