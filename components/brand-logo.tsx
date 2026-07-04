@@ -8,7 +8,7 @@ export function BrandLogo({ compact = false }: BrandLogoProps) {
       <img
         src="/voltix-logo.svg"
         alt="Voltix"
-        className={compact ? "h-7 w-auto object-contain" : "h-9 w-auto object-contain"}
+        className={compact ? "h-[34px] w-[120px] object-contain object-left" : "h-[34px] w-[120px] object-contain object-left"}
       />
     </div>
   );
