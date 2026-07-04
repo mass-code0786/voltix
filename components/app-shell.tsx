@@ -860,15 +860,15 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, a
   </div>;
 }
 function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; onOpenAuth: () => void }) {
-  return <GlassCard className="home-hero-card relative h-[178px] overflow-hidden rounded-[24px] p-4">
-    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_116px] items-center gap-1">
+  return <GlassCard className="home-hero-card relative h-[162px] overflow-hidden rounded-[24px] p-[18px]">
+    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_108px] items-center gap-1">
       <div className="min-w-0">
-        <p className="text-xs font-semibold text-slate-400">Welcome to join Voltix</p>
-        <h2 className="mt-1.5 text-[23px] font-black leading-[1.02] text-white">VOLTIX</h2>
-        <p className="mt-2 max-w-[10rem] text-[11px] leading-4 text-slate-500">AI copy trading and wallet tools in one dashboard.</p>
-        <div className="mt-3 grid grid-cols-2 gap-1.5">
-          <button onClick={onOpenAuth} className="rounded-xl bg-[#18ff8a] px-3 py-2 text-[11px] font-black text-[#050608] shadow-[0_14px_34px_rgba(24,255,138,.24)]">Login</button>
-          <button onClick={onOpenAuth} className="rounded-xl border border-[#18ff8a]/25 bg-white/[.045] px-3 py-2 text-[11px] font-black text-[#18ff8a]">Sign up</button>
+        <p className="text-[13px] font-semibold text-slate-400">Welcome to join Voltix</p>
+        <h2 className="mt-1 text-[25px] font-black leading-[1.02] text-white">VOLTIX</h2>
+        <p className="mt-1.5 max-w-[10rem] text-[11px] leading-4 text-slate-500">AI copy trading and wallet tools.</p>
+        <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+          <button onClick={onOpenAuth} className="rounded-xl bg-[#18ff8a] px-3 py-1.5 text-[11px] font-black text-[#050608] shadow-[0_14px_34px_rgba(24,255,138,.24)]">Login</button>
+          <button onClick={onOpenAuth} className="rounded-xl border border-[#18ff8a]/25 bg-white/[.045] px-3 py-1.5 text-[11px] font-black text-[#18ff8a]">Sign up</button>
         </div>
       </div>
       <VoltixVIllustration />
@@ -877,23 +877,23 @@ function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; o
 }
 
 function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible, setBalanceVisible }: { currentUser: CurrentUser; total: number; todaysProfit: number; balanceVisible: boolean; setBalanceVisible: (value: boolean) => void }) {
-  return <GlassCard className="home-hero-card relative h-[178px] overflow-hidden rounded-[24px] p-4">
-    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_116px] items-center gap-1">
+  return <GlassCard className="home-hero-card relative h-[162px] overflow-hidden rounded-[24px] p-[18px]">
+    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_108px] items-center gap-1">
       <div className="min-w-0">
-        <p className="text-xs font-semibold text-slate-400">Welcome Back,</p>
+        <p className="text-[13px] font-semibold text-slate-400">Welcome Back,</p>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-          <h2 className="truncate text-[20px] font-black leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
+          <h2 className="truncate text-[24px] font-black leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
           <CheckCircle2 size={15} className="shrink-0 text-[#18ff8a]" fill="rgba(24,255,138,.18)" />
         </div>
         <div className="mt-1.5 flex items-center gap-1.5">
           <span className="rounded-full border border-[#9b5cff]/35 bg-[#9b5cff]/12 px-2 py-0.5 text-[9px] font-black text-[#c9aeff]">{currentUser.vipRank || "VIP 0"}</span>
           <span className="rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 px-2 py-0.5 text-[9px] font-black text-[#18ff8a]">Verified</span>
         </div>
-        <p className="mt-3 text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>
-        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-0.5 text-left text-[23px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
+        <p className="mt-2 text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>
+        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-0.5 text-left text-[36px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
           {balanceVisible ? usd(total) : "$ ******"}
         </button>
-        <div className={`mt-2 inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-black ${todaysProfit >= 0 ? "border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
+        <div className={`mt-1.5 inline-flex rounded-full border px-2.5 py-0.5 text-[13px] font-black leading-none ${todaysProfit >= 0 ? "border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
           {balanceVisible ? `${todaysProfit >= 0 ? "+" : ""}${usd(todaysProfit)} today` : "Balance hidden"}
         </div>
       </div>
@@ -926,15 +926,15 @@ function HomeActionTile({ icon: Icon, label, onClick }: { icon: typeof Home; lab
 function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome: number; history: CopyTradeHistory[]; balanceVisible: boolean }) {
   const chartData=useMemo(()=>history.map(row=>Number(row.profit ?? 0)).filter(value=>Number.isFinite(value)),[history]);
   const percent=history.length?chartData.reduce((sum,value)=>sum+value,0):0;
-  return <GlassCard className="home-depth-card h-[158px] rounded-[20px] p-4">
+  return <GlassCard className="home-depth-card h-[145px] rounded-[20px] p-4">
     <div className="flex items-start justify-between gap-3">
-      <h3 className="text-[14px] font-black text-white">AI Copy Trading Overview</h3>
+      <h3 className="text-[20px] font-black leading-tight text-white">AI Copy Trading Overview</h3>
       <button className="flex shrink-0 items-center gap-1 rounded-full border border-[#18ff8a]/15 bg-white/[.04] px-2.5 py-1 text-[9px] font-black text-slate-300">This Week <ChevronDown size={11}/></button>
     </div>
-    <div className="mt-3 grid grid-cols-[.78fr_1fr] items-end gap-3">
+    <div className="mt-2.5 grid grid-cols-[.78fr_1fr] items-end gap-3">
       <div>
         <p className="text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Income</p>
-        <p className="mt-1 text-[20px] font-black text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
+        <p className="mt-1 text-[32px] font-black leading-none text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
         <p className="mt-0.5 text-[10px] font-bold text-slate-500">{history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT` : "No chart data yet"}</p>
       </div>
       <IncomeChart data={chartData} />
@@ -943,12 +943,12 @@ function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome:
 }
 
 function IncomeChart({ data }: { data: number[] }) {
-  if (!data.length) return <div className="grid h-[86px] place-items-center rounded-2xl border border-white/[.06] bg-black/20 text-center text-[9px] font-bold text-slate-600">No chart data</div>;
-  const width=160, height=86;
+  if (!data.length) return <div className="grid h-[82px] place-items-center rounded-2xl border border-white/[.06] bg-black/20 text-center text-[9px] font-bold text-slate-600">No chart data</div>;
+  const width=160, height=82;
   const cumulative=data.reduce<number[]>((series,value,index)=>[...series,(series[index-1]??0)+value],[]);
   const min=Math.min(...cumulative,0), max=Math.max(...cumulative,1);
   const points=cumulative.map((value,index)=>`${(index/Math.max(cumulative.length-1,1))*width},${height-8-((value-min)/Math.max(max-min,1))*(height-18)}`).join(" ");
-  return <svg className="h-[86px] w-full drop-shadow-[0_0_12px_rgba(24,255,138,.38)]" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+  return <svg className="h-[82px] w-full drop-shadow-[0_0_12px_rgba(24,255,138,.38)]" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
     <defs><linearGradient id="incomeFill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#18ff8a" stopOpacity=".34"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></linearGradient></defs>
     <polyline points={`0,${height} ${points} ${width},${height}`} fill="url(#incomeFill)" stroke="none" />
     <polyline points={points} fill="none" stroke="#18ff8a" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
