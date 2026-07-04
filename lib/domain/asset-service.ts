@@ -4,7 +4,7 @@ import { ensureUserWalletAccounts } from "./user-wallets";
 
 type AssetClient = Pick<PrismaClient, "asset" | "walletAccount" | "ledgerEntry" | "copyTrade" | "user"> | Prisma.TransactionClient;
 
-const userWalletTypes = ["SPOT", "FUTURES", "BITEX"] as const satisfies readonly WalletType[];
+const userWalletTypes: WalletType[] = ["SPOT", "FUTURES", "BITEX"];
 
 export async function getUserAssetsAndTotals(client: AssetClient, userId: string) {
   await ensureUserWalletAccounts(client, userId);
