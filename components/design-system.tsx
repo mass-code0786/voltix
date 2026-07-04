@@ -3,7 +3,6 @@
 import type { ComponentType, ReactNode } from "react";
 import type { LucideProps } from "lucide-react";
 import { Bell, ChevronRight, Menu, Search } from "lucide-react";
-import { BrandLogo } from "./brand-logo";
 import { CoinMark } from "./coin-mark";
 import { Sparkline } from "./sparkline";
 import { compact } from "@/lib/format";
@@ -31,28 +30,22 @@ type HeaderProps = {
 
 export function AppHeader({ title, subtitle, compactBrand = true, initials, unreadNotifications = 0, onMenuButton, onNotifications, onMenu }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-30 h-[54px] bg-[#060a08]/72 px-4 backdrop-blur-2xl lg:h-[62px] lg:border-b lg:border-white/[.06] lg:px-8">
-      <div className="mx-auto flex h-[54px] max-w-[420px] items-center justify-between gap-1.5 lg:h-[62px] lg:max-w-6xl">
-        <div className="flex min-w-0 items-center gap-2 lg:hidden">
-          <button onClick={onMenuButton ?? onMenu} className="grid h-9 w-9 shrink-0 place-items-center rounded-[14px] border border-white/[.08] bg-white/[.035] text-white shadow-[0_10px_28px_rgba(0,0,0,.28),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Open menu">
-            <Menu size={18} />
-          </button>
-          <BrandLogo compact={compactBrand} />
+    <header className="sticky top-0 z-30 h-[72px] bg-[#060a08]/72 px-5 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
+      <div className="mx-auto flex h-[72px] max-w-[420px] items-center justify-between gap-3 lg:max-w-6xl">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full drop-shadow-[0_0_10px_rgba(24,255,138,.45)]" aria-hidden="true">
+            <img src="/voltix-logo.svg" alt="" className="h-9 w-[130px] max-w-none object-left" />
+          </span>
+          <span className="truncate text-[20px] font-bold leading-none text-white tracking-[0.5px]">VOLTIX</span>
         </div>
-        <div className="hidden lg:block">
-          {subtitle && <p className="text-xs font-semibold text-slate-500">{subtitle}</p>}
-          <h1 className="text-lg font-black text-white">{title}</h1>
-        </div>
-        <div className="hidden h-7 min-w-7 flex-1 rounded-full border border-white/[.04] bg-black/30 shadow-[inset_0_8px_22px_rgba(0,0,0,.42)] min-[410px]:block lg:hidden" aria-hidden="true" />
         <div className="flex shrink-0 items-center gap-1.5">
           <button onClick={onNotifications} className="relative grid h-9 w-9 place-items-center rounded-full border border-white/[.08] bg-white/[.045] text-slate-200 shadow-[0_0_24px_rgba(24,255,138,.1),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Notifications">
             <Bell size={18} />
             <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-[#060a08] bg-[#18ff8a] shadow-[0_0_10px_rgba(24,255,138,.7)]" />
             {unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#18ff8a] px-1 text-[10px] font-black text-[#050608] shadow-[0_0_18px_rgba(24,255,138,.42)]">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}
           </button>
-          <button onClick={onMenu} className="relative grid h-10 w-10 place-items-center rounded-full border border-[#18ff8a]/55 bg-[linear-gradient(145deg,#dfffe8,#18ff8a_55%,#008f55)] text-[11px] font-black text-[#050608] shadow-[0_14px_30px_rgba(24,255,138,.22),inset_0_1px_0_rgba(255,255,255,.45)]" aria-label="Account menu">
-            {initials}
-            <span className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#060a08] bg-[#18ff8a]" />
+          <button onClick={onMenuButton ?? onMenu} className="grid h-9 w-9 shrink-0 place-items-center rounded-[14px] border border-white/[.08] bg-white/[.035] text-white shadow-[0_10px_28px_rgba(0,0,0,.28),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Open menu">
+            <Menu size={24} />
           </button>
         </div>
       </div>
