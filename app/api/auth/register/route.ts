@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { createSession, generateUniqueUid, hashPassword } from "@/lib/auth";
+import { ensureUserWalletAccounts } from "@/lib/domain/user-wallets";
 import { prisma } from "@/lib/prisma";
 
 const registerSchema = z.object({
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
   try {
     const user = await prisma.$transaction(async tx => {
       const uid = await generateUniqueUid(tx);
-      return tx.user.create({
+      const created = await tx.user.create({
         data: {
           email,
           uid,
@@ -42,6 +43,8 @@ export async function POST(request: Request) {
         },
         select: { id: true, uid: true, name: true, email: true, country: true, vipRank: true },
       });
+      await ensureUserWalletAccounts(tx, created.id);
+      return created;
     });
     await createSession(user.id);
     return NextResponse.json({ authenticated: true, user }, { status: 201 });

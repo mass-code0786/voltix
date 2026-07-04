@@ -34,6 +34,20 @@ type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: bool
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath">> & { localLogoPath?: string | null };
 type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; vipRank?: string | null };
 type AuthMode = "login" | "register";
+type WalletSnapshot = {
+  balances?: {
+    spot?: number;
+    funding?: number;
+    futures?: number;
+    bitex?: number;
+  };
+  bitex?: {
+    principal?: number;
+    incomeEarned?: number;
+    targetAmount?: number;
+    unlocked?: boolean;
+  };
+};
 
 const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
@@ -74,6 +88,12 @@ const demoTradeCodes: Record<string, { returnPercent: number; status: "ACTIVE" |
   P6V3RD: { returnPercent: 2.15, status: "EXPIRED", maxUsage: 1, usedCount: 0, createdBy: "system", expiresAt: "2026-06-20T14:10:00Z" },
 };
 const minCopyTradeStake = 1;
+const demoFuturesBalance = 350;
+const demoBitexBalance = 1284.65;
+const demoBitexTransferred = 2468.25;
+const demoBitexPrincipalLocked = 2468.25;
+const demoBitexIncomeEarned = 642.40;
+const demoBalancesBySymbol = new Map(coins.map(coin => [coin.symbol, coin.balance]));
 
 function applyCoinSettings(baseCoins: AppCoin[]): AppCoin[] {
   if (typeof window === "undefined") return baseCoins;
@@ -116,6 +136,13 @@ function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSet
   return merged.sort((a,b)=>(a.displayOrder??9999)-(b.displayOrder??9999));
 }
 
+function withSpotBalances(current: AppCoin[], spotBalance: number | null) {
+  return current.map(coin => ({
+    ...coin,
+    balance: spotBalance === null ? demoBalancesBySymbol.get(coin.symbol) ?? 0 : coin.symbol === "USDT" ? spotBalance : 0,
+  }));
+}
+
 export default function AppShell() {
   const [tab, setTab] = useState<Tab>("home");
   const [tradeCategory, setTradeCategory] = useState<TradeCategory>("spot");
@@ -132,11 +159,11 @@ export default function AppShell() {
     { code: "T6V2KL", amount: 8.5, returnPercent: 2.2, profit: 0.187, date: "Jun 9, 2026 · 6:30 PM", status: "Credited" },
   ]);
   const [walletCoins, setWalletCoins] = useState(() => applyCoinSettings(coins).map((coin) => ({ ...coin })));
-  const [futuresBalance, setFuturesBalance] = useState(350);
-  const [bitexBalance, setBitexBalance] = useState(1284.65);
-  const [bitexTransferred, setBitexTransferred] = useState(2468.25);
-  const [bitexPrincipalLocked, setBitexPrincipalLocked] = useState(2468.25);
-  const [bitexIncomeEarned, setBitexIncomeEarned] = useState(642.40);
+  const [futuresBalance, setFuturesBalance] = useState(demoFuturesBalance);
+  const [bitexBalance, setBitexBalance] = useState(demoBitexBalance);
+  const [bitexTransferred, setBitexTransferred] = useState(demoBitexTransferred);
+  const [bitexPrincipalLocked, setBitexPrincipalLocked] = useState(demoBitexPrincipalLocked);
+  const [bitexIncomeEarned, setBitexIncomeEarned] = useState(demoBitexIncomeEarned);
   const [transferOpen, setTransferOpen] = useState<{ from: UserWallet; to: UserWallet } | null>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [withdrawals, setWithdrawals] = useState<DemoWithdrawal[]>([
@@ -173,6 +200,43 @@ export default function AppShell() {
     return user;
   }, [applyAuthenticatedUser]);
 
+  const applyWalletSnapshot = useCallback((wallet: WalletSnapshot | null) => {
+    if (!wallet) {
+      setWalletCoins(current => withSpotBalances(current, null));
+      setFuturesBalance(demoFuturesBalance);
+      setBitexBalance(demoBitexBalance);
+      setBitexTransferred(demoBitexTransferred);
+      setBitexPrincipalLocked(demoBitexPrincipalLocked);
+      setBitexIncomeEarned(demoBitexIncomeEarned);
+      return;
+    }
+
+    const balances = wallet.balances ?? {};
+    const spotBalance = Number(balances.spot ?? 0);
+    const fundingBalance = Number(balances.funding ?? balances.futures ?? 0);
+    const realBitexBalance = Number(balances.bitex ?? 0);
+    const bitexPrincipal = Number(wallet.bitex?.principal ?? 0);
+    const bitexIncome = Number(wallet.bitex?.incomeEarned ?? 0);
+
+    setWalletCoins(current => withSpotBalances(current, spotBalance));
+    setFuturesBalance(fundingBalance);
+    setBitexBalance(realBitexBalance);
+    setBitexTransferred(bitexPrincipal);
+    setBitexPrincipalLocked(bitexPrincipal);
+    setBitexIncomeEarned(bitexIncome);
+  }, []);
+
+  const refreshWallet = useCallback(async (user: CurrentUser | null) => {
+    if (!user) {
+      applyWalletSnapshot(null);
+      return;
+    }
+    const response = await fetch("/api/wallet");
+    if (!response.ok) throw new Error("Wallet request failed");
+    const data = await response.json();
+    applyWalletSnapshot(data?.authenticated ? data.wallet as WalletSnapshot : null);
+  }, [applyWalletSnapshot]);
+
   useEffect(() => {
     fetch("/api/coins")
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -189,6 +253,13 @@ export default function AppShell() {
     refreshMe()
       .catch(() => setUserCountry("United States"));
   }, [refreshMe]);
+
+  useEffect(() => {
+    refreshWallet(currentUser)
+      .catch(() => {
+        if (!currentUser) applyWalletSnapshot(null);
+      });
+  }, [applyWalletSnapshot, currentUser, refreshWallet]);
 
   const syncNavigation = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
