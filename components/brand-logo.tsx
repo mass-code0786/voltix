@@ -4,7 +4,7 @@ type BrandLogoProps = {
 
 export function BrandLogo({ compact = false }: BrandLogoProps) {
   const width = compact ? 120 : 120;
-  const height = compact ? 34 : 34;
+  const height = compact ? 28 : 34;
 
   return (
     <svg
@@ -13,7 +13,7 @@ export function BrandLogo({ compact = false }: BrandLogoProps) {
       viewBox="0 0 120 34"
       role="img"
       aria-label="Voltix"
-      className="block h-[34px] w-[120px] shrink-0"
+      className={`${compact ? "h-[28px]" : "h-[34px]"} block w-[120px] shrink-0`}
     >
       <defs>
         <radialGradient id="voltix-bloom" cx="50%" cy="52%" r="58%">
