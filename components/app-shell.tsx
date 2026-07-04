@@ -86,6 +86,19 @@ type DashboardSnapshot = {
   wallet?: WalletSnapshot;
   team?: TeamSnapshot;
 };
+type AiSubscription = {
+  id: string;
+  amount: number;
+  startsAt: string;
+  expiresAt: string;
+  active: boolean;
+  remainingDays: number;
+};
+type AiSubscriptionStatus = {
+  price: number;
+  validityDays: number;
+  subscription: AiSubscription | null;
+};
 
 const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
@@ -186,6 +199,7 @@ export default function AppShell() {
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
+  const [aiSubscription, setAiSubscription] = useState<AiSubscriptionStatus | null>(null);
   const [walletActivity, setWalletActivity] = useState<WalletActivity[]>([]);
   const [userCountry, setUserCountry] = useState("United States");
 
@@ -269,6 +283,19 @@ export default function AppShell() {
     setCopyTradeHistory(Array.isArray(status?.history) ? status.history.map(normalizeTrade) : []);
   }, []);
 
+  const refreshAiSubscription = useCallback(async (user: CurrentUser | null) => {
+    if (!user) {
+      setAiSubscription(null);
+      return null;
+    }
+    const response = await fetch("/api/ai/subscription");
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "AI request failed");
+    const status = data as AiSubscriptionStatus;
+    setAiSubscription(status);
+    return status;
+  }, []);
+
   const refreshPaymentHistory = useCallback(async (user: CurrentUser | null) => {
     if (!user) {
       setWalletActivity([]);
@@ -342,6 +369,13 @@ export default function AppShell() {
         }
       });
   }, [currentUser, refreshCopyTradeStatus]);
+
+  useEffect(() => {
+    refreshAiSubscription(currentUser)
+      .catch(() => {
+        if (!currentUser) setAiSubscription(null);
+      });
+  }, [currentUser, refreshAiSubscription]);
 
   useEffect(() => {
     refreshPaymentHistory(currentUser)
@@ -493,6 +527,32 @@ export default function AppShell() {
     return { ok: true, message: "" };
   }, [currentUser, notify, refreshCopyTradeStatus, refreshWallet]);
 
+  const purchaseAi = useCallback(async () => {
+    if (!currentUser) {
+      setAuthMode("login");
+      return { ok: false, message: "Login required" };
+    }
+    try {
+      await refreshAiSubscription(currentUser);
+      const response = await fetch("/api/ai/subscription/purchase", { method: "POST" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 401) setAuthMode("login");
+        return { ok: false, message: data.error || "AI purchase failed" };
+      }
+      await Promise.all([
+        refreshWallet(currentUser),
+        refreshAiSubscription(currentUser),
+        refreshDashboard(currentUser),
+        refreshCopyTradeStatus(currentUser),
+      ]);
+      notify("AI active");
+      return { ok: true, message: "" };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "AI purchase failed" };
+    }
+  }, [currentUser, notify, refreshAiSubscription, refreshCopyTradeStatus, refreshDashboard, refreshWallet]);
+
   const completeActiveCopyTrade = useCallback(() => {
     refreshCopyTradeStatus(currentUser).catch(() => {});
     refreshWallet(currentUser).catch(() => {});
@@ -502,7 +562,7 @@ export default function AppShell() {
     home: <HomeScreen onNavigate={navigate} onOpenCopyTrade={()=>navigate("bitex")} assets={walletCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} bitexBalance={bitexBalance} userCountry={userCountry} />,
     markets: <MarketsScreen coins={walletCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
-    bitex: <AiCopyTradePage activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} />,
+    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} history={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>setAuthMode("login")} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
     wallet: <WalletScreen notify={notify} assets={walletCoins} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
@@ -692,8 +752,54 @@ function TradeWorkspace({category}:{category:TradeCategory}) {
   return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category}/></div>;
 }
 
-function AiCopyTradePage({activeTrade,bitexBalance,history,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;bitexBalance:number;history:CopyTradeHistory[];startTrade:(code:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void}) {
-  return <div className="space-y-5"><div><h2 className="text-2xl font-black">AI</h2></div><CandlestickChart/><CopyTradeScreen activeTrade={activeTrade} bitexBalance={bitexBalance} history={history} startTrade={startTrade} completeTrade={completeTrade}/></div>;
+function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,history,startTrade,completeTrade,purchaseAi,openLogin}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;history:CopyTradeHistory[];startTrade:(code:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void}) {
+  return <div className="space-y-5"><div><h2 className="text-2xl font-black">AI</h2></div><AiPurchaseCard currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin}/><CandlestickChart/><CopyTradeScreen activeTrade={activeTrade} bitexBalance={bitexBalance} history={history} startTrade={startTrade} completeTrade={completeTrade}/></div>;
+}
+
+function AiPurchaseCard({currentUser,status,purchaseAi,openLogin}:{currentUser:CurrentUser|null;status:AiSubscriptionStatus|null;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void}) {
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(false);
+  const active=Boolean(status?.subscription?.active);
+  const price=status?.price ?? 15;
+  const validityDays=status?.validityDays ?? 30;
+  const expiry=status?.subscription?.expiresAt ? new Date(status.subscription.expiresAt) : null;
+  const purchase=async()=>{
+    setError("");
+    if(!currentUser){
+      setError("Login required");
+      openLogin();
+      return;
+    }
+    setLoading(true);
+    const result=await purchaseAi();
+    setLoading(false);
+    if(!result.ok)setError(result.message || "AI purchase failed");
+  };
+  return <section className={`${card} p-4 sm:p-5`}>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded-xl bg-lime/10 text-lime"><Zap size={18}/></span><h3 className="font-bold">AI</h3></div>
+        {!currentUser&&<p className="mt-2 text-xs text-slate-500">Login required</p>}
+      </div>
+      <span className={`w-fit rounded-full px-3 py-1 text-[10px] font-black ${active?"bg-mint/10 text-mint":"bg-white/5 text-slate-400"}`}>{active?"Active":"Inactive"}</span>
+    </div>
+    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <AiDetail label="Price" value={`${price.toFixed(0)} USDT`} />
+      <AiDetail label="Validity" value={`${validityDays} days`} />
+      <AiDetail label="Current status" value={active?"Active":"Inactive"} />
+      <AiDetail label="Expiry date" value={active&&expiry?formatDate(expiry):"--"} />
+    </div>
+    {error&&<p className="mt-3 text-xs text-danger">{error}</p>}
+    <button onClick={purchase} disabled={loading} className="mt-5 w-full rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60 sm:w-auto sm:px-7">{loading?"Please wait...":"Purchase AI"}</button>
+  </section>;
+}
+
+function AiDetail({label,value}:{label:string;value:string}) {
+  return <div className="rounded-xl border border-line bg-ink px-3 py-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><p className="mt-1 text-sm font-black">{value}</p></div>;
+}
+
+function formatDate(value:Date) {
+  return value.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 }
 
 function TradeMenu({close,select}:{close:()=>void;select:(category:TradeCategory)=>void}) {
