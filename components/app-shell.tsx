@@ -764,7 +764,7 @@ export default function AppShell() {
           />
           {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
-          <div className="mx-auto max-w-[420px] px-[14px] py-[14px] sm:px-4 lg:max-w-6xl lg:px-8 lg:py-8">{screen}</div>
+          <div className="mx-auto max-w-[420px] px-3 py-2.5 sm:px-4 lg:max-w-6xl lg:px-8 lg:py-8">{screen}</div>
         </main>
       </div>
 
@@ -832,7 +832,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, a
     { icon: Trophy, label: "VIP Benefits", onClick: onOpenCopyTrade },
     { icon: Gift, label: "Rewards", onClick: () => onNavigate("team") },
   ];
-  return <div className="mx-auto max-w-[390px] space-y-[14px] overflow-x-hidden pb-3">
+  return <div className="mx-auto max-w-[390px] space-y-2.5 overflow-x-hidden pb-2">
     {currentUser ? (
       <VoltixPortfolioHero
         currentUser={currentUser}
@@ -843,7 +843,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, a
       />
     ) : <WelcomeCard t={t} onOpenAuth={onOpenAuth} />}
 
-    <div className="grid grid-cols-4 gap-[14px]">
+    <div className="grid grid-cols-4 gap-2">
       {shortcuts.map(({icon:Icon,label,onClick}) => <HomeActionTile key={label} icon={Icon} label={label} onClick={onClick} />)}
     </div>
 
@@ -853,22 +853,22 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, a
 
     <GlassCard className="home-depth-card overflow-hidden rounded-[24px]">
       <SectionHeader title="Market Pulse" actionLabel="View All" onAction={() => onNavigate("markets")} />
-      <div className="flex gap-[10px] overflow-x-auto px-4 pb-4 no-scrollbar">
+      <div className="flex gap-2 overflow-x-auto px-3 pb-3 no-scrollbar">
         {pulseCoins.length ? pulseCoins.map(c => <MarketPulseCoinCard key={c.symbol} coin={c} localCurrency={localCurrency} />) : <div className="w-full"><EmptyState title="Live market data unavailable" icon={BarChart3} /></div>}
       </div>
     </GlassCard>
   </div>;
 }
 function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; onOpenAuth: () => void }) {
-  return <GlassCard className="home-hero-card relative h-[220px] overflow-hidden rounded-[28px] p-6">
-    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_145px] items-center gap-1">
+  return <GlassCard className="home-hero-card relative h-[178px] overflow-hidden rounded-[24px] p-4">
+    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_116px] items-center gap-1">
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-slate-400">Welcome to join Voltix</p>
-        <h2 className="mt-2 text-[28px] font-black leading-[1.02] text-white">VOLTIX</h2>
-        <p className="mt-3 max-w-[11rem] text-xs leading-5 text-slate-500">AI copy trading and wallet tools in one premium dashboard.</p>
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <button onClick={onOpenAuth} className="rounded-2xl bg-[#18ff8a] px-4 py-3 text-xs font-black text-[#050608] shadow-[0_14px_34px_rgba(24,255,138,.24)]">Login</button>
-          <button onClick={onOpenAuth} className="rounded-2xl border border-[#18ff8a]/25 bg-white/[.045] px-4 py-3 text-xs font-black text-[#18ff8a]">Sign up</button>
+        <p className="text-xs font-semibold text-slate-400">Welcome to join Voltix</p>
+        <h2 className="mt-1.5 text-[23px] font-black leading-[1.02] text-white">VOLTIX</h2>
+        <p className="mt-2 max-w-[10rem] text-[11px] leading-4 text-slate-500">AI copy trading and wallet tools in one dashboard.</p>
+        <div className="mt-3 grid grid-cols-2 gap-1.5">
+          <button onClick={onOpenAuth} className="rounded-xl bg-[#18ff8a] px-3 py-2 text-[11px] font-black text-[#050608] shadow-[0_14px_34px_rgba(24,255,138,.24)]">Login</button>
+          <button onClick={onOpenAuth} className="rounded-xl border border-[#18ff8a]/25 bg-white/[.045] px-3 py-2 text-[11px] font-black text-[#18ff8a]">Sign up</button>
         </div>
       </div>
       <VoltixVIllustration />
@@ -877,23 +877,23 @@ function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; o
 }
 
 function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible, setBalanceVisible }: { currentUser: CurrentUser; total: number; todaysProfit: number; balanceVisible: boolean; setBalanceVisible: (value: boolean) => void }) {
-  return <GlassCard className="home-hero-card relative h-[220px] overflow-hidden rounded-[28px] p-6">
-    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_145px] items-center gap-1">
+  return <GlassCard className="home-hero-card relative h-[178px] overflow-hidden rounded-[24px] p-4">
+    <div className="relative grid h-full grid-cols-[minmax(0,1fr)_116px] items-center gap-1">
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-slate-400">Welcome Back,</p>
-        <div className="mt-1 flex min-w-0 items-center gap-2">
-          <h2 className="truncate text-[25px] font-black leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
-          <CheckCircle2 size={18} className="shrink-0 text-[#18ff8a]" fill="rgba(24,255,138,.18)" />
+        <p className="text-xs font-semibold text-slate-400">Welcome Back,</p>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+          <h2 className="truncate text-[20px] font-black leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
+          <CheckCircle2 size={15} className="shrink-0 text-[#18ff8a]" fill="rgba(24,255,138,.18)" />
         </div>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="rounded-full border border-[#9b5cff]/35 bg-[#9b5cff]/12 px-2.5 py-1 text-[10px] font-black text-[#c9aeff]">{currentUser.vipRank || "VIP 0"}</span>
-          <span className="rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 px-2.5 py-1 text-[10px] font-black text-[#18ff8a]">Verified</span>
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className="rounded-full border border-[#9b5cff]/35 bg-[#9b5cff]/12 px-2 py-0.5 text-[9px] font-black text-[#c9aeff]">{currentUser.vipRank || "VIP 0"}</span>
+          <span className="rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 px-2 py-0.5 text-[9px] font-black text-[#18ff8a]">Verified</span>
         </div>
-        <p className="mt-4 text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">Total Balance</p>
-        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-1 text-left text-[28px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
+        <p className="mt-3 text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>
+        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-0.5 text-left text-[23px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
           {balanceVisible ? usd(total) : "$ ******"}
         </button>
-        <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-[11px] font-black ${todaysProfit >= 0 ? "border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
+        <div className={`mt-2 inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-black ${todaysProfit >= 0 ? "border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
           {balanceVisible ? `${todaysProfit >= 0 ? "+" : ""}${usd(todaysProfit)} today` : "Balance hidden"}
         </div>
       </div>
@@ -917,25 +917,25 @@ function VoltixVIllustration() {
 }
 
 function HomeActionTile({ icon: Icon, label, onClick }: { icon: typeof Home; label: string; onClick: () => void }) {
-  return <button onClick={onClick} className="home-action-tile h-[92px] min-w-0 rounded-[22px] px-1.5 py-3 text-center">
-    <span className="home-action-icon mx-auto grid h-[34px] w-[34px] place-items-center rounded-2xl text-[#18ff8a]"><Icon size={17} /></span>
-    <span className="mt-2 block text-[10px] font-black leading-tight text-slate-200">{label}</span>
+  return <button onClick={onClick} className="home-action-tile h-[76px] min-w-0 rounded-[18px] px-1 py-2 text-center">
+    <span className="home-action-icon mx-auto grid h-7 w-7 place-items-center rounded-xl text-[#18ff8a]"><Icon size={14} /></span>
+    <span className="mt-1.5 block text-[9px] font-black leading-tight text-slate-200">{label}</span>
   </button>;
 }
 
 function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome: number; history: CopyTradeHistory[]; balanceVisible: boolean }) {
   const chartData=useMemo(()=>history.map(row=>Number(row.profit ?? 0)).filter(value=>Number.isFinite(value)),[history]);
   const percent=history.length?chartData.reduce((sum,value)=>sum+value,0):0;
-  return <GlassCard className="home-depth-card h-[190px] rounded-[24px] p-5">
+  return <GlassCard className="home-depth-card h-[158px] rounded-[20px] p-4">
     <div className="flex items-start justify-between gap-3">
-      <h3 className="text-base font-black text-white">AI Copy Trading Overview</h3>
-      <button className="flex shrink-0 items-center gap-1 rounded-full border border-[#18ff8a]/15 bg-white/[.04] px-3 py-1.5 text-[10px] font-black text-slate-300">This Week <ChevronDown size={13}/></button>
+      <h3 className="text-[14px] font-black text-white">AI Copy Trading Overview</h3>
+      <button className="flex shrink-0 items-center gap-1 rounded-full border border-[#18ff8a]/15 bg-white/[.04] px-2.5 py-1 text-[9px] font-black text-slate-300">This Week <ChevronDown size={11}/></button>
     </div>
-    <div className="mt-5 grid grid-cols-[.8fr_1fr] items-end gap-4">
+    <div className="mt-3 grid grid-cols-[.78fr_1fr] items-end gap-3">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[.14em] text-slate-500">Total Income</p>
-        <p className="mt-2 text-2xl font-black text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
-        <p className="mt-1 text-xs font-bold text-slate-500">{history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT recorded` : "No chart data yet"}</p>
+        <p className="text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Income</p>
+        <p className="mt-1 text-[20px] font-black text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
+        <p className="mt-0.5 text-[10px] font-bold text-slate-500">{history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT` : "No chart data yet"}</p>
       </div>
       <IncomeChart data={chartData} />
     </div>
@@ -943,12 +943,12 @@ function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome:
 }
 
 function IncomeChart({ data }: { data: number[] }) {
-  if (!data.length) return <div className="grid h-[105px] place-items-center rounded-2xl border border-white/[.06] bg-black/20 text-center text-[10px] font-bold text-slate-600">No chart data</div>;
-  const width=160, height=105;
+  if (!data.length) return <div className="grid h-[86px] place-items-center rounded-2xl border border-white/[.06] bg-black/20 text-center text-[9px] font-bold text-slate-600">No chart data</div>;
+  const width=160, height=86;
   const cumulative=data.reduce<number[]>((series,value,index)=>[...series,(series[index-1]??0)+value],[]);
   const min=Math.min(...cumulative,0), max=Math.max(...cumulative,1);
   const points=cumulative.map((value,index)=>`${(index/Math.max(cumulative.length-1,1))*width},${height-8-((value-min)/Math.max(max-min,1))*(height-18)}`).join(" ");
-  return <svg className="h-[105px] w-full drop-shadow-[0_0_12px_rgba(24,255,138,.38)]" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+  return <svg className="h-[86px] w-full drop-shadow-[0_0_12px_rgba(24,255,138,.38)]" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
     <defs><linearGradient id="incomeFill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#18ff8a" stopOpacity=".34"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></linearGradient></defs>
     <polyline points={`0,${height} ${points} ${width},${height}`} fill="url(#incomeFill)" stroke="none" />
     <polyline points={points} fill="none" stroke="#18ff8a" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
@@ -969,12 +969,12 @@ function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; s
     if(!result.ok){setError(result.message);return;}
     notify("Copy trade started");
   };
-  return <GlassCard className="home-depth-card overflow-hidden rounded-[24px]">
-    <div className="flex items-start justify-between gap-3 px-5 pb-2 pt-4">
-      <h3 className="text-base font-black text-white">VIP Trade Rows</h3>
-      <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[.14em] text-slate-600">Trade Time</p><p className="mt-1 text-xs font-black text-[#18ff8a]">{nextTime}</p></div>
+  return <GlassCard className="home-depth-card overflow-hidden rounded-[20px]">
+    <div className="flex items-start justify-between gap-3 px-4 pb-1.5 pt-3">
+      <h3 className="text-[14px] font-black text-white">VIP Trade Rows</h3>
+      <div className="text-right"><p className="text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Trade Time</p><p className="mt-0.5 text-[10px] font-black text-[#18ff8a]">{nextTime}</p></div>
     </div>
-    <div className="space-y-2 px-3 pb-3">
+    <div className="space-y-1.5 px-2.5 pb-2.5">
       {rows.length ? rows.map(row=><VipTradeRowItem key={row.id} row={row} loading={loadingRow===row.id} start={()=>start(row)} />) : <EmptyState title="No VIP trade rows available" icon={LineChart} />}
     </div>
     {error&&<p className="border-t border-[#18ff8a]/10 px-5 py-3 text-xs font-bold text-danger">{error}</p>}
@@ -993,16 +993,16 @@ function vipAccent(row: VipTradeRow) {
 function VipTradeRowItem({ row, loading, start }: { row: VipTradeRow; loading: boolean; start: () => void }) {
   const accent=vipAccent(row);
   const status=row.tradeStatus??(row.available?"Live":"Closed");
-  return <div className="vip-row flex h-[74px] items-center gap-2 rounded-[18px] px-3 py-2" style={{"--vip-accent":accent} as CSSProperties}>
-    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-xs font-black text-[#050807]" style={{background:`linear-gradient(145deg, ${accent}, ${accent}99)`,boxShadow:`0 0 22px ${accent}33`}}>VIP</div>
+  return <div className="vip-row flex h-[56px] items-center gap-2 rounded-[15px] px-2 py-1.5" style={{"--vip-accent":accent} as CSSProperties}>
+    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[9px] font-black text-[#050807]" style={{background:`linear-gradient(145deg, ${accent}, ${accent}99)`,boxShadow:`0 0 18px ${accent}33`}}>VIP</div>
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-1.5">
-        <p className="text-sm font-black text-white">{row.label}</p>
-        <span className="rounded-full border px-2 py-0.5 text-[9px] font-black" style={{borderColor:`${accent}33`,backgroundColor:`${accent}14`,color:accent}}>{status}</span>
+        <p className="text-[12px] font-black text-white">{row.label}</p>
+        <span className="rounded-full border px-1.5 py-0.5 text-[8px] font-black" style={{borderColor:`${accent}33`,backgroundColor:`${accent}14`,color:accent}}>{status}</span>
       </div>
-      <p className="mt-1 text-[11px] font-bold text-slate-400">{row.dailyPercentMin.toFixed(1)}% - {row.dailyPercentMax.toFixed(1)}% Daily Return</p>
+      <p className="mt-0.5 text-[9px] font-bold text-slate-400">{row.dailyPercentMin.toFixed(1)}% - {row.dailyPercentMax.toFixed(1)}% Daily Return</p>
     </div>
-    <button onClick={start} disabled={loading} className="h-[46px] w-[118px] shrink-0 rounded-2xl text-[11px] font-black text-[#050807] disabled:opacity-50" style={{background:accent,boxShadow:`0 0 22px ${accent}2e`}}>{loading?"Wait":"Trade"}</button>
+    <button onClick={start} disabled={loading} className="h-9 w-[84px] shrink-0 rounded-xl text-[10px] font-black text-[#050807] disabled:opacity-50" style={{background:accent,boxShadow:`0 0 18px ${accent}2e`}}>{loading?"Wait":"Trade"}</button>
   </div>;
 }
 
@@ -1017,15 +1017,15 @@ function HomeAiSubscriptionCard({ currentUser, status, purchaseAi, onOpenAuth, n
     setLoading(false);
     if(!result.ok) notify(result.message || "AI purchase failed");
   };
-  return <GlassCard className="home-depth-card h-[100px] rounded-[24px] p-4">
-    <div className="grid h-full grid-cols-[68px_1fr_auto] items-center gap-3">
+  return <GlassCard className="home-depth-card h-[82px] rounded-[20px] p-3">
+    <div className="grid h-full grid-cols-[52px_1fr_auto] items-center gap-2.5">
       <AiCube />
       <div className="min-w-0">
-        <h3 className="text-base font-black text-white">AI Subscription</h3>
-        <p className={`mt-1 text-xs font-black ${active?"text-[#18ff8a]":"text-slate-500"}`}>{active?"Active":"Inactive"}</p>
-        <p className="mt-1 truncate text-[11px] text-slate-500">{active&&expiry?`Expiry ${formatDate(expiry)}`:"Purchase required for AI copy trade"}</p>
+        <h3 className="text-[14px] font-black text-white">AI Subscription</h3>
+        <p className={`mt-0.5 text-[10px] font-black ${active?"text-[#18ff8a]":"text-slate-500"}`}>{active?"Active":"Inactive"}</p>
+        <p className="mt-0.5 truncate text-[9px] text-slate-500">{active&&expiry?`Expiry ${formatDate(expiry)}`:"Purchase required"}</p>
       </div>
-      <button onClick={action} disabled={loading} className="h-[42px] w-[110px] rounded-2xl border border-[#18ff8a]/25 bg-[#18ff8a]/12 text-[11px] font-black text-[#18ff8a] disabled:opacity-50">{loading?"Wait":active?"Manage":"Purchase"}</button>
+      <button onClick={action} disabled={loading} className="h-9 w-[86px] rounded-xl border border-[#18ff8a]/25 bg-[#18ff8a]/12 text-[10px] font-black text-[#18ff8a] disabled:opacity-50">{loading?"Wait":active?"Manage":"Purchase"}</button>
     </div>
   </GlassCard>;
 }
@@ -1036,16 +1036,16 @@ function AiCube() {
 
 function MarketPulseCoinCard({ coin, localCurrency }: { coin: MarketCoin; localCurrency: ReturnType<typeof currencyConfigForCountry> }) {
   const shown = coin.price < .001 ? coin.price.toFixed(8) : coin.price < 1 ? coin.price.toFixed(4) : coin.price.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  return <article className="market-coin-card h-[145px] w-[110px] shrink-0 rounded-[18px] p-3">
+  return <article className="market-coin-card h-[104px] w-[96px] shrink-0 rounded-[16px] p-2.5">
     <div className="flex items-center justify-between gap-2">
       <CoinMark symbol={coin.symbol} color={coin.color} logoPath={coin.localLogoPath} size="sm" />
-      <span className={`text-[10px] font-black ${coin.change >= 0 ? "text-[#18ff8a]" : "text-danger"}`}>{coin.live?`${coin.change>=0?"+":""}${coin.change.toFixed(2)}%`:"--"}</span>
+      <span className={`text-[8px] font-black ${coin.change >= 0 ? "text-[#18ff8a]" : "text-danger"}`}>{coin.live?`${coin.change>=0?"+":""}${coin.change.toFixed(2)}%`:"--"}</span>
     </div>
-    <p className="mt-3 text-sm font-black text-white">{coin.symbol}<span className="text-[10px] text-slate-500">/USDT</span></p>
-    <p className="mt-1 truncate text-[10px] text-slate-500">{coin.name}</p>
-    <p className="mt-3 text-sm font-black text-[#18ff8a]">{coin.live?`$${shown}`:"Loading"}</p>
-    {coin.live&&<p className="mt-1 text-[9px] text-slate-600">{formatLocalCurrency(coin.price, localCurrency)}</p>}
-    <div className="mt-auto pt-2"><Sparkline data={coin.spark} positive={coin.change >= 0} /></div>
+    <p className="mt-1.5 text-[12px] font-black text-white">{coin.symbol}<span className="text-[8px] text-slate-500">/USDT</span></p>
+    <p className="mt-0.5 truncate text-[8px] text-slate-500">{coin.name}</p>
+    <p className="mt-1.5 text-[11px] font-black text-[#18ff8a]">{coin.live?`$${shown}`:"Loading"}</p>
+    {coin.live&&<p className="mt-0.5 text-[8px] text-slate-600">{formatLocalCurrency(coin.price, localCurrency)}</p>}
+    <div className="mt-auto h-5 overflow-hidden pt-0.5"><Sparkline data={coin.spark} positive={coin.change >= 0} /></div>
   </article>;
 }
 function TradeActiveCard({ t = getTranslator("en"), onClick, trade, previewAmount }: { t?: ReturnType<typeof getTranslator>; onClick: () => void; trade: ActiveCopyTrade | null; previewAmount: number }) {
