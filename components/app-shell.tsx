@@ -753,7 +753,7 @@ function TradeWorkspace({category}:{category:TradeCategory}) {
 }
 
 function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,history,startTrade,completeTrade,purchaseAi,openLogin}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;history:CopyTradeHistory[];startTrade:(code:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void}) {
-  return <div className="space-y-5"><div><h2 className="text-2xl font-black">AI</h2></div><AiPurchaseCard currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin}/><CandlestickChart/><CopyTradeScreen activeTrade={activeTrade} bitexBalance={bitexBalance} history={history} startTrade={startTrade} completeTrade={completeTrade}/></div>;
+  return <div className="space-y-5"><div><h2 className="text-2xl font-black">AI</h2></div><CandlestickChart/><AiPurchaseCard currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin}/><CopyTradeScreen activeTrade={activeTrade} bitexBalance={bitexBalance} history={history} startTrade={startTrade} completeTrade={completeTrade}/></div>;
 }
 
 function AiPurchaseCard({currentUser,status,purchaseAi,openLogin}:{currentUser:CurrentUser|null;status:AiSubscriptionStatus|null;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void}) {
@@ -781,7 +781,6 @@ function AiPurchaseCard({currentUser,status,purchaseAi,openLogin}:{currentUser:C
         <div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded-xl bg-lime/10 text-lime"><Zap size={18}/></span><h3 className="font-bold">AI</h3></div>
         {!currentUser&&<p className="mt-2 text-xs text-slate-500">Login required</p>}
       </div>
-      <span className={`w-fit rounded-full px-3 py-1 text-[10px] font-black ${active?"bg-mint/10 text-mint":"bg-white/5 text-slate-400"}`}>{active?"Active":"Inactive"}</span>
     </div>
     <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
       <AiDetail label="Price" value={`${price.toFixed(0)} USDT`} />
