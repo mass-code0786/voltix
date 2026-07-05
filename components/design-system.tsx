@@ -140,9 +140,16 @@ export function SectionHeader({ title, actionLabel, onAction }: { title: string;
 
 export function EmptyState({ title, icon: Icon }: { title: string; icon?: IconType }) {
   return (
-    <div className="grid place-items-center px-5 py-10 text-center text-xs text-slate-500">
-      {Icon && <span className="mb-3 grid h-11 w-11 place-items-center rounded-2xl border border-line bg-white/[.035] text-lime"><Icon size={18} /></span>}
-      {title}
+    <div className="premium-empty-state">
+      <svg viewBox="0 0 96 72" aria-hidden="true">
+        <defs><radialGradient id="emptyGlow" cx="50%" cy="65%" r="55%"><stop stopColor="#18ff8a" stopOpacity=".38"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></radialGradient></defs>
+        <ellipse cx="48" cy="58" rx="34" ry="10" fill="url(#emptyGlow)"/>
+        <ellipse cx="48" cy="54" rx="29" ry="8" fill="#06110d" stroke="#18ff8a" strokeOpacity=".38" strokeDasharray="18 10"/>
+        <path d="M34 18h28l10 10v18H24V28l10-10Z" fill="rgba(24,255,138,.08)" stroke="#18ff8a" strokeOpacity=".35"/>
+        <path d="M36 34h24M40 43h16" stroke="#9cffd9" strokeOpacity=".45" strokeLinecap="round"/>
+      </svg>
+      {Icon && <span><Icon size={18} /></span>}
+      <p>{title}</p>
     </div>
   );
 }
@@ -207,9 +214,13 @@ export function CoinRow({ coin, action, localCurrency = currencyConfigForCountry
 
 export function PageHero({ eyebrow, title, description, children }: { eyebrow?: string; title: string; description?: string; children?: ReactNode }) {
   return (
-    <GlassCard className="relative overflow-hidden rounded-[28px] p-5 sm:p-7">
-      <div className="absolute right-0 -top-20 h-56 w-56 rounded-full border-[34px] border-lime/[.035]" />
-      <div className="absolute bottom-0 right-8 h-24 w-24 rounded-full bg-lime/[.06] blur-3xl" />
+    <GlassCard className="premium-page-hero">
+      <svg viewBox="0 0 180 126" aria-hidden="true">
+        <defs><radialGradient id="pageHeroGlow" cx="50%" cy="65%" r="58%"><stop stopColor="#18ff8a" stopOpacity=".42"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></radialGradient></defs>
+        <ellipse cx="128" cy="100" rx="44" ry="13" fill="url(#pageHeroGlow)"/>
+        <ellipse cx="128" cy="96" rx="39" ry="10" fill="#06110d" stroke="#18ff8a" strokeOpacity=".35" strokeDasharray="22 12"/>
+        <path d="M112 35h-12l21 48 7 13 7-13 21-48h-12l-16 38-16-38Z" fill="#18ff8a" fillOpacity=".28" stroke="#9cffd9" strokeOpacity=".42"/>
+      </svg>
       <div className="relative">
         {eyebrow && <p className="mb-2 text-[10px] font-black uppercase tracking-[.18em] text-lime">{eyebrow}</p>}
         <h2 className="max-w-xl text-2xl font-black tracking-tight text-white sm:text-4xl">{title}</h2>

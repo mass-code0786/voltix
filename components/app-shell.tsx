@@ -207,7 +207,7 @@ const mobileTabs: { id: MobileNavTab; label: string; icon: typeof Home; section?
   { id: "profile", label: "Profile", icon: Settings },
 ];
 
-const card = "rounded-2xl border border-line bg-panel/80";
+const card = "premium-card";
 const coinSettingsKey = "voltix.coin-settings";
 const topCopyTraders: { country: string; name: string; monthlyReturn: number; message: string }[] = [];
 const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA","TRX","AVAX","DOT","LINK","TON","SHIB","LTC","BCH","ATOM","APT","ARB","OP","PEPE","NEAR","INJ","SEI","FIL"];

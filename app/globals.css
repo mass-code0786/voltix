@@ -1000,6 +1000,245 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 }
 
+.premium-card,
+.admin-premium-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(24,255,138,.16);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255,255,255,.08), transparent 26%),
+    linear-gradient(145deg, rgba(8,18,14,.84), rgba(3,7,8,.92));
+  box-shadow: 0 18px 46px rgba(0,0,0,.36), 0 0 28px rgba(24,255,138,.1), inset 0 1px 0 rgba(255,255,255,.075);
+  backdrop-filter: blur(18px);
+}
+
+.premium-card::after,
+.admin-premium-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,.08), transparent 36%, rgba(24,255,138,.06));
+  pointer-events: none;
+}
+
+.premium-empty-state {
+  display: grid;
+  place-items: center;
+  padding: 34px 18px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.premium-empty-state svg {
+  width: 96px;
+  height: 72px;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 0 16px rgba(24,255,138,.16));
+  animation: market-float 5s ease-in-out infinite;
+}
+
+.premium-empty-state span {
+  display: grid;
+  height: 42px;
+  width: 42px;
+  place-items: center;
+  margin-top: -38px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(24,255,138,.18);
+  border-radius: 16px;
+  background: rgba(24,255,138,.1);
+  color: #18ff8a;
+}
+
+.premium-page-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 150px;
+  border-radius: 22px;
+  padding: 18px;
+}
+
+.premium-page-hero > svg {
+  position: absolute;
+  right: -18px;
+  bottom: -8px;
+  width: 178px;
+  height: 124px;
+  opacity: .9;
+  filter: drop-shadow(0 0 18px rgba(24,255,138,.18));
+  animation: market-float 5s ease-in-out infinite;
+}
+
+.admin-premium-shell {
+  background:
+    radial-gradient(circle at 18% 4%, rgba(24,255,138,.15), transparent 10rem),
+    radial-gradient(circle at 88% 15%, rgba(88,216,255,.07), transparent 9rem),
+    linear-gradient(180deg, #050807 0%, #070b0a 50%, #050807 100%);
+}
+
+.admin-premium-sidebar {
+  border-right: 1px solid rgba(24,255,138,.14);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(24,255,138,.12), transparent 8rem),
+    rgba(6,14,11,.9);
+  box-shadow: 18px 0 48px rgba(0,0,0,.32);
+  backdrop-filter: blur(18px);
+}
+
+.admin-premium-nav {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 10px 14px;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 800;
+  transition: border-color .24s ease, background .24s ease, color .24s ease, box-shadow .24s ease;
+}
+
+.admin-premium-nav:hover,
+.admin-premium-nav.active {
+  border-color: rgba(24,255,138,.22);
+  background: rgba(24,255,138,.1);
+  color: #18ff8a;
+  box-shadow: 0 0 22px rgba(24,255,138,.1), inset 0 1px 0 rgba(255,255,255,.06);
+}
+
+.admin-premium-user {
+  border: 1px solid rgba(24,255,138,.16);
+  border-radius: 18px;
+  background: rgba(255,255,255,.045);
+  padding: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+}
+
+.admin-premium-header {
+  border-bottom: 1px solid rgba(24,255,138,.13);
+  background: rgba(5,8,7,.78);
+  backdrop-filter: blur(20px);
+}
+
+.admin-premium-panel input,
+.admin-premium-panel select,
+.admin-premium-panel textarea,
+.premium-card input,
+.premium-card select,
+.premium-card textarea {
+  border-color: rgba(24,255,138,.14) !important;
+  border-radius: 16px !important;
+  background-color: rgba(0,0,0,.22) !important;
+}
+
+.admin-premium-panel table thead tr {
+  background: rgba(24,255,138,.055) !important;
+}
+
+.admin-premium-panel table tr {
+  border-color: rgba(255,255,255,.07) !important;
+}
+
+.admin-premium-panel button,
+.premium-card button {
+  border-radius: 14px;
+}
+
+[class*="bg-[#111c18]"],
+[class*="bg-[#101916]"] {
+  border-color: rgba(24,255,138,.16) !important;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255,255,255,.08), transparent 26%),
+    linear-gradient(145deg, rgba(8,18,14,.92), rgba(3,7,8,.96)) !important;
+  box-shadow: 0 22px 58px rgba(0,0,0,.46), 0 0 32px rgba(24,255,138,.12), inset 0 1px 0 rgba(255,255,255,.08) !important;
+  backdrop-filter: blur(18px);
+}
+
+[class*="bg-ink"],
+[class*="bg-panel"] {
+  border-color: rgba(24,255,138,.14);
+}
+
+input,
+select,
+textarea {
+  caret-color: #18ff8a;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(24,255,138,.5) !important;
+  box-shadow: 0 0 0 3px rgba(24,255,138,.08);
+}
+
+.system-state-page {
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 6%, rgba(24,255,138,.18), transparent 9rem),
+    radial-gradient(circle at 90% 18%, rgba(88,216,255,.08), transparent 8rem),
+    linear-gradient(180deg, #050807 0%, #070b0a 50%, #050807 100%);
+  color: #f8fafc;
+}
+
+.system-state-card {
+  position: relative;
+  width: min(390px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid rgba(24,255,138,.16);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255,255,255,.08), transparent 26%),
+    linear-gradient(145deg, rgba(8,18,14,.86), rgba(3,7,8,.94));
+  padding: 22px;
+  text-align: center;
+  box-shadow: 0 22px 58px rgba(0,0,0,.46), 0 0 32px rgba(24,255,138,.12), inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter: blur(18px);
+}
+
+.system-state-card svg {
+  width: 180px;
+  height: 126px;
+  margin: 0 auto 10px;
+  animation: market-float 5s ease-in-out infinite;
+}
+
+.system-state-card h1 {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.system-state-card p {
+  margin-top: 10px;
+  color: #9ca3af;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.system-state-card a,
+.system-state-card button {
+  display: inline-flex;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #d8ff62, #18ff8a);
+  padding: 0 18px;
+  color: #050807;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 18px 42px rgba(24,255,138,.2), inset 0 1px 0 rgba(255,255,255,.45);
+}
+
 .market-coin-card:hover {
   transform: translateY(-2px);
   border-color: rgba(24,255,138,.32);
