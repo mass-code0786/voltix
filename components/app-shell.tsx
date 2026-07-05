@@ -765,7 +765,7 @@ export default function AppShell() {
           />
           {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
-          <div className={`mx-auto max-w-[420px] px-4 lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "bitex" || tab === "wallet" ? "pb-36 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
+          <div className={`mx-auto max-w-[420px] px-4 lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "bitex" ? "pb-36 pt-1 lg:py-8" : tab === "wallet" ? "pb-44 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
         </main>
       </div>
 
@@ -1682,7 +1682,7 @@ function WalletScreen({notify,assets,futuresBalance,bitexBalance,bitexIncomeEarn
 return <div className="wallet-page -mx-4 -mt-1 min-h-screen overflow-x-hidden px-4 pb-12">
   <WalletHero/>
   <WalletTotalCard total={total} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
-  <WalletTypeCards ai={bitexBalance} trading={futuresBalance} profit={bitexIncomeEarned} bonus={0}/>
+  <WalletTypeCards spot={spotBalance} ai={bitexBalance} trading={futuresBalance} profit={bitexIncomeEarned} bonus={0}/>
   <WalletQuickActions onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal} onOpenTransfer={onOpenTransfer} onHistory={()=>onSectionChange("ledger")} onAddressBook={()=>notify("Address book unavailable")}/>
   <WalletBalancesCard assets={activeAssets} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
   {section==="ledger"&&<section className="wallet-glass wallet-ledger-card"><div className="flex justify-between gap-3"><div><h3>Wallet ledger</h3><p>All balance movements and AI income credits</p></div><button onClick={()=>notify("Ledger export prepared")}>Export</button></div><ActivityRows rows={activity}/></section>}
@@ -1705,14 +1705,14 @@ function WalletTotalCard({total,onOpenDeposit,onOpenWithdrawal}:{total:number;on
   return <section className="wallet-glass wallet-total-card"><div className="min-w-0"><div className="flex items-center gap-2"><p>Total Wallet Balance</p><Eye size={15} className="text-[#18ff8a]"/></div><h2>{usd(total)}</h2><div className="mt-2 flex items-center gap-2"><span>USD</span><em>{total>0?"+0.00% today":"0.00% today"}</em></div></div><div className="wallet-total-actions"><button onClick={onOpenDeposit}><Plus size={16}/>Add Funds</button><button onClick={onOpenWithdrawal}><Send size={16}/>Withdraw</button></div></section>;
 }
 
-function WalletTypeCards({ai,trading,profit,bonus}:{ai:number;trading:number;profit:number;bonus:number}) {
-  const items=[["AI Wallet",ai,Bot,"green"],["Trading Wallet",trading,LineChart,"blue"],["Profit Wallet",profit,Trophy,"purple"],["Bonus Wallet",bonus,Gift,"gold"]] as const;
+function WalletTypeCards({spot,ai,trading,profit,bonus}:{spot:number;ai:number;trading:number;profit:number;bonus:number}) {
+  const items=[["Spot Wallet",spot,Wallet,"green"],["AI Wallet",ai,Bot,"green"],["Trading Wallet",trading,LineChart,"blue"],["Profit Wallet",profit,Trophy,"purple"],["Bonus Wallet",bonus,Gift,"gold"]] as const;
   return <section className="wallet-type-grid">{items.map(([label,value,Icon,tone])=><div key={label} className="wallet-glass wallet-type-card"><span className={`wallet-type-icon wallet-type-${tone}`}><Icon size={16}/></span><p>{label}</p><strong>{value.toFixed(2)}</strong><em>0.00%</em></div>)}</section>;
 }
 
 function WalletQuickActions({onOpenDeposit,onOpenWithdrawal,onOpenTransfer,onHistory,onAddressBook}:{onOpenDeposit:()=>void;onOpenWithdrawal:()=>void;onOpenTransfer:()=>void;onHistory:()=>void;onAddressBook:()=>void}) {
   const actions=[["Deposit",ArrowDownToLine,onOpenDeposit],["Withdraw",Send,onOpenWithdrawal],["Transfer",ArrowLeftRight,onOpenTransfer],["History",FileClock,onHistory],["Address Book",QrCode,onAddressBook]] as const;
-  return <section className="wallet-glass wallet-actions">{actions.map(([label,Icon,onClick])=><button key={label} onClick={onClick}><span><Icon size={18}/></span><p>{label}</p></button>)}</section>;
+  return <section className="wallet-glass wallet-actions">{actions.map(([label,Icon,onClick])=><button key={label} onClick={onClick}><span><Icon size={18}/></span><p>{label==="Address Book"?<><b>Address</b><b>Book</b></>:label}</p></button>)}</section>;
 }
 
 function WalletBalancesCard({assets,onOpenDeposit,onOpenWithdrawal}:{assets:(AppCoin&{volume?:number;live?:boolean})[];onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {

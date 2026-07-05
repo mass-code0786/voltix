@@ -1382,13 +1382,13 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .wallet-total-card {
   display: grid;
-  min-height: 178px;
-  grid-template-columns: minmax(0, 1fr) 142px;
+  min-height: 168px;
+  grid-template-columns: minmax(0, 1fr) 126px;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: 12px;
   border-radius: 22px;
-  padding: 15px;
+  padding: 14px;
 }
 
 .wallet-total-card p {
@@ -1403,7 +1403,7 @@ button { -webkit-tap-highlight-color: transparent; }
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #f8fafc;
-  font-size: 36px;
+  font-size: 34px;
   font-weight: 900;
   line-height: 1;
 }
@@ -1433,12 +1433,12 @@ button { -webkit-tap-highlight-color: transparent; }
 .wallet-total-actions button {
   display: flex;
   height: 48px;
-  width: 140px;
+  width: 126px;
   align-items: center;
   justify-content: center;
   gap: 7px;
   border-radius: 15px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
 }
 
@@ -1456,22 +1456,22 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .wallet-type-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
   margin-top: 12px;
 }
 
 .wallet-type-card {
-  height: 84px;
+  height: 78px;
   min-width: 0;
-  border-radius: 18px;
-  padding: 9px 6px;
+  border-radius: 16px;
+  padding: 8px 4px;
 }
 
 .wallet-type-icon {
   display: grid;
-  height: 32px;
-  width: 32px;
+  height: 28px;
+  width: 28px;
   place-items: center;
   border-radius: 999px;
   margin-bottom: 5px;
@@ -1493,14 +1493,14 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .wallet-type-card p {
   color: #9ca3af;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
 }
 
 .wallet-type-card strong {
   margin-top: 2px;
   color: #fff;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
 }
 
@@ -1513,12 +1513,12 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .wallet-actions {
   display: grid;
-  min-height: 82px;
+  min-height: 78px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  gap: 3px;
   margin-top: 12px;
   border-radius: 22px;
-  padding: 10px 8px;
+  padding: 9px 7px;
 }
 
 .wallet-actions button {
@@ -1528,8 +1528,8 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .wallet-actions span {
   display: grid;
-  height: 42px;
-  width: 42px;
+  height: 38px;
+  width: 38px;
   place-items: center;
   border-radius: 999px;
   margin: 0 auto 6px;
@@ -1539,12 +1539,16 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .wallet-actions p {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: block;
   color: #d1d5db;
-  font-size: 12px;
+  font-size: 10.5px;
   font-weight: 800;
+  line-height: 1.05;
+}
+
+.wallet-actions p b {
+  display: block;
+  font: inherit;
 }
 
 .wallet-balances-card,
@@ -1562,16 +1566,16 @@ button { -webkit-tap-highlight-color: transparent; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   border-bottom: 1px solid rgba(255,255,255,.07);
-  padding: 14px;
+  padding: 12px 13px;
 }
 
 .wallet-card-head h2,
 .wallet-ledger-card h3,
 .wallet-security-card h2 {
   color: #fff;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 900;
 }
 
@@ -1579,9 +1583,9 @@ button { -webkit-tap-highlight-color: transparent; }
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   color: #9ca3af;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
 }
 
@@ -1592,9 +1596,9 @@ button { -webkit-tap-highlight-color: transparent; }
 .wallet-asset-row {
   display: grid;
   min-height: 72px;
-  grid-template-columns: 42px minmax(0, 1fr) 82px 46px;
+  grid-template-columns: 42px minmax(0, 1fr) 76px 42px;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   border-bottom: 1px solid rgba(255,255,255,.065);
   padding: 10px 14px;
 }
@@ -1679,7 +1683,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .wallet-security-card {
   display: grid;
   min-height: 98px;
-  grid-template-columns: 62px minmax(0,1fr) 92px;
+  grid-template-columns: 58px minmax(0,1fr) 86px;
   align-items: center;
   gap: 10px;
   padding: 12px;
@@ -1699,7 +1703,7 @@ button { -webkit-tap-highlight-color: transparent; }
   border: 1px solid rgba(24,255,138,.24);
   background: rgba(24,255,138,.08);
   color: #18ff8a;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
 }
 
@@ -1713,29 +1717,48 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 
   .wallet-total-card {
-    grid-template-columns: minmax(0, 1fr) 118px;
-    padding: 13px;
+    grid-template-columns: minmax(0, 1fr) 104px;
+    padding: 12px;
   }
 
   .wallet-total-card h2 {
-    font-size: 30px;
+    font-size: 28px;
   }
 
   .wallet-total-actions button {
-    width: 118px;
-    font-size: 12px;
+    width: 104px;
+    font-size: 11px;
   }
 
   .wallet-type-grid {
-    gap: 6px;
+    gap: 4px;
+  }
+
+  .wallet-type-card {
+    height: 74px;
+    padding-inline: 3px;
+  }
+
+  .wallet-type-icon {
+    height: 25px;
+    width: 25px;
+  }
+
+  .wallet-type-card p {
+    font-size: 8px;
   }
 
   .wallet-type-card strong {
-    font-size: 13px;
+    font-size: 11px;
   }
 
   .wallet-actions p {
-    font-size: 10px;
+    font-size: 9.5px;
+  }
+
+  .wallet-actions span {
+    height: 34px;
+    width: 34px;
   }
 
   .wallet-asset-row {
@@ -1745,7 +1768,7 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 
   .wallet-security-card {
-    grid-template-columns: 54px minmax(0,1fr) 78px;
+    grid-template-columns: 50px minmax(0,1fr) 72px;
   }
 
   .wallet-security-card button {
