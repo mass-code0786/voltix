@@ -867,14 +867,14 @@ function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; o
     <div className="relative grid h-full grid-cols-[minmax(0,1fr)_108px] items-center gap-1">
       <div className="min-w-0">
         <p className="text-[12px] font-semibold text-slate-400">Welcome to join Voltix</p>
-        <h2 className="mt-0.5 text-[22px] font-black leading-none text-white">VOLTIX</h2>
+        <Brand compact />
         <p className="mt-1 max-w-[10rem] text-[10px] leading-4 text-slate-500">AI copy trading and wallet tools.</p>
         <div className="mt-2 grid grid-cols-2 gap-1.5">
           <button onClick={onOpenAuth} className="rounded-xl bg-[#18ff8a] px-3 py-1.5 text-[10px] font-black text-[#050608] shadow-[0_14px_34px_rgba(24,255,138,.24)]">Login</button>
           <button onClick={onOpenAuth} className="rounded-xl border border-[#18ff8a]/25 bg-white/[.045] px-3 py-1.5 text-[10px] font-black text-[#18ff8a]">Sign up</button>
         </div>
       </div>
-      <div className="justify-self-end"><VoltixVIllustration /></div>
+      <div className="justify-self-end"><VoltixHeroLogo /></div>
     </div>
   </GlassCard>;
 }
@@ -900,34 +900,13 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
           {balanceVisible ? `${todaysProfit >= 0 ? "+" : ""}${usd(todaysProfit)} today` : "Balance hidden"}
         </div>
       </div>
-      <div className="justify-self-end"><VoltixVIllustration /></div>
+      <div className="justify-self-end"><VoltixHeroLogo /></div>
     </div>
   </GlassCard>;
 }
 
-function VoltixVIllustration() {
-  return <div className="voltix-v-scene" aria-hidden="true">
-    <div className="voltix-core-grid" />
-    <span className="voltix-beam voltix-beam-a" />
-    <span className="voltix-beam voltix-beam-b" />
-    <span className="voltix-beam voltix-beam-c" />
-    <div className="voltix-v-halo" />
-    <div className="voltix-v-orbit" />
-    <div className="voltix-v-orbit voltix-v-orbit-alt" />
-    <div className="voltix-v-orbit voltix-v-orbit-holo" />
-    <span className="voltix-particle voltix-particle-a" />
-    <span className="voltix-particle voltix-particle-b" />
-    <span className="voltix-particle voltix-particle-c" />
-    <span className="voltix-particle voltix-particle-d" />
-    <span className="voltix-particle voltix-particle-e" />
-    <div className="voltix-v-letter">V</div>
-    <div className="voltix-platform-layer voltix-platform-layer-a" />
-    <div className="voltix-platform-layer voltix-platform-layer-b" />
-    <div className="voltix-platform-layer voltix-platform-layer-c" />
-    <div className="voltix-v-platform" />
-    <div className="voltix-platform-ring" />
-    <div className="voltix-v-reflection" />
-  </div>;
+function VoltixHeroLogo() {
+  return <img src="/logo.png" alt="" className="block h-[48px] w-auto object-contain opacity-100 mix-blend-normal filter-none transform-none" />;
 }
 
 function HomeActionTile({ icon: Icon, label, onClick }: { icon: typeof Home; label: string; onClick: () => void }) {
