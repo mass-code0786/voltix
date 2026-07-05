@@ -763,7 +763,7 @@ export default function AppShell() {
           />
           {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
-          <div className="mx-auto max-w-[420px] px-4 pb-20 pt-2.5 lg:max-w-6xl lg:px-8 lg:py-8">{screen}</div>
+          <div className={`mx-auto max-w-[420px] px-4 lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
         </main>
       </div>
 
