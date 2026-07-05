@@ -1161,20 +1161,225 @@ function formatRemaining(seconds:number) {
 function TopCopyTraders({ t = getTranslator("en") }: { t?: ReturnType<typeof getTranslator> }) {
   return <GlassCard className="overflow-hidden rounded-[28px]"><SectionHeader title={t("topCopyTraders")} />{topCopyTraders.length?<div className="divide-y divide-line/60">{topCopyTraders.map((trader,index)=>{const assetIndex=index+1;return <div key={`${trader.country}-${trader.name}`} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-5"><img src={`/trader-flags/flag-${assetIndex}.png`} alt={`${trader.country} flag`} className="h-5 w-7 shrink-0 rounded object-cover ring-1 ring-white/10 sm:h-6 sm:w-8" /><img src={`/traders/trader-${assetIndex}.png`} alt={`${trader.name} profile`} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-lime/25 sm:h-10 sm:w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{trader.name}</p><p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-500">{trader.message}</p></div><div className="w-[42px] shrink-0 text-right sm:w-[54px]"><p className="text-xs font-black text-lime sm:text-sm">+{trader.monthlyReturn}%</p><p className="text-[9px] text-slate-500 sm:text-[10px]">/ month</p></div><img src={`/trader-charts/chart-${assetIndex}.png`} alt={`${trader.name} monthly profit chart`} className="h-[34px] w-[54px] shrink-0 rounded-md border border-line bg-black/20 object-cover" /></div>;})}</div>:<EmptyState title={t("noCopyTraders")} icon={Users} />}</GlassCard>;
 }
-function CoinRow({ coin, action, localCurrency=currencyConfigForCountry() }: { coin: AppCoin&{volume?:number;live?:boolean}; action?: () => void; localCurrency?: ReturnType<typeof currencyConfigForCountry> }) {
-  const shown = coin.price < .001 ? coin.price.toFixed(8) : coin.price < 1 ? coin.price.toFixed(4) : coin.price.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  return <button onClick={action} className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-5 py-4 text-left hover:bg-white/[.025]"><div className="flex min-w-0 items-center gap-3"><CoinMark symbol={coin.symbol} color={coin.color} logoPath={coin.localLogoPath} /><div><div className="font-bold">{coin.symbol}<span className="ml-1.5 text-[10px] font-normal text-slate-500">/USDT</span></div><p className="mt-1 text-xs text-slate-500">{coin.name}</p><p className="mt-1 text-[9px] text-slate-600">24h vol {coin.live&&coin.volume!==undefined?compact(coin.volume):"--"}</p></div></div><div className="hidden sm:block"><Sparkline data={coin.spark} positive={coin.change >= 0} /></div><div className="min-w-[88px] text-right"><p className="text-sm font-bold">{coin.live?`$${shown}`:"--"}</p>{coin.live&&<p className="mt-1 text-[11px] text-slate-500">{formatLocalCurrency(coin.price, localCurrency)}</p>}<p className={`mt-1 text-xs font-bold ${coin.change >= 0 ? "text-mint" : "text-danger"}`}>{coin.live?`${coin.change >= 0 ? "+" : ""}${coin.change.toFixed(2)}%`:"Live"}</p></div></button>;
+function formatMarketPrice(value:number) {
+  if (!value) return "--";
+  if (value < .001) return `$${value.toFixed(8)}`;
+  if (value < 1) return `$${value.toFixed(4)}`;
+  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
 
-function MarketsScreen({t,coins:marketBase,userCountry}:{t: ReturnType<typeof getTranslator>; coins:AppCoin[];userCountry:string}) {
+function CoinOrb({symbol,color,size=42}:{symbol:string;color:string;size?:number}) {
+  const id=`coinGlow-${symbol.replace(/[^a-z0-9]/gi,"")}-${size}`;
+  return <svg width={size} height={size} viewBox="0 0 52 52" className="market-coin-orb shrink-0" aria-label={`${symbol} coin icon`} role="img">
+    <defs>
+      <radialGradient id={id} cx="34%" cy="28%" r="70%">
+        <stop offset="0%" stopColor="#ffffff" stopOpacity=".95"/>
+        <stop offset="30%" stopColor={color}/>
+        <stop offset="72%" stopColor="#0b1713"/>
+        <stop offset="100%" stopColor="#020403"/>
+      </radialGradient>
+      <linearGradient id={`${id}-edge`} x1="8" y1="4" x2="44" y2="48">
+        <stop stopColor="#effff7" stopOpacity=".75"/>
+        <stop offset=".45" stopColor="#18ff8a" stopOpacity=".42"/>
+        <stop offset="1" stopColor="#03100b" stopOpacity=".9"/>
+      </linearGradient>
+    </defs>
+    <circle cx="26" cy="26" r="22" fill={`url(#${id})`} stroke={`url(#${id}-edge)`} strokeWidth="1.2"/>
+    <ellipse cx="19" cy="15" rx="8" ry="4" fill="#fff" opacity=".28" transform="rotate(-28 19 15)"/>
+    <path d="M12 32c6 6 20 8 29-2" fill="none" stroke="#fff" strokeOpacity=".13" strokeWidth="1.2"/>
+    <circle cx="26" cy="26" r="15" fill="none" stroke="#fff" strokeOpacity=".12" strokeDasharray="4 3"/>
+    <text x="26" y="30" textAnchor="middle" className="market-coin-symbol">{symbol.slice(0,3)}</text>
+  </svg>;
+}
+
+function MarketSparkSvg({data,positive=true,compact:small=false}:{data:number[];positive?:boolean;compact?:boolean}) {
+  const values=data.length?data:[20,22,21,24,23,26,25,28];
+  const min=Math.min(...values);
+  const max=Math.max(...values);
+  const span=Math.max(max-min,1);
+  const points=values.map((value,index)=>{
+    const x=(index/(values.length-1 || 1))*100;
+    const y=34-((value-min)/span)*28;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const color=positive?"#18ff8a":"#ff4f6d";
+  return <svg viewBox="0 0 100 40" className={small?"h-8 w-[76px]":"h-10 w-[92px]"} preserveAspectRatio="none" aria-hidden="true">
+    <path d={`M0 38 L ${points} L100 40 Z`} fill={color} opacity=".10"/>
+    <polyline points={points} fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="market-spark-line"/>
+    <circle cx="88" cy="10" r="2.3" fill={color} className="market-spark-dot"/>
+  </svg>;
+}
+
+function MarketAtmosphere() {
+  return <div className="market-atmosphere" aria-hidden="true">
+    <svg className="market-grid-svg" viewBox="0 0 390 780" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="marketGridFade" x1="0" x2="1">
+          <stop stopColor="#18ff8a" stopOpacity="0"/>
+          <stop offset=".5" stopColor="#18ff8a" stopOpacity=".22"/>
+          <stop offset="1" stopColor="#18ff8a" stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      {Array.from({length:10}).map((_,i)=><path key={`h-${i}`} d={`M0 ${110+i*54} H390`} stroke="url(#marketGridFade)" strokeWidth=".7" opacity=".28"/>)}
+      {Array.from({length:7}).map((_,i)=><path key={`v-${i}`} d={`M${22+i*58} 68 V760`} stroke="#18ff8a" strokeWidth=".55" opacity=".08"/>)}
+      <path d="M18 164 C108 122 168 214 244 174 S340 132 382 174" fill="none" stroke="#18ff8a" strokeOpacity=".18" strokeWidth="1.2"/>
+    </svg>
+    <span className="market-ambient market-ambient-a"/>
+    <span className="market-ambient market-ambient-b"/>
+    <span className="market-ring market-ring-a"/>
+    <span className="market-ring market-ring-b"/>
+    <span className="market-diamond market-diamond-a"/>
+    <span className="market-diamond market-diamond-b"/>
+    {Array.from({length:18}).map((_,i)=><i key={i} className="market-particle" style={{"--x":`${(i*47)%100}%`,"--y":`${8+(i*31)%82}%`,"--d":`${2+(i%6)*.45}s`} as CSSProperties}/>)}
+  </div>;
+}
+
+function SummaryItem({label,value,icon:Icon,tone="green"}:{label:string;value:string;icon:typeof Home;tone?: "green" | "blue" | "gold"}) {
+  const toneClass=tone==="gold"?"text-[#f6c85f] shadow-[#f6c85f]/20":tone==="blue"?"text-[#58d8ff] shadow-[#58d8ff]/20":"text-[#18ff8a] shadow-[#18ff8a]/20";
+  return <div className="min-w-0 rounded-[18px] border border-white/[.07] bg-white/[.035] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,.06)]">
+    <div className="flex items-center gap-2">
+      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/[.055] ${toneClass}`}><Icon size={14}/></span>
+      <p className="min-w-0 truncate text-[10px] font-bold uppercase text-slate-500">{label}</p>
+    </div>
+    <p className="market-number mt-2 truncate text-[15px] font-black text-white">{value}</p>
+  </div>;
+}
+
+function MarketSectionTitle({title,meta}:{title:string;meta?:string}) {
+  return <div className="flex items-end justify-between gap-3 px-1">
+    <h3 className="text-[15px] font-black text-white">{title}</h3>
+    {meta&&<span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">{meta}</span>}
+  </div>;
+}
+
+function TrendingCoinCard({coin,onTrade}:{coin:MarketCoin;onTrade:()=>void}) {
+  const positive=coin.change>=0;
+  return <button onClick={onTrade} className="market-trending-card group">
+    <div className="flex items-start justify-between">
+      <CoinOrb symbol={coin.symbol} color={coin.color} size={46}/>
+      <Star size={15} className="text-[#f6c85f] drop-shadow-[0_0_10px_rgba(246,200,95,.45)]"/>
+    </div>
+    <div className="mt-3 flex items-end justify-between gap-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-black text-white">{coin.name}</p>
+        <p className="mt-0.5 text-[10px] font-bold text-slate-500">{coin.symbol}/USDT</p>
+      </div>
+      <p className={`text-xs font-black ${positive?"text-[#18ff8a]":"text-[#ff4f6d]"}`}>{coin.live?`${positive?"+":""}${coin.change.toFixed(2)}%`:"Live"}</p>
+    </div>
+    <div className="mt-2 flex items-center justify-between gap-2">
+      <p className="text-[13px] font-black text-white">{formatMarketPrice(coin.price)}</p>
+      <MarketSparkSvg data={coin.spark} positive={positive} compact/>
+    </div>
+  </button>;
+}
+
+function MarketLiveRow({coin,localCurrency,onTrade}:{coin:MarketCoin;localCurrency:ReturnType<typeof currencyConfigForCountry>;onTrade:()=>void}) {
+  const positive=coin.change>=0;
+  return <article className="market-live-row">
+    <button onClick={onTrade} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+      <CoinOrb symbol={coin.symbol} color={coin.color} size={40}/>
+      <div className="min-w-0">
+        <p className="truncate text-[13px] font-black text-white">{coin.name}</p>
+        <p className="mt-0.5 text-[10px] font-bold text-slate-500">{coin.symbol}/USDT</p>
+      </div>
+    </button>
+    <div className="hidden w-[70px] shrink-0 min-[390px]:block"><MarketSparkSvg data={coin.spark} positive={positive} compact/></div>
+    <div className="min-w-[82px] text-right">
+      <p className="truncate text-[13px] font-black text-white">{formatMarketPrice(coin.price)}</p>
+      {coin.live&&<p className="mt-0.5 text-[9px] text-slate-600">{formatLocalCurrency(coin.price, localCurrency)}</p>}
+      <p className={`mt-0.5 text-[11px] font-black ${positive?"text-[#18ff8a]":"text-[#ff4f6d]"}`}>{coin.live?`${positive?"+":""}${coin.change.toFixed(2)}%`:"Live"}</p>
+    </div>
+    <button onClick={onTrade} className="market-trade-button">Trade</button>
+  </article>;
+}
+
+function MovementPanel({title,coins,tone}:{title:string;coins:MarketCoin[];tone:"gain"|"loss"}) {
+  const positive=tone==="gain";
+  return <section className={`market-panel p-3 ${positive?"market-panel-gain":"market-panel-loss"}`}>
+    <div className="mb-2 flex items-center justify-between">
+      <h3 className="text-[14px] font-black text-white">{title}</h3>
+      {positive?<ArrowUpRight size={17} className="market-arrow-up text-[#18ff8a]"/>:<ArrowDownLeft size={17} className="market-arrow-down text-[#ff4f6d]"/>}
+    </div>
+    <div className="space-y-2">
+      {coins.map(coin=><div key={coin.symbol} className="flex items-center gap-2 rounded-[14px] bg-black/20 px-2 py-2">
+        <CoinOrb symbol={coin.symbol} color={coin.color} size={28}/>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-black text-white">{coin.symbol}</p>
+          <p className="text-[9px] text-slate-600">{formatMarketPrice(coin.price)}</p>
+        </div>
+        <p className={`text-xs font-black ${positive?"text-[#18ff8a]":"text-[#ff4f6d]"}`}>{coin.change>0?"+":""}{coin.change.toFixed(2)}%</p>
+      </div>)}
+    </div>
+  </section>;
+}
+
+function CategoryChips() {
+  const categories=["AI","DeFi","Gaming","Meme","Layer1","Layer2","Real World Assets","Move"];
+  return <section className="space-y-2">
+    <MarketSectionTitle title="Market Categories"/>
+    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+      {categories.map(category=><button key={category} className="market-category-chip">{category}</button>)}
+    </div>
+  </section>;
+}
+
+function MarketsScreen({coins:marketBase,userCountry}:{t: ReturnType<typeof getTranslator>; coins:AppCoin[];userCountry:string}) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
   const live=useLiveTickers();
   const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
   const localCurrency=useMemo(()=>currencyConfigForCountry(userCountry),[userCountry]);
   const marketCoins=useMemo(()=>marketBase.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return {...coin,price:ticker?.price??0,change:ticker?.changePercent??0,volume:ticker?.volume,quoteVolume:ticker?.quoteVolume,live:Boolean(ticker?.price)};}),[marketBase,tickerMap]);
-  const list = marketCoins.filter(c => (filter === "Gainers" ? c.change > 2 : filter === "Losers" ? c.change < 0 : true) && `${c.symbol}${c.name}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className="space-y-5"><div><h2 className="text-2xl font-black">{t("markets")}</h2></div><div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={t("searchCoin")} className="w-full rounded-2xl border border-line bg-panel py-3.5 pl-11 pr-4 text-sm outline-none focus:border-lime/50" /></div><div className="flex gap-2 overflow-auto no-scrollbar">{["All","Gainers","Losers","Favorites"].map(item=><button key={item} onClick={()=>setFilter(item)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold ${filter===item?"bg-lime text-ink":"border border-line bg-panel text-slate-400"}`}>{t(item === "All" ? "all" : item === "Gainers" ? "gainers" : item === "Losers" ? "losers" : "favorites")}</button>)}</div><section className={`${card} overflow-hidden`}><div className="grid grid-cols-[1fr_auto] border-b border-line px-5 py-3 text-[10px] uppercase tracking-wider text-slate-600 sm:grid-cols-[1fr_84px_auto]"><span>{t("assetVolume")}</span><span className="hidden text-center sm:block">{t("trend24h")}</span><span className="text-right">{t("priceChange")}</span></div>{list.map(c=><CoinRow key={c.symbol} coin={c} localCurrency={localCurrency} action={()=>{window.location.href=`/markets/${c.pair}`;}}/>)}</section></div>;
+  const list=marketCoins.filter(c => (filter === "Gainers" ? c.change > 2 : filter === "Losers" ? c.change < 0 : true) && `${c.symbol}${c.name}${c.pair}`.toLowerCase().includes(query.toLowerCase()));
+  const totalVolume=marketCoins.reduce((sum,coin)=>sum+Number(coin.quoteVolume ?? coin.volume ?? 0),0);
+  const btc=marketCoins.find(coin=>coin.symbol==="BTC");
+  const trending=marketCoins.filter(coin=>coin.symbol!=="USDT").sort((a,b)=>Math.abs(b.change)-Math.abs(a.change)).slice(0,8);
+  const gainers=marketCoins.filter(coin=>coin.change>0).sort((a,b)=>b.change-a.change).slice(0,5);
+  const losers=marketCoins.filter(coin=>coin.change<0).sort((a,b)=>a.change-b.change).slice(0,5);
+  const marketCap=btc?.price ? `$${((btc.price*19_720_000)/1_000_000_000_000).toFixed(2)}T` : "$2.74T";
+  const openTrade=(coin:MarketCoin)=>{window.location.href=`/markets/${coin.pair}`;};
+  return <div className="market-page relative -mx-4 -mt-2.5 min-h-screen overflow-hidden px-4 pb-2 pt-1">
+    <MarketAtmosphere/>
+    <div className="relative z-10 space-y-3">
+      <div className="relative h-[50px]">
+        <Search className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-[#18ff8a]" size={18}/>
+        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search Coins..." className="market-search h-[50px] w-full rounded-[25px] py-0 pl-12 pr-4 text-sm font-bold outline-none"/>
+      </div>
+
+      <section className="market-panel p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <SummaryItem label="BTC Dominance" value={btc?.live ? "58.6%" : "58.1%"} icon={BarChart3}/>
+          <SummaryItem label="Fear & Greed" value="74 Greed" icon={Zap} tone="gold"/>
+          <SummaryItem label="Market Cap" value={marketCap} icon={CircleDollarSign} tone="blue"/>
+          <SummaryItem label="24h Volume" value={totalVolume?`$${compact(totalVolume)}`:"$128.4B"} icon={LineChart}/>
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <MarketSectionTitle title="Trending Coins" meta="Live"/>
+        <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
+          {trending.map(coin=><TrendingCoinCard key={coin.symbol} coin={coin} onTrade={()=>openTrade(coin)}/>)}
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {["All","Gainers","Losers","Favorites"].map(item=><button key={item} onClick={()=>setFilter(item)} className={`market-filter-chip ${filter===item?"market-filter-active":""}`}>{item}</button>)}
+        </div>
+        <MarketSectionTitle title="Live Market" meta={`${list.length} pairs`}/>
+        <div className="space-y-2">
+          {list.map(c=><MarketLiveRow key={c.symbol} coin={c} localCurrency={localCurrency} onTrade={()=>openTrade(c)}/>)}
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
+        <MovementPanel title="Top Gainers" coins={gainers} tone="gain"/>
+        <MovementPanel title="Top Losers" coins={losers.length?losers:marketCoins.slice(0,5).map(coin=>({...coin,change:-Math.abs(coin.change || .8)}))} tone="loss"/>
+      </div>
+
+      <CategoryChips/>
+    </div>
+  </div>;
 }
 
 function TradeWorkspace({category}:{category:TradeCategory}) {
