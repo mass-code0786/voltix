@@ -1060,7 +1060,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .ai-vip-card {
   border-radius: 22px;
   margin-top: 6px;
-  padding: 12px;
+  padding: 14px;
 }
 
 .ai-vip-card > div:first-child p {
@@ -1075,22 +1075,19 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .ai-vip-row {
   display: grid;
-  min-height: 70px;
-  grid-template-columns: 88px minmax(86px,1fr) 58px 92px;
+  height: 62px;
+  min-height: 62px;
+  grid-template-columns: 82px minmax(78px,1fr) 54px 86px;
   align-items: center;
   gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--vip-accent) 22%, transparent);
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--vip-accent) 12%, transparent), transparent 34%),
-    rgba(0,0,0,.22);
+  overflow: hidden;
+  border-radius: 14px;
   padding: 10px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 12px 28px rgba(0,0,0,.24);
 }
 
 .ai-vip-row svg {
-  height: 42px;
-  width: 42px;
+  height: 40px;
+  width: 40px;
 }
 
 .ai-vip-title {
@@ -1098,7 +1095,7 @@ button { -webkit-tap-highlight-color: transparent; }
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #fff;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 900;
   line-height: 1;
 }
@@ -1108,7 +1105,7 @@ button { -webkit-tap-highlight-color: transparent; }
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #fff;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
   line-height: 1;
 }
@@ -1124,15 +1121,18 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .ai-status-pill {
   display: inline-flex;
-  height: 22px;
+  height: 20px;
+  max-width: 54px;
   align-items: center;
   border: 1px solid;
   border-radius: 999px;
   padding: 0 6px;
   text-transform: uppercase;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 900;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ai-vip-time {
@@ -1146,10 +1146,10 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .ai-row-trade {
-  height: 38px;
-  width: 92px;
+  height: 36px;
+  width: 86px;
   flex-shrink: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   color: #050807;
   font-size: 13px;
   font-weight: 900;
@@ -1247,13 +1247,35 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 
   .ai-vip-row {
-    grid-template-columns: 78px minmax(74px,1fr) 50px 82px;
+    grid-template-columns: 70px minmax(66px,1fr) 45px 74px;
     gap: 4px;
-    padding: 9px 7px;
+    height: 60px;
+    min-height: 60px;
+    padding: 9px 6px;
+  }
+
+  .ai-vip-row svg {
+    height: 36px;
+    width: 36px;
+  }
+
+  .ai-vip-title {
+    font-size: 13px;
+  }
+
+  .ai-vip-return {
+    font-size: 12px;
+  }
+
+  .ai-status-pill {
+    max-width: 45px;
+    padding: 0 4px;
+    font-size: 8px;
   }
 
   .ai-row-trade {
-    width: 82px;
+    width: 74px;
+    height: 34px;
     font-size: 12px;
   }
 

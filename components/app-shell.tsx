@@ -1507,7 +1507,7 @@ function AiVipRowsCard({rows,startTrade,notify}:{rows:VipTradeRow[];startTrade:(
     if(!result.ok){setError(result.message);return;}
     notify("Copy trade started");
   };
-  return <section className="ai-glass ai-vip-card">
+  return <section className="ai-glass ai-vip-card home-depth-card">
     <div className="mb-2 flex items-center justify-between gap-3">
       <div className="flex items-center gap-1.5"><h2>VIP Trade Rows</h2><ShieldCheck size={14} className="text-[#18ff8a]"/></div>
       <p>Trade Time: <span>{tradeTime}</span></p>
@@ -1528,11 +1528,12 @@ function AiVipBadge({accent}:{accent:string}) {
 function AiVipRow({row,loading,start}:{row:VipTradeRow;loading:boolean;start:()=>void}) {
   const accent=vipAccent(row);
   const status=row.tradeStatus??(row.available?"Live":"Closed");
-  return <article className="ai-vip-row" style={{"--vip-accent":accent} as CSSProperties}>
+  const label=displayVipLabel(row.label);
+  return <article className="vip-row ai-vip-row" style={{"--vip-accent":accent} as CSSProperties}>
     <div className="flex min-w-0 items-center gap-1.5">
       <AiVipBadge accent={accent}/>
       <div className="min-w-0">
-        <p className="ai-vip-title">{row.label}</p>
+        <p className="ai-vip-title">{label}</p>
       </div>
     </div>
     <div className="min-w-0 flex-1">
@@ -1545,6 +1546,16 @@ function AiVipRow({row,loading,start}:{row:VipTradeRow;loading:boolean;start:()=
     </div>
     <button onClick={start} disabled={loading} className="ai-row-trade" style={{background:`linear-gradient(135deg, ${accent}, ${accent}aa)`,boxShadow:`0 0 22px ${accent}30`}}>{loading?"Wait":"Trade"}</button>
   </article>;
+}
+
+function displayVipLabel(label:string) {
+  const clean=label.replace(/\s+/g," ").trim();
+  if (/7/.test(clean) && /10/.test(clean)) return "VIP 7 - 10";
+  if (/5/.test(clean) && /6/.test(clean)) return "VIP 5 - 6";
+  if (/3/.test(clean) && /4/.test(clean)) return "VIP 3 - 4";
+  if (/1/.test(clean) && /2/.test(clean)) return "VIP 1 - 2";
+  if (/0/.test(clean)) return "VIP 0";
+  return clean;
 }
 
 function AiInfoStrip() {
