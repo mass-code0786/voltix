@@ -33,7 +33,7 @@ export function AppHeader({ title, subtitle, compactBrand = true, initials, unre
     <header className="sticky top-0 z-30 h-[72px] bg-[#060a08]/72 px-5 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
       <div className="mx-auto flex h-[72px] max-w-[420px] items-center justify-between gap-3 lg:max-w-6xl">
         <div className="flex h-[48px] w-fit shrink-0 items-center justify-start">
-          <img src="/logo.png" alt="VOLTIX" className="block h-[42px] w-auto max-w-none object-contain opacity-100 mix-blend-normal filter-none transform-none" />
+          <img src="/logo.png" alt="VOLTIX" className="block h-[21px] w-auto max-w-none object-contain opacity-100 mix-blend-normal filter-none transform-none" />
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <button onClick={onNotifications} className="relative grid h-9 w-9 place-items-center rounded-full border border-white/[.08] bg-white/[.045] text-slate-200 shadow-[0_0_24px_rgba(24,255,138,.1),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Notifications">
