@@ -727,7 +727,7 @@ export default function AppShell() {
     home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} bitexBalance={bitexBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
-    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} />,
+    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
     wallet: <WalletScreen notify={notify} assets={walletAssets} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
@@ -757,13 +757,15 @@ export default function AppShell() {
             subtitle={t("welcomeBack")}
             initials={initials(currentUser?.name)}
             unreadNotifications={unreadNotifications}
+            variant={tab==="bitex"?"ai":"default"}
+            onBack={() => selectTab("home")}
             onMenuButton={() => { setMenu(!menu); setNotificationOpen(false); }}
             onNotifications={() => { if (!currentUser) { openAuthPage("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }}
             onMenu={() => { setMenu(!menu); setNotificationOpen(false); }}
           />
           {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
-          <div className={`mx-auto max-w-[420px] px-4 lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
+          <div className={`mx-auto max-w-[420px] px-4 lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "bitex" ? "pb-36 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
         </main>
       </div>
 
@@ -1386,8 +1388,204 @@ function TradeWorkspace({category}:{category:TradeCategory}) {
   return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category}/></div>;
 }
 
-function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,tradeRows,startTrade,completeTrade,purchaseAi,openLogin}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void}) {
-  return <div className="space-y-5"><div><h2 className="text-2xl font-black">AI</h2></div><CandlestickChart/><AiPurchaseCard currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin}/><CopyTradeScreen activeTrade={activeTrade} bitexBalance={bitexBalance} tradeRows={tradeRows} startTrade={startTrade} completeTrade={completeTrade}/></div>;
+function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,tradeRows,copyTradeHistory,startTrade,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];copyTradeHistory:CopyTradeHistory[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
+  const active=Boolean(subscription?.subscription?.active);
+  const today=new Date().toDateString();
+  const todayIncome=copyTradeHistory.reduce((sum,row)=>{
+    const date=new Date(row.date);
+    return Number.isNaN(date.getTime()) || date.toDateString()!==today ? sum : sum+Number(row.profit ?? 0);
+  }, activeTrade?.date && new Date(activeTrade.date).toDateString()===today ? Number(activeTrade.profit ?? 0) : 0);
+  const currentTrades=activeTrade ? 1 : 0;
+  const allowedTrades=tradeRows.length;
+  return <div className="ai-trade-page -mx-4 -mt-1 min-h-screen overflow-x-hidden px-4 pb-2">
+    <section className="ai-trade-hero">
+      <div className="relative z-10">
+        <h1>AI Trade</h1>
+        <p>Smart AI. Auto Trade. Daily Income.</p>
+      </div>
+      <AiTradeHeroVisual/>
+    </section>
+    <AiTopStats balance={bitexBalance} todayIncome={todayIncome} currentTrades={currentTrades} allowedTrades={allowedTrades} active={active}/>
+    <AiTradeOverviewCard history={copyTradeHistory} todayIncome={todayIncome}/>
+    <AiVipRowsCard rows={tradeRows.slice(0,5)} startTrade={startTrade} notify={notify}/>
+    <AiInfoStrip/>
+    <AiSubscriptionPanel currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin} notify={notify}/>
+  </div>;
+}
+
+function AiTradeHeroVisual() {
+  return <svg viewBox="0 0 180 136" className="ai-hero-svg" aria-hidden="true">
+    <defs>
+      <linearGradient id="aiHeroV" x1="61" y1="26" x2="107" y2="92"><stop stopColor="#eafff4"/><stop offset=".45" stopColor="#18ff8a"/><stop offset="1" stopColor="#047a49"/></linearGradient>
+      <radialGradient id="aiHeroGlow" cx="50%" cy="50%" r="55%"><stop stopColor="#18ff8a" stopOpacity=".45"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></radialGradient>
+      <filter id="aiHeroBlur" x="0" y="0" width="180" height="136"><feGaussianBlur stdDeviation="4"/></filter>
+    </defs>
+    <path d="M14 106H166M28 92H152M41 79H139" stroke="#18ff8a" strokeOpacity=".13"/>
+    <g opacity=".42">{[0,1,2,3,4].map(i=><rect key={i} x={118+i*8} y={64-i*8} width="5" height={34+i*8} rx="2" fill="#18ff8a" opacity={.35+i*.09}/>)}</g>
+    <ellipse cx="88" cy="103" rx="58" ry="18" fill="url(#aiHeroGlow)" filter="url(#aiHeroBlur)" className="ai-svg-pulse"/>
+    <g className="ai-svg-orbit"><ellipse cx="88" cy="99" rx="58" ry="15" fill="#06110d" stroke="#18ff8a" strokeOpacity=".42" strokeDasharray="28 15"/></g>
+    <ellipse cx="88" cy="99" rx="38" ry="9" fill="#020806" stroke="#0d5e40"/>
+    <g className="ai-svg-float">
+      <circle cx="86" cy="58" r="33" fill="rgba(24,255,138,.1)" stroke="#18ff8a" strokeOpacity=".35"/>
+      <path d="M71 37H61L79 82L86 95L93 82L111 37H101L86 72L71 37Z" fill="url(#aiHeroV)" stroke="#eafff4" strokeOpacity=".34"/>
+      <path d="M101 37H111L93 82L86 95V72L101 37Z" fill="#006b43" opacity=".88"/>
+      <path d="M71 37H61L79 82L86 95V72L71 37Z" fill="#9cffd9" opacity=".26"/>
+    </g>
+    <g className="ai-bot" transform="translate(118 48)">
+      <rect x="0" y="10" width="29" height="25" rx="9" fill="#08140f" stroke="#18ff8a" strokeOpacity=".55"/>
+      <circle cx="9" cy="23" r="2.5" fill="#18ff8a"/><circle cx="20" cy="23" r="2.5" fill="#18ff8a"/>
+      <path d="M14 10V2M8 2h12" stroke="#18ff8a" strokeLinecap="round"/>
+    </g>
+    <path d="M28 68c16-24 34 7 48-10s27-13 38-24" fill="none" stroke="#18ff8a" strokeWidth="2" strokeLinecap="round" className="ai-chart-line"/>
+    <g fill="#9cffd9">{[24,145,154,43,132].map((x,i)=><circle key={x} cx={x} cy={30+i*16%62} r="1.5" opacity=".55" className="ai-svg-particle"/>)}</g>
+  </svg>;
+}
+
+function AiTopStats({balance,todayIncome,currentTrades,allowedTrades,active}:{balance:number;todayIncome:number;currentTrades:number;allowedTrades:number;active:boolean}) {
+  return <section className="ai-glass ai-top-stats">
+    <AiStat icon={Wallet} tone="green" label="AI Wallet Balance" value={`${balance.toFixed(2)} USDT`}/>
+    <AiStat icon={LineChart} tone="purple" label="Today's Income" value={usd(todayIncome)} trend={todayIncome>0?"+ today":undefined}/>
+    <AiStat icon={BarChart3} tone="blue" label="Today's Trades" value={`${currentTrades}/${allowedTrades || 0}`}/>
+    <AiStat icon={Trophy} tone="gold" label="AI Subscription" value={active?"Active":"Inactive"}/>
+  </section>;
+}
+
+function AiStat({icon:Icon,tone,label,value,trend}:{icon:typeof Home;tone:"green"|"purple"|"blue"|"gold";label:string;value:string;trend?:string}) {
+  return <div className="ai-stat">
+    <span className={`ai-stat-icon ai-stat-${tone}`}><Icon size={16}/></span>
+    <p>{label}</p>
+    <strong>{value}</strong>
+    {trend&&<em>{trend}</em>}
+  </div>;
+}
+
+function AiTradeOverviewCard({history,todayIncome}:{history:CopyTradeHistory[];todayIncome:number}) {
+  const chartData=useMemo(()=>history.slice(0,7).reverse().map(row=>Number(row.profit ?? 0)).filter(Number.isFinite),[history]);
+  const total=history.reduce((sum,row)=>sum+Number(row.profit ?? 0),0);
+  return <section className="ai-glass ai-overview-card">
+    <div className="flex items-center justify-between gap-3">
+      <h2>AI Copy Trading Overview</h2>
+      <button>This Week <ChevronDown size={11}/></button>
+    </div>
+    <div className="mt-3 grid grid-cols-[105px_minmax(0,1fr)] gap-2.5">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Income</p>
+        <strong className="mt-1 block text-[24px] font-black leading-none text-[#18ff8a]">{usd(total)}</strong>
+        <span className="mt-1 block text-[11px] font-black text-[#18ff8a]">{todayIncome>0?`+${usd(todayIncome)} today`:"No income today"}</span>
+      </div>
+      <AiIncomeChart data={chartData} todayIncome={todayIncome}/>
+    </div>
+  </section>;
+}
+
+function AiIncomeChart({data,todayIncome}:{data:number[];todayIncome:number}) {
+  const width=210,height=140;
+  const series=data.length?data:[0,0,0,0,0,0,0];
+  const max=Math.max(...series,600), min=0;
+  const points=series.map((value,index)=>`${28+(index/6)*168},${height-28-((value-min)/Math.max(max-min,1))*88}`).join(" ");
+  return <svg viewBox={`0 0 ${width} ${height}`} className="ai-income-chart" preserveAspectRatio="none" aria-hidden="true">
+    <defs><linearGradient id="aiIncomeFill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#18ff8a" stopOpacity=".28"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></linearGradient></defs>
+    {[0,200,400,600].map(v=><g key={v}><text x="0" y={height-28-(v/600)*88} fill="#64748b" fontSize="9">${v}</text><line x1="25" x2="205" y1={height-31-(v/600)*88} y2={height-31-(v/600)*88} stroke="#ffffff" strokeOpacity=".06"/></g>)}
+    <path d={`M28 ${height-28} L ${points} L196 ${height-28} Z`} fill="url(#aiIncomeFill)"/>
+    <polyline points={points} fill="none" stroke="#18ff8a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="ai-chart-line"/>
+    {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((day,i)=><text key={day} x={28+(i/6)*168} y="135" textAnchor="middle" fill="#64748b" fontSize="9">{day}</text>)}
+    <g transform="translate(118 12)" className="ai-tooltip"><rect width="78" height="24" rx="10" fill="#0b1712" stroke="#18ff8a" strokeOpacity=".34"/><text x="39" y="15" textAnchor="middle" fill="#18ff8a" fontSize="10" fontWeight="800">{todayIncome?usd(todayIncome):"$0 Today"}</text></g>
+  </svg>;
+}
+
+function AiVipRowsCard({rows,startTrade,notify}:{rows:VipTradeRow[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;notify:(message:string)=>void}) {
+  const [loadingRow,setLoadingRow]=useState("");
+  const [error,setError]=useState("");
+  const tradeTime=rows.find(row=>row.currentTradeTime)?.currentTradeTime ?? "--:--:--";
+  const start=async(row:VipTradeRow)=>{
+    setError("");
+    if(!row.available){setError(row.message || "Trade not available.");return;}
+    if(!row.eligible){setError(row.message || "You are not eligible for this trade.");return;}
+    setLoadingRow(row.id);
+    const result=await startTrade(row.id);
+    setLoadingRow("");
+    if(!result.ok){setError(result.message);return;}
+    notify("Copy trade started");
+  };
+  return <section className="ai-glass ai-vip-card">
+    <div className="mb-2 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-1.5"><h2>VIP Trade Rows</h2><ShieldCheck size={14} className="text-[#18ff8a]"/></div>
+      <p>Trade Time: <span>{tradeTime}</span></p>
+    </div>
+    <div className="space-y-2">{rows.length?rows.map(row=><AiVipRow key={row.id} row={row} loading={loadingRow===row.id} start={()=>start(row)}/>):<EmptyState title="No VIP trade rows available" icon={LineChart}/>}</div>
+    {error&&<p className="mt-3 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-xs font-bold text-danger">{error}</p>}
+  </section>;
+}
+
+function AiVipBadge({accent}:{accent:string}) {
+  return <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true" className="shrink-0" style={{filter:`drop-shadow(0 0 14px ${accent}44)`}}>
+    <path d="M23 3 39 11v15c0 9-6 14-16 17C13 40 7 35 7 26V11Z" fill={`${accent}22`} stroke={accent} strokeWidth="1.3"/>
+    <path d="M15 18h16l-8 12Z" fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round"/>
+    <text x="23" y="14" textAnchor="middle" fill={accent} fontSize="8" fontWeight="900">VIP</text>
+  </svg>;
+}
+
+function AiVipRow({row,loading,start}:{row:VipTradeRow;loading:boolean;start:()=>void}) {
+  const accent=vipAccent(row);
+  const status=row.tradeStatus??(row.available?"Live":"Closed");
+  return <article className="ai-vip-row" style={{"--vip-accent":accent} as CSSProperties}>
+    <div className="flex min-w-0 items-center gap-2">
+      <AiVipBadge accent={accent}/>
+      <div className="min-w-[48px]">
+        <p className="truncate text-[18px] font-black leading-none text-white">{row.label}</p>
+      </div>
+    </div>
+    <div className="min-w-0 flex-1">
+      <p className="text-[17px] font-black leading-none text-white">{row.dailyPercentMin.toFixed(1)}% - {row.dailyPercentMax.toFixed(1)}%</p>
+      <p className="mt-1 text-[12px] font-bold text-slate-500">Daily Return</p>
+    </div>
+    <div className="w-[62px] shrink-0">
+      <span className="ai-status-pill" style={{color:accent,borderColor:`${accent}44`,backgroundColor:`${accent}14`}}>{status}</span>
+      <p className="mt-1 truncate text-[10px] font-bold text-slate-600">{row.currentTradeTime ?? "--:--"}</p>
+    </div>
+    <button onClick={start} disabled={loading} className="ai-row-trade" style={{background:`linear-gradient(135deg, ${accent}, ${accent}aa)`,boxShadow:`0 0 22px ${accent}30`}}>{loading?"Wait":"Trade"}</button>
+  </article>;
+}
+
+function AiInfoStrip() {
+  return <section className="ai-glass ai-info-strip">
+    <span><ShieldCheck size={19}/></span>
+    <p>AI Subscription users get auto trades in live window. Manual trade available for non-subscribers.</p>
+    <button><span>How it works?</span><ChevronRight size={13}/></button>
+  </section>;
+}
+
+function AiSubscriptionPanel({currentUser,status,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;status:AiSubscriptionStatus|null;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
+  const [loading,setLoading]=useState(false);
+  const active=Boolean(status?.subscription?.active);
+  const expiry=status?.subscription?.expiresAt ? new Date(status.subscription.expiresAt) : null;
+  const action=async()=>{
+    if(!currentUser){openLogin();return;}
+    if(active){notify("AI subscription active");return;}
+    setLoading(true);
+    const result=await purchaseAi();
+    setLoading(false);
+    if(!result.ok)notify(result.message || "AI purchase failed");
+  };
+  return <section className="ai-glass ai-subscription-panel">
+    <AiCubeSvg/>
+    <div className="min-w-0 flex-1">
+      <h2>AI Subscription</h2>
+      <p className={active?"text-[#18ff8a]":"text-slate-500"}>{active?"Active":"Inactive"}</p>
+      <span>{active&&expiry?`Valid till ${formatDate(expiry)}`:"Purchase to enable auto trades"}</span>
+    </div>
+    <button onClick={action} disabled={loading}>{loading?"Wait":active?"Manage":"Purchase"}</button>
+  </section>;
+}
+
+function AiCubeSvg() {
+  return <svg width="70" height="70" viewBox="0 0 70 70" className="ai-cube-svg" aria-hidden="true">
+    <defs><linearGradient id="aiCube" x1="14" y1="8" x2="58" y2="62"><stop stopColor="#f4fff9"/><stop offset=".48" stopColor="#18ff8a"/><stop offset="1" stopColor="#047a49"/></linearGradient></defs>
+    <ellipse cx="35" cy="55" rx="24" ry="7" fill="#18ff8a" opacity=".16"/>
+    <path d="M35 7 56 19v24L35 55 14 43V19Z" fill="url(#aiCube)" fillOpacity=".18" stroke="#18ff8a"/>
+    <path d="M14 19 35 31 56 19M35 31v24" stroke="#eafff4" strokeOpacity=".34"/>
+    <text x="35" y="39" textAnchor="middle" fill="#eafff4" fontSize="13" fontWeight="900">AI</text>
+  </svg>;
 }
 
 function AiPurchaseCard({currentUser,status,purchaseAi,openLogin}:{currentUser:CurrentUser|null;status:AiSubscriptionStatus|null;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void}) {

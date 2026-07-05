@@ -2,7 +2,7 @@
 
 import type { ComponentType, ReactNode } from "react";
 import type { LucideProps } from "lucide-react";
-import { Bell, ChevronRight, Menu, Search } from "lucide-react";
+import { ArrowLeft, Bell, ChevronRight, Menu, Search } from "lucide-react";
 import { CoinMark } from "./coin-mark";
 import { Sparkline } from "./sparkline";
 import { compact } from "@/lib/format";
@@ -23,12 +23,39 @@ type HeaderProps = {
   compactBrand?: boolean;
   initials: string;
   unreadNotifications?: number;
+  variant?: "default" | "ai";
+  onBack?: () => void;
   onMenuButton?: () => void;
   onNotifications: () => void;
   onMenu: () => void;
 };
 
-export function AppHeader({ title, subtitle, compactBrand = true, initials, unreadNotifications = 0, onMenuButton, onNotifications, onMenu }: HeaderProps) {
+export function AppHeader({ title, subtitle, compactBrand = true, initials, unreadNotifications = 0, variant = "default", onBack, onMenuButton, onNotifications, onMenu }: HeaderProps) {
+  if (variant === "ai") {
+    return (
+      <header className="sticky top-0 z-30 h-[72px] bg-[#050807]/82 px-4 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
+        <div className="mx-auto flex h-[72px] max-w-[420px] items-center justify-between gap-3 lg:max-w-6xl">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button onClick={onBack} className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full border border-white/[.1] bg-white/[.045] text-white shadow-[0_0_24px_rgba(24,255,138,.12),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Back">
+              <ArrowLeft size={20} />
+            </button>
+            <img src="/logo.png" alt="VOLTIX" className="block h-[35px] w-auto max-w-none object-contain opacity-100 mix-blend-normal filter-none transform-none" />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button onClick={onNotifications} className="relative grid h-[42px] w-[42px] place-items-center rounded-full border border-white/[.1] bg-white/[.045] text-slate-200 shadow-[0_0_24px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Notifications">
+              <Bell size={19} />
+              <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border border-[#050807] bg-[#18ff8a] shadow-[0_0_10px_rgba(24,255,138,.7)]" />
+              {unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#18ff8a] px-1 text-[10px] font-black text-[#050608]">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}
+            </button>
+            <button onClick={onMenuButton ?? onMenu} className="grid h-[46px] w-[46px] shrink-0 place-items-center rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[13px] font-black text-[#18ff8a] shadow-[0_0_28px_rgba(24,255,138,.18),inset_0_1px_0_rgba(255,255,255,.1)]" aria-label="Open profile menu">
+              {initials}
+            </button>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-30 h-[72px] bg-[#060a08]/72 px-5 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
       <div className="mx-auto flex h-[72px] max-w-[420px] items-center justify-between gap-3 lg:max-w-6xl">
