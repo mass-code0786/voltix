@@ -493,7 +493,7 @@ function VipProgressCard({currentVip,nextVip,progress}:{currentVip:string;nextVi
         </div>
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/40">
-        <div className="h-full rounded-full bg-gradient-to-r from-[#18ff8a] to-[#d8ff62] shadow-[0_0_16px_rgba(24,255,138,.42)]" style={{width:`${progress}%`}}/>
+        <div className="h-full rounded-full bg-gradient-to-r from-[#18ff8a] to-[#00c96b] shadow-[0_0_16px_rgba(24,255,138,.42)]" style={{width:`${progress}%`}}/>
       </div>
       <p className="mt-2 text-center text-[11px] font-bold text-slate-500">— / — VIP Points</p>
     </div>

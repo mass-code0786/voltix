@@ -162,7 +162,7 @@ export function StatusBadge({ children, tone = "live" }: { children: ReactNode; 
 export function ActionTile({ icon: Icon, label, onClick }: { icon: IconType; label: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="group flex min-h-[74px] flex-col items-center justify-center gap-2 rounded-2xl border border-white/[.06] bg-white/[.045] px-2 py-3 text-center text-xs font-bold text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,.06)] transition hover:border-lime/25 hover:bg-lime/[.07]">
-      <span className="grid h-9 w-9 place-items-center rounded-2xl bg-lime/10 text-lime transition group-hover:shadow-[0_0_20px_rgba(184,242,59,.18)]"><Icon size={18} /></span>
+      <span className="grid h-9 w-9 place-items-center rounded-2xl bg-lime/10 text-lime transition group-hover:shadow-[0_0_20px_rgba(24,255,138,.35)]"><Icon size={18} /></span>
       <span className="leading-tight">{label}</span>
     </button>
   );
