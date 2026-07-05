@@ -583,9 +583,9 @@ button { -webkit-tap-highlight-color: transparent; }
 .profile-hero-card {
   position: relative;
   overflow: hidden;
-  min-height: 198px;
+  height: 202px;
   border-radius: 22px;
-  padding: 14px;
+  padding: 13px 13px 11px;
 }
 
 .profile-hero-card::before {
@@ -617,8 +617,8 @@ button { -webkit-tap-highlight-color: transparent; }
 .profile-avatar {
   position: relative;
   display: grid;
-  height: 86px;
-  width: 86px;
+  height: 82px;
+  width: 82px;
   flex-shrink: 0;
   place-items: center;
   border-radius: 999px;
@@ -627,12 +627,42 @@ button { -webkit-tap-highlight-color: transparent; }
     radial-gradient(circle at 35% 24%, rgba(255,255,255,.22), transparent 28%),
     linear-gradient(145deg, rgba(24,255,138,.16), rgba(5,12,10,.92));
   color: #18ff8a;
-  font-size: 27px;
+  font-size: 26px;
   font-weight: 900;
   box-shadow:
     0 0 34px rgba(24,255,138,.22),
     inset 0 1px 0 rgba(255,255,255,.18),
     inset 0 -18px 28px rgba(0,0,0,.24);
+}
+
+.profile-hero-main {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  height: 126px;
+  grid-template-columns: 82px minmax(0, 1fr) 102px;
+  align-items: center;
+  gap: 9px;
+}
+
+.profile-identity {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  margin-right: -12px;
+}
+
+.profile-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.08;
 }
 
 .profile-camera {
@@ -667,16 +697,45 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .profile-v-svg {
+  position: relative;
+  z-index: 1;
+  justify-self: end;
   filter: drop-shadow(0 0 20px rgba(24,255,138,.25));
-  animation: market-float 5.2s ease-in-out infinite;
 }
 
 .profile-v-pulse {
   animation: market-pulse 2.6s ease-in-out infinite;
 }
 
-.profile-orbit-dot {
-  animation: market-pulse 1.8s ease-in-out infinite;
+.profile-v-float {
+  animation: profile-v-float 5.8s ease-in-out infinite;
+  transform-origin: 57.5px 54px;
+}
+
+.profile-v-ring {
+  animation: profile-v-ring 9s linear infinite;
+  transform-origin: 57.5px 88px;
+}
+
+.profile-v-ring-slow {
+  animation: profile-v-ring 13s linear infinite reverse;
+  transform-origin: 57.5px 88px;
+}
+
+.profile-v-particle {
+  animation: profile-v-particle 3.6s ease-in-out infinite;
+}
+
+.profile-v-particle:nth-of-type(2) {
+  animation-delay: .7s;
+}
+
+.profile-v-particle:nth-of-type(3) {
+  animation-delay: 1.4s;
+}
+
+.profile-v-particle:nth-of-type(4) {
+  animation-delay: 2.1s;
 }
 
 .profile-hero-stats {
@@ -684,9 +743,9 @@ button { -webkit-tap-highlight-color: transparent; }
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: 8px;
+  margin-top: 5px;
   border-top: 1px solid rgba(255,255,255,.07);
-  padding-top: 9px;
+  padding-top: 8px;
 }
 
 .profile-stat {
@@ -710,7 +769,7 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .profile-stat strong {
-  margin-top: 3px;
+  margin-top: 2px;
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -733,12 +792,12 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .profile-row {
   display: flex;
-  min-height: 60px;
+  min-height: 58px;
   width: 100%;
   align-items: center;
   gap: 11px;
   border-bottom: 1px solid rgba(255,255,255,.065);
-  padding: 10px 12px;
+  padding: 9px 12px;
   transition: background .2s ease, transform .2s ease;
 }
 
@@ -752,8 +811,8 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .profile-row-icon {
   display: grid;
-  height: 40px;
-  width: 40px;
+  height: 38px;
+  width: 38px;
   flex-shrink: 0;
   place-items: center;
   border-radius: 15px;
@@ -806,7 +865,14 @@ button { -webkit-tap-highlight-color: transparent; }
 
 @media (max-width: 374px) {
   .profile-hero-card {
+    height: 198px;
     padding: 12px;
+  }
+
+  .profile-hero-main {
+    height: 122px;
+    grid-template-columns: 76px minmax(0, 1fr) 88px;
+    gap: 7px;
   }
 
   .profile-avatar {
@@ -815,14 +881,33 @@ button { -webkit-tap-highlight-color: transparent; }
     font-size: 23px;
   }
 
+  .profile-name {
+    font-size: 20px;
+  }
+
   .profile-v-svg {
-    width: 92px;
-    height: 92px;
+    width: 94px;
+    height: 94px;
   }
 
   .profile-stat strong {
     font-size: 14px;
   }
+}
+
+@keyframes profile-v-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes profile-v-ring {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes profile-v-particle {
+  0%, 100% { opacity: .22; transform: scale(.92); }
+  50% { opacity: .82; transform: scale(1.08); }
 }
 
 @keyframes market-grid-drift {

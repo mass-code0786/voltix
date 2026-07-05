@@ -297,7 +297,7 @@ export default function ProfilePage() {
         onMenu={() => router.push("/")}
         onMenuButton={() => router.push("/")}
       />
-      <div className="mx-auto w-full max-w-[420px] px-4 pb-28 pt-1 lg:max-w-3xl">
+      <div className="mx-auto w-full max-w-[420px] px-4 pb-40 pt-1 lg:max-w-3xl">
         {loading ? (
           <div className="profile-glass mt-1 rounded-[22px] p-5 text-sm text-slate-400">Loading profile...</div>
         ) : profile ? (
@@ -315,8 +315,7 @@ export default function ProfilePage() {
 
             <VipProgressCard currentVip={currentVip} nextVip={nextVip} progress={vipProgress} />
 
-            <section className="space-y-2">
-              <h2 className="px-1 text-[18px] font-black text-white">Account</h2>
+            <section>
               <div className="profile-menu-card">
                 <ProfileRow icon={UserRound} tone="green" title="Account Information" subtitle="Name, email, country and profile details" onClick={() => setActivePanel(activePanel === "account" ? null : "account")} />
                 <ProfileRow icon={ShieldCheck} tone="green" title="KYC Verification" subtitle="Identity verification status" pill={kycLabel(profile.kycStatus)} pillTone={profile.kycStatus === "APPROVED" ? "green" : "muted"} onClick={() => router.push("/?view=home")} />
@@ -376,29 +375,25 @@ export default function ProfilePage() {
 function ProfileHero({profile,initialsText,kycTone,totalBalance,totalIncome,referralIncome,teamSize,copyUid}:{profile:Profile;initialsText:string;kycTone:string;totalBalance:number;totalIncome:number;referralIncome:number;teamSize:number;copyUid:()=>void}) {
   return (
     <section className="profile-hero-card">
-      <div className="relative z-10 flex h-[130px] gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            <div className="profile-avatar">
-              <span>{initialsText}</span>
-              <span className="profile-camera"><Camera size={13}/></span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <h1 className="truncate text-[22px] font-black leading-tight text-white">{profile.fullName || "—"}</h1>
-                {profile.kycStatus === "APPROVED" && <CheckCircle2 size={17} className="shrink-0 text-[#18ff8a] drop-shadow-[0_0_10px_rgba(24,255,138,.55)]"/>}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <span className="profile-vip-pill">{profile.vipRank || "—"}</span>
-                <span className={`profile-status-pill ${kycTone}`}>KYC {kycLabel(profile.kycStatus)}</span>
-              </div>
-              <button onClick={copyUid} className="mt-1 flex max-w-full items-center gap-1.5 text-[11px] font-bold text-slate-400">
-                <span className="truncate">UID {profile.uid || "—"}</span><Copy size={12} className="shrink-0 text-[#18ff8a]"/>
-              </button>
-              <p className="mt-0.5 truncate text-[11px] text-slate-500">{profile.email || "—"}</p>
-              {profile.phone&&<p className="mt-0.5 truncate text-[11px] text-slate-500">{profile.phone}</p>}
-            </div>
+      <div className="profile-hero-main">
+        <div className="profile-avatar">
+          <span>{initialsText}</span>
+          <span className="profile-camera"><Camera size={13}/></span>
+        </div>
+        <div className="profile-identity">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <h1 className="profile-name">{profile.fullName || "—"}</h1>
+            {profile.kycStatus === "APPROVED" && <CheckCircle2 size={16} className="shrink-0 text-[#18ff8a] drop-shadow-[0_0_10px_rgba(24,255,138,.55)]"/>}
           </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className="profile-vip-pill">{profile.vipRank || "—"}</span>
+            <span className={`profile-status-pill ${kycTone}`}>KYC {kycLabel(profile.kycStatus)}</span>
+          </div>
+          <button onClick={copyUid} className="mt-1 flex max-w-full items-center gap-1.5 text-[11px] font-bold text-slate-400">
+            <span className="truncate">UID {profile.uid || "—"}</span><Copy size={12} className="shrink-0 text-[#18ff8a]"/>
+          </button>
+          <p className="mt-0.5 truncate text-[11px] text-slate-500">{profile.email || "—"}</p>
+          {profile.phone&&<p className="mt-0.5 truncate text-[11px] text-slate-500">{profile.phone}</p>}
         </div>
         <VoltixVMark/>
       </div>
@@ -413,23 +408,66 @@ function ProfileHero({profile,initialsText,kycTone,totalBalance,totalIncome,refe
 }
 
 function VoltixVMark() {
-  return <svg width="110" height="110" viewBox="0 0 110 110" className="profile-v-svg shrink-0" aria-hidden="true">
+  return <svg width="110" height="110" viewBox="0 0 115 115" className="profile-v-svg shrink-0" fill="none" aria-hidden="true">
     <defs>
-      <linearGradient id="profileV" x1="22" y1="10" x2="88" y2="98">
-        <stop stopColor="#f4fff9"/>
-        <stop offset=".38" stopColor="#18ff8a"/>
-        <stop offset="1" stopColor="#047a49"/>
+      <linearGradient id="profileVoltixVFront" x1="32" y1="23" x2="75" y2="78" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#9CFFD9" />
+        <stop offset=".48" stopColor="#1EFF88" />
+        <stop offset="1" stopColor="#00B86B" />
       </linearGradient>
-      <radialGradient id="profileVGlow" cx="50%" cy="50%" r="50%">
-        <stop stopColor="#18ff8a" stopOpacity=".55"/>
-        <stop offset="1" stopColor="#18ff8a" stopOpacity="0"/>
+      <linearGradient id="profileVoltixVHighlight" x1="34" y1="25" x2="48" y2="74" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#F3FFF9" stopOpacity=".95" />
+        <stop offset=".55" stopColor="#9CFFD9" stopOpacity=".62" />
+        <stop offset="1" stopColor="#1EFF88" stopOpacity=".08" />
+      </linearGradient>
+      <linearGradient id="profileVoltixGlass" x1="42" y1="30" x2="73" y2="67" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#FFFFFF" stopOpacity=".7" />
+        <stop offset=".45" stopColor="#CFFFF0" stopOpacity=".16" />
+        <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+      </linearGradient>
+      <radialGradient id="profileVoltixPlatformGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(58 91) rotate(90) scale(17 42)">
+        <stop stopColor="#1EFF88" stopOpacity=".42" />
+        <stop offset=".62" stopColor="#00B86B" stopOpacity=".14" />
+        <stop offset="1" stopColor="#00B86B" stopOpacity="0" />
       </radialGradient>
+      <filter id="profileVoltixSoftGlow" x="11" y="8" width="93" height="88" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+        <feGaussianBlur stdDeviation="3.4" result="blur" />
+        <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.117 0 0 0 0 1 0 0 0 0 0.533 0 0 0 .78 0" />
+        <feBlend in="SourceGraphic" mode="screen" />
+      </filter>
+      <filter id="profileVoltixPlatformBlur" x="10" y="72" width="96" height="37" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+        <feGaussianBlur stdDeviation="3.2" />
+      </filter>
     </defs>
-    <ellipse cx="55" cy="83" rx="38" ry="13" fill="url(#profileVGlow)" className="profile-v-pulse"/>
-    <path d="M24 22 L43 22 L55 64 L68 22 L87 22 L63 82 L47 82 Z" fill="url(#profileV)" stroke="#eafff4" strokeOpacity=".34" strokeWidth="1.2"/>
-    <path d="M33 28 L45 28 L55 63 L66 28 L78 28" fill="none" stroke="#06120d" strokeOpacity=".42" strokeWidth="3"/>
-    <ellipse cx="55" cy="86" rx="32" ry="8" fill="none" stroke="#18ff8a" strokeOpacity=".38"/>
-    <circle cx="88" cy="36" r="3" fill="#18ff8a" className="profile-orbit-dot"/>
+    <g className="profile-v-pulse" filter="url(#profileVoltixPlatformBlur)">
+      <ellipse cx="58" cy="92" rx="38" ry="10" fill="url(#profileVoltixPlatformGlow)" />
+    </g>
+    <g>
+      <ellipse cx="58" cy="88" rx="34" ry="10" fill="#06110D" stroke="#0D5E40" strokeOpacity=".7" />
+      <g className="profile-v-ring"><ellipse cx="58" cy="88" rx="42" ry="12" stroke="#1EFF88" strokeOpacity=".5" strokeWidth="1.3" strokeDasharray="24 15" /></g>
+      <g className="profile-v-ring-slow"><ellipse cx="58" cy="88" rx="31" ry="8" stroke="#9CFFD9" strokeOpacity=".42" strokeWidth="1" strokeDasharray="12 11" /></g>
+      <ellipse cx="58" cy="88" rx="23" ry="5.8" stroke="#00B86B" strokeOpacity=".55" strokeWidth="1.1" />
+      <ellipse cx="58" cy="88" rx="15" ry="3.8" fill="#020806" stroke="#123E2F" />
+    </g>
+    <g className="profile-v-pulse" opacity=".9" filter="url(#profileVoltixSoftGlow)">
+      <path d="M30 22L52 76L58 88L64 76L85 22L71 22L58 58L45 22H30Z" fill="#1EFF88" opacity=".32" />
+    </g>
+    <g className="profile-v-float">
+      <path d="M43 25H29L52 79L58 91L64 79L86 25H72L58 62L43 25Z" fill="url(#profileVoltixVFront)" />
+      <path d="M72 25H86L64 79L58 91L58 62L72 25Z" fill="#006B43" opacity=".92" />
+      <path d="M43 25H29L52 79L58 91L58 62L43 25Z" fill="url(#profileVoltixVFront)" />
+      <path d="M35 28L53.5 72.5L57.8 81.3L61.4 73L75.7 28" stroke="#F4FFF9" strokeOpacity=".64" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M40 30L54 65L58 72L62 65L76 30H71L58 61L45 30H40Z" fill="url(#profileVoltixGlass)" opacity=".78" />
+      <path d="M58 62L72 25H78L61 69L58 75V62Z" fill="#003B2A" opacity=".35" />
+      <path d="M29 25L43 25L58 62V71L50 57L34 25H29Z" fill="url(#profileVoltixVHighlight)" opacity=".72" />
+      <path d="M43 25H29L52 79L58 91L64 79L86 25H72L58 62L43 25Z" stroke="#9CFFD9" strokeOpacity=".34" strokeWidth="1" strokeLinejoin="round" />
+    </g>
+    <g fill="#9CFFD9">
+      <circle className="profile-v-particle" cx="23" cy="45" r="1.4" opacity=".38" />
+      <circle className="profile-v-particle" cx="91" cy="47" r="1.2" opacity=".32" />
+      <circle className="profile-v-particle" cx="82" cy="73" r="1" opacity=".3" />
+      <circle className="profile-v-particle" cx="35" cy="78" r="1.1" opacity=".26" />
+    </g>
   </svg>;
 }
 
@@ -444,14 +482,20 @@ function VipProgressCard({currentVip,nextVip,progress}:{currentVip:string;nextVi
   return <section className="profile-glass flex h-[108px] items-center gap-3 rounded-[22px] p-3.5">
     <VipHex/>
     <div className="min-w-0 flex-1">
-      <div className="flex items-center gap-2">
-        <p className="text-[15px] font-black text-white">{currentVip}</p>
-        <span className="text-[11px] font-bold text-slate-500">Next {nextVip}</span>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <p className="text-[15px] font-black text-white">{currentVip}</p>
+          <p className="text-[10px] font-bold text-slate-500">Current Level</p>
+        </div>
+        <div>
+          <p className="text-[15px] font-black text-white">{nextVip}</p>
+          <p className="text-[10px] font-bold text-slate-500">Next Level</p>
+        </div>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/40">
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/40">
         <div className="h-full rounded-full bg-gradient-to-r from-[#18ff8a] to-[#d8ff62] shadow-[0_0_16px_rgba(24,255,138,.42)]" style={{width:`${progress}%`}}/>
       </div>
-      <p className="mt-2 text-[11px] font-bold text-slate-500">— / — VIP Points</p>
+      <p className="mt-2 text-center text-[11px] font-bold text-slate-500">— / — VIP Points</p>
     </div>
     <div className="text-right">
       <p className="text-[18px] font-black text-[#18ff8a]">{progress}%</p>
