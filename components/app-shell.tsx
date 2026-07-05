@@ -905,7 +905,115 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
 }
 
 function VoltixHeroLogo() {
-  return <img src="/logo.png" alt="" className="block h-[48px] w-auto object-contain opacity-100 mix-blend-normal filter-none transform-none" />;
+  return <svg
+    aria-hidden="true"
+    className="block h-[115px] w-[115px] shrink-0"
+    viewBox="0 0 115 115"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <style>{`
+      .voltix-v-float { animation: voltix-v-float 5.8s ease-in-out infinite; transform-origin: 57.5px 54px; }
+      .voltix-ring-orbit { animation: voltix-ring-orbit 9s linear infinite; transform-origin: 57.5px 88px; }
+      .voltix-ring-orbit-slow { animation: voltix-ring-orbit 13s linear infinite reverse; transform-origin: 57.5px 88px; }
+      .voltix-glow-pulse { animation: voltix-glow-pulse 4.8s ease-in-out infinite; }
+      .voltix-particle { animation: voltix-particle 3.6s ease-in-out infinite; }
+      .voltix-particle:nth-of-type(2) { animation-delay: .7s; }
+      .voltix-particle:nth-of-type(3) { animation-delay: 1.4s; }
+      .voltix-particle:nth-of-type(4) { animation-delay: 2.1s; }
+      @keyframes voltix-v-float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-3px); }
+      }
+      @keyframes voltix-ring-orbit {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes voltix-glow-pulse {
+        0%, 100% { opacity: .72; }
+        50% { opacity: .94; }
+      }
+      @keyframes voltix-particle {
+        0%, 100% { opacity: .22; transform: scale(.92); }
+        50% { opacity: .82; transform: scale(1.08); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .voltix-v-float,
+        .voltix-ring-orbit,
+        .voltix-ring-orbit-slow,
+        .voltix-glow-pulse,
+        .voltix-particle { animation: none; }
+      }
+    `}</style>
+    <defs>
+      <linearGradient id="voltixVFront" x1="32" y1="23" x2="75" y2="78" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#9CFFD9" />
+        <stop offset=".48" stopColor="#1EFF88" />
+        <stop offset="1" stopColor="#00B86B" />
+      </linearGradient>
+      <linearGradient id="voltixVHighlight" x1="34" y1="25" x2="48" y2="74" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#F3FFF9" stopOpacity=".95" />
+        <stop offset=".55" stopColor="#9CFFD9" stopOpacity=".62" />
+        <stop offset="1" stopColor="#1EFF88" stopOpacity=".08" />
+      </linearGradient>
+      <linearGradient id="voltixGlass" x1="42" y1="30" x2="73" y2="67" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#FFFFFF" stopOpacity=".7" />
+        <stop offset=".45" stopColor="#CFFFF0" stopOpacity=".16" />
+        <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+      </linearGradient>
+      <radialGradient id="voltixPlatformGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(58 91) rotate(90) scale(17 42)">
+        <stop stopColor="#1EFF88" stopOpacity=".42" />
+        <stop offset=".62" stopColor="#00B86B" stopOpacity=".14" />
+        <stop offset="1" stopColor="#00B86B" stopOpacity="0" />
+      </radialGradient>
+      <filter id="voltixSoftGlow" x="11" y="8" width="93" height="88" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+        <feGaussianBlur stdDeviation="3.4" result="blur" />
+        <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.117 0 0 0 0 1 0 0 0 0 0.533 0 0 0 .78 0" />
+        <feBlend in="SourceGraphic" mode="screen" />
+      </filter>
+      <filter id="voltixPlatformBlur" x="10" y="72" width="96" height="37" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+        <feGaussianBlur stdDeviation="3.2" />
+      </filter>
+    </defs>
+
+    <g className="voltix-glow-pulse" filter="url(#voltixPlatformBlur)">
+      <ellipse cx="58" cy="92" rx="38" ry="10" fill="url(#voltixPlatformGlow)" />
+    </g>
+
+    <g>
+      <ellipse cx="58" cy="88" rx="34" ry="10" fill="#06110D" stroke="#0D5E40" strokeOpacity=".7" />
+      <g className="voltix-ring-orbit">
+        <ellipse cx="58" cy="88" rx="42" ry="12" stroke="#1EFF88" strokeOpacity=".5" strokeWidth="1.3" strokeDasharray="24 15" />
+      </g>
+      <g className="voltix-ring-orbit-slow">
+        <ellipse cx="58" cy="88" rx="31" ry="8" stroke="#9CFFD9" strokeOpacity=".42" strokeWidth="1" strokeDasharray="12 11" />
+      </g>
+      <ellipse cx="58" cy="88" rx="23" ry="5.8" stroke="#00B86B" strokeOpacity=".55" strokeWidth="1.1" />
+      <ellipse cx="58" cy="88" rx="15" ry="3.8" fill="#020806" stroke="#123E2F" />
+    </g>
+
+    <g className="voltix-glow-pulse" opacity=".9" filter="url(#voltixSoftGlow)">
+      <path d="M30 22L52 76L58 88L64 76L85 22L71 22L58 58L45 22H30Z" fill="#1EFF88" opacity=".32" />
+    </g>
+
+    <g className="voltix-v-float">
+      <path d="M43 25H29L52 79L58 91L64 79L86 25H72L58 62L43 25Z" fill="url(#voltixVFront)" />
+      <path d="M72 25H86L64 79L58 91L58 62L72 25Z" fill="#006B43" opacity=".92" />
+      <path d="M43 25H29L52 79L58 91L58 62L43 25Z" fill="url(#voltixVFront)" />
+      <path d="M35 28L53.5 72.5L57.8 81.3L61.4 73L75.7 28" stroke="#F4FFF9" strokeOpacity=".64" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M40 30L54 65L58 72L62 65L76 30H71L58 61L45 30H40Z" fill="url(#voltixGlass)" opacity=".78" />
+      <path d="M58 62L72 25H78L61 69L58 75V62Z" fill="#003B2A" opacity=".35" />
+      <path d="M29 25L43 25L58 62V71L50 57L34 25H29Z" fill="url(#voltixVHighlight)" opacity=".72" />
+      <path d="M43 25H29L52 79L58 91L64 79L86 25H72L58 62L43 25Z" stroke="#9CFFD9" strokeOpacity=".34" strokeWidth="1" strokeLinejoin="round" />
+    </g>
+
+    <g fill="#9CFFD9">
+      <circle className="voltix-particle" cx="23" cy="45" r="1.4" opacity=".38" />
+      <circle className="voltix-particle" cx="91" cy="47" r="1.2" opacity=".32" />
+      <circle className="voltix-particle" cx="82" cy="73" r="1" opacity=".3" />
+      <circle className="voltix-particle" cx="35" cy="78" r="1.1" opacity=".26" />
+    </g>
+  </svg>;
 }
 
 function HomeActionTile({ icon: Icon, label, onClick }: { icon: typeof Home; label: string; onClick: () => void }) {
