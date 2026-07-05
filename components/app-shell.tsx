@@ -1654,7 +1654,7 @@ function AiVipRow({row,loading,start}:{row:VipTradeRow;loading:boolean;start:()=
     <div className="flex min-w-0 items-center gap-1.5">
       <AiVipBadge accent={accent}/>
       <div className="min-w-0">
-        <p className="ai-vip-title">{label}</p>
+        <p className={`ai-vip-title ${label.length>18?"ai-vip-title-long":""}`}>{label}</p>
       </div>
     </div>
     <div className="min-w-0 flex-1">
@@ -1671,10 +1671,10 @@ function AiVipRow({row,loading,start}:{row:VipTradeRow;loading:boolean;start:()=
 
 function displayVipLabel(label:string) {
   const clean=label.replace(/\s+/g," ").trim();
-  if (/7/.test(clean) && /10/.test(clean)) return "VIP 7 - 10";
-  if (/5/.test(clean) && /6/.test(clean)) return "VIP 5 - 6";
-  if (/3/.test(clean) && /4/.test(clean)) return "VIP 3 - 4";
-  if (/1/.test(clean) && /2/.test(clean)) return "VIP 1 - 2";
+  if (/7/.test(clean) && /10/.test(clean)) return "VIP 7 / VIP 8 / VIP 9 / VIP 10";
+  if (/5/.test(clean) && /6/.test(clean)) return "VIP 5 / VIP 6";
+  if (/3/.test(clean) && /4/.test(clean)) return "VIP 3 / VIP 4";
+  if (/1/.test(clean) && /2/.test(clean)) return "VIP 1 / VIP 2";
   if (/0/.test(clean)) return "VIP 0";
   return clean;
 }
