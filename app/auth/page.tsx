@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { BrandLogo } from "@/components/brand-logo";
 import { SearchableSelect } from "@/components/searchable-select";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 
@@ -87,7 +86,7 @@ export default function AuthPage() {
         </header>
 
         <section className="mt-6">
-          <BrandLogo compact />
+          <img src="/logo.png" alt="VOLTIX" className="block h-[28px] w-auto object-contain opacity-100 mix-blend-normal filter-none transform-none" />
           <h1 className="mt-8 text-4xl font-black tracking-tight">{isRegister ? "Register" : "Login"}</h1>
           <div className="mt-7 grid grid-cols-2 rounded-2xl border border-line bg-panel p-1">
             <button onClick={() => switchMode("login")} className={`rounded-xl py-2.5 text-sm font-black transition ${!isRegister ? "bg-lime text-ink" : "text-slate-500"}`}>Login</button>

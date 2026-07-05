@@ -13,7 +13,6 @@ import { CoinMark } from "./coin-mark";
 import { Sparkline } from "./sparkline";
 import { CandlestickChart } from "./candlestick-chart";
 import { OrderBookPanel } from "./order-book";
-import { BrandLogo } from "./brand-logo";
 import {
   ActionTile,
   AppHeader,
@@ -780,7 +779,7 @@ export default function AppShell() {
 }
 
 function Brand({ compact = false }: { compact?: boolean }) {
-  return <BrandLogo compact={compact} />;
+  return <img src="/logo.png" alt="VOLTIX" className={`${compact ? "h-[28px]" : "h-[34px]"} block w-auto object-contain opacity-100 mix-blend-normal filter-none transform-none`} />;
 }
 
 function initials(name?: string | null) {

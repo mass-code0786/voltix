@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { BrandLogo } from "@/components/brand-logo";
 import { SearchableSelect } from "@/components/searchable-select";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 
@@ -177,7 +176,7 @@ export default function ProfilePage() {
           <button onClick={() => router.back()} className="grid h-10 w-10 place-items-center rounded-full border border-line bg-panel text-slate-200" aria-label="Go back">
             <ArrowLeft size={18} />
           </button>
-          <BrandLogo />
+          <img src="/logo.png" alt="VOLTIX" className="block h-[34px] w-auto object-contain opacity-100 mix-blend-normal filter-none transform-none" />
           <div className="h-10 w-10" />
         </header>
 
