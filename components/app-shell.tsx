@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowDownLeft, ArrowDownToLine, ArrowLeftRight, ArrowUpRight, BarChart3, Bell,
   Bot, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Copy, Eye, FileClock, Gift, Grid2X2,
-  Headphones, Home, Landmark, LineChart, Menu, Network, Plus, QrCode, Search,
+  Headphones, Home, Landmark, LineChart, Menu, Network, Plus, QrCode, Search, SlidersHorizontal,
   Send, Settings, Share2, ShieldCheck, Star,
   Trophy, Users, Wallet, X, Zap,
 } from "lucide-react";
@@ -765,7 +765,7 @@ export default function AppShell() {
           />
           {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
-          <div className={`mx-auto max-w-[420px] px-4 lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "bitex" ? "pb-36 pt-1 lg:py-8" : tab === "wallet" ? "pb-44 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
+          <div className={`mx-auto max-w-[420px] px-4 lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "bitex" || tab === "markets" ? "pb-36 pt-1 lg:py-8" : tab === "wallet" ? "pb-44 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
         </main>
       </div>
 
@@ -1325,61 +1325,182 @@ function CategoryChips() {
   </section>;
 }
 
+function MarketsHeroVisual() {
+  return <svg viewBox="0 0 180 136" className="markets-ref-hero-svg" aria-hidden="true">
+    <defs>
+      <radialGradient id="marketsHeroGlow" cx="50%" cy="50%" r="58%"><stop stopColor="#18ff8a" stopOpacity=".48"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></radialGradient>
+      <linearGradient id="marketsHeroV" x1="59" y1="29" x2="106" y2="88"><stop stopColor="#f7fff9"/><stop offset=".45" stopColor="#18ff8a"/><stop offset="1" stopColor="#036c44"/></linearGradient>
+      <linearGradient id="marketsHeroEth" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#dfe9ff"/><stop offset="1" stopColor="#6f86ff"/></linearGradient>
+      <filter id="marketsHeroBlur" x="0" y="0" width="180" height="136"><feGaussianBlur stdDeviation="4"/></filter>
+    </defs>
+    <g opacity=".35">
+      <path d="M12 108H168M28 94H152M42 80H138" stroke="#18ff8a" strokeOpacity=".18"/>
+      <path d="M42 116L86 66L136 116M62 116L96 74L152 116" fill="none" stroke="#18ff8a" strokeOpacity=".13"/>
+    </g>
+    <g opacity=".55">{[0,1,2,3,4].map(i=><rect key={i} x={118+i*8} y={72-i*8} width="5" height={28+i*7} rx="2" fill="#18ff8a" opacity={.32+i*.1}/>)}</g>
+    <ellipse cx="88" cy="105" rx="60" ry="19" fill="url(#marketsHeroGlow)" filter="url(#marketsHeroBlur)" className="markets-ref-pulse"/>
+    <ellipse cx="88" cy="101" rx="58" ry="15" fill="#06110d" stroke="#18ff8a" strokeOpacity=".38" strokeDasharray="26 13" className="markets-ref-orbit"/>
+    <ellipse cx="88" cy="101" rx="38" ry="9" fill="#020806" stroke="#0d5e40"/>
+    <g className="markets-ref-float">
+      <circle cx="86" cy="59" r="34" fill="rgba(24,255,138,.1)" stroke="#18ff8a" strokeOpacity=".36"/>
+      <path d="M70 38H60L79 82L86 95L93 82L112 38H101L86 72L70 38Z" fill="url(#marketsHeroV)" stroke="#eafff4" strokeOpacity=".3"/>
+      <path d="M101 38H112L93 82L86 95V72L101 38Z" fill="#006b43" opacity=".9"/>
+      <path d="M70 38H60L79 82L86 95V72L70 38Z" fill="#9cffd9" opacity=".25"/>
+    </g>
+    <g className="markets-ref-coin-a">
+      <circle cx="43" cy="44" r="17" fill="#f7931a" stroke="#ffd38c" strokeOpacity=".8"/>
+      <text x="43" y="50" textAnchor="middle" fill="#fff7df" fontSize="18" fontWeight="900">B</text>
+    </g>
+    <g className="markets-ref-coin-b">
+      <circle cx="140" cy="39" r="16" fill="#121827" stroke="#7f95ff" strokeOpacity=".85"/>
+      <path d="M140 23l10 17-10 6-10-6 10-17Z" fill="url(#marketsHeroEth)"/>
+      <path d="M130 43l10 6 10-6-10 13-10-13Z" fill="#8fa0ff" opacity=".75"/>
+    </g>
+    <path d="M30 77c18-21 34 6 49-8s25-13 43-31" fill="none" stroke="#18ff8a" strokeWidth="2" strokeLinecap="round" className="markets-ref-line"/>
+    {[22,54,132,151,116,69].map((x,i)=><circle key={x} cx={x} cy={26+(i*17)%66} r="1.5" fill="#b8ffe0" opacity=".65" className="markets-ref-particle"/>)}
+  </svg>;
+}
+
+function MarketCoinLogo({coin}:{coin:MarketCoin}) {
+  const [failed,setFailed]=useState(false);
+  useEffect(()=>setFailed(false),[coin.localLogoPath]);
+  if (coin.localLogoPath && !failed) {
+    return <span className="markets-ref-logo"><img src={coin.localLogoPath} alt={`${coin.symbol} logo`} onError={()=>setFailed(true)}/></span>;
+  }
+  return <span className="markets-ref-logo"><MarketCoinFallback symbol={coin.symbol} color={coin.color}/></span>;
+}
+
+function MarketCoinFallback({symbol,color}:{symbol:string;color:string}) {
+  const id=`marketLogo${symbol.replace(/[^a-zA-Z0-9]/g,"")}`;
+  if (symbol==="BTC") return <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="21" fill="#f7931a"/><text x="21" y="28" textAnchor="middle" fill="#fff7df" fontSize="22" fontWeight="900">B</text></svg>;
+  if (symbol==="ETH") return <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="21" fill="#151a2f"/><path d="M21 6l11 16-11 6-11-6L21 6Z" fill="#dfe7ff"/><path d="M10 24l11 7 11-7-11 13-11-13Z" fill="#8292ff"/></svg>;
+  if (symbol==="BNB") return <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="21" fill="#f3ba2f"/><path d="M21 8l6 6-6 6-6-6 6-6Zm-9 9l6 6-6 6-6-6 6-6Zm18 0l6 6-6 6-6-6 6-6Zm-9 9l6 6-6 6-6-6 6-6Z" fill="#1d1600"/></svg>;
+  if (symbol==="SOL") return <svg viewBox="0 0 42 42"><defs><linearGradient id={`${id}Sol`} x1="6" y1="8" x2="36" y2="34"><stop stopColor="#00ffa3"/><stop offset=".55" stopColor="#dc1fff"/><stop offset="1" stopColor="#03e1ff"/></linearGradient></defs><circle cx="21" cy="21" r="21" fill="#111827"/><path d="M12 12h21l-4 5H8l4-5Zm-4 9h21l5 5H13l-5-5Zm4 9h21l-4 5H8l4-5Z" fill={`url(#${id}Sol)`}/></svg>;
+  if (symbol==="XRP") return <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="21" fill="#f8fafc"/><path d="M12 13h5l4 4 4-4h5l-6.5 6.4a3.6 3.6 0 0 1-5 0L12 13Zm18 16h-5l-4-4-4 4h-5l6.5-6.4a3.6 3.6 0 0 1 5 0L30 29Z" fill="#0f172a"/></svg>;
+  if (symbol==="ADA") return <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="21" fill="#1e5eff"/>{[0,1,2,3,4,5,6,7].map(i=><circle key={i} cx={21+Math.cos(i*.785)*10} cy={21+Math.sin(i*.785)*10} r="1.8" fill="#dbeafe"/>)}<circle cx="21" cy="21" r="3" fill="#fff"/></svg>;
+  if (symbol==="DOGE") return <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="21" fill="#c2a633"/><text x="21" y="28" textAnchor="middle" fill="#fff8cf" fontSize="22" fontWeight="900">D</text></svg>;
+  if (symbol==="MATIC" || symbol==="POL") return <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="21" fill="#8247e5"/><path d="M12 17l6-4 6 4v8l-6 4-6-4v-8Zm12 0l6-4 6 4v8l-6 4-6-4" fill="none" stroke="#f5f3ff" strokeWidth="2.4" strokeLinejoin="round"/></svg>;
+  return <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="21" fill={color}/><text x="21" y="26" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="900">{symbol.slice(0,3)}</text></svg>;
+}
+
+function MarketsMiniSpark({coin}:{coin:MarketCoin}) {
+  const positive=coin.change>=0;
+  const values=coin.spark?.length?coin.spark:[20,21,20,22,21,23,22,24,23];
+  const min=Math.min(...values);
+  const max=Math.max(...values);
+  const span=Math.max(max-min,1);
+  const points=values.map((value,index)=>`${((index/(values.length-1 || 1))*100).toFixed(1)},${(32-((value-min)/span)*26).toFixed(1)}`).join(" ");
+  const color=positive?"#18ff8a":"#ff4f6d";
+  return <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="markets-ref-chart" aria-hidden="true">
+    <path d={`M0 36 L ${points} L100 36 Z`} fill={color} opacity=".11"/>
+    <polyline points={points} fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="market-spark-line"/>
+  </svg>;
+}
+
+function MarketsTableRow({coin,localCurrency,onTrade}:{coin:MarketCoin;localCurrency:ReturnType<typeof currencyConfigForCountry>;onTrade:()=>void}) {
+  const positive=coin.change>=0;
+  const volume=Number(coin.quoteVolume ?? coin.volume ?? 0);
+  return <article className="markets-table-row">
+    <button onClick={onTrade} className="markets-coin-cell" aria-label={`Open ${coin.name} market`}>
+      <MarketCoinLogo coin={coin}/>
+      <span className="min-w-0">
+        <span className="markets-coin-name">{coin.name}</span>
+        <span className="markets-coin-symbol">{coin.symbol}</span>
+      </span>
+    </button>
+    <div className="markets-price-cell">
+      <strong>{formatMarketPrice(coin.price)}</strong>
+      <span>{coin.live?formatLocalCurrency(coin.price, localCurrency):"Live data"}</span>
+    </div>
+    <div className={`markets-change-pill ${positive?"markets-change-up":"markets-change-down"}`}>{coin.live?`${positive?"+":""}${coin.change.toFixed(2)}%`:"--"}</div>
+    <div className="markets-chart-cell"><MarketsMiniSpark coin={coin}/>{volume>0&&<span>${compact(volume)}</span>}</div>
+    <button onClick={onTrade} className="markets-star-button" aria-label={`Watch ${coin.symbol}`}><Star size={21}/></button>
+  </article>;
+}
+
+function MarketsPromoCard() {
+  return <section className="markets-promo-card">
+    <svg viewBox="0 0 96 94" className="markets-promo-svg" aria-hidden="true">
+      <defs>
+        <radialGradient id="marketsPromoGlow" cx="50%" cy="60%" r="58%"><stop stopColor="#18ff8a" stopOpacity=".4"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></radialGradient>
+      </defs>
+      <ellipse cx="48" cy="75" rx="38" ry="13" fill="url(#marketsPromoGlow)"/>
+      <rect x="28" y="14" width="38" height="62" rx="9" fill="#07110d" stroke="#18ff8a" strokeOpacity=".5"/>
+      <rect x="33" y="20" width="28" height="48" rx="5" fill="#020806"/>
+      <path d="M36 55c8-17 14 4 21-13" fill="none" stroke="#18ff8a" strokeWidth="2.2" strokeLinecap="round"/>
+      <rect x="37" y="28" width="4" height="16" rx="2" fill="#18ff8a" opacity=".45"/>
+      <rect x="45" y="34" width="4" height="10" rx="2" fill="#58d8ff" opacity=".5"/>
+      <rect x="53" y="25" width="4" height="19" rx="2" fill="#18ff8a" opacity=".65"/>
+      <circle cx="70" cy="30" r="9" fill="#f7931a" opacity=".95"/>
+      <circle cx="24" cy="39" r="7" fill="#6f86ff" opacity=".9"/>
+    </svg>
+    <div className="min-w-0 flex-1">
+      <h3>Track Smarter. Trade Better.</h3>
+      <p>Real-time data, advanced charts and deep market insights.</p>
+    </div>
+    <button type="button">Explore Charts <ArrowUpRight size={14}/></button>
+  </section>;
+}
+
 function MarketsScreen({coins:marketBase,userCountry}:{t: ReturnType<typeof getTranslator>; coins:AppCoin[];userCountry:string}) {
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("All");
+  const [category, setCategory] = useState("All Coins");
   const live=useLiveTickers();
   const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
   const localCurrency=useMemo(()=>currencyConfigForCountry(userCountry),[userCountry]);
-  const marketCoins=useMemo(()=>marketBase.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return {...coin,price:ticker?.price??0,change:ticker?.changePercent??0,volume:ticker?.volume,quoteVolume:ticker?.quoteVolume,live:Boolean(ticker?.price)};}),[marketBase,tickerMap]);
-  const list=marketCoins.filter(c => (filter === "Gainers" ? c.change > 2 : filter === "Losers" ? c.change < 0 : true) && `${c.symbol}${c.name}${c.pair}`.toLowerCase().includes(query.toLowerCase()));
-  const totalVolume=marketCoins.reduce((sum,coin)=>sum+Number(coin.quoteVolume ?? coin.volume ?? 0),0);
-  const btc=marketCoins.find(coin=>coin.symbol==="BTC");
-  const trending=marketCoins.filter(coin=>coin.symbol!=="USDT").sort((a,b)=>Math.abs(b.change)-Math.abs(a.change)).slice(0,8);
-  const gainers=marketCoins.filter(coin=>coin.change>0).sort((a,b)=>b.change-a.change).slice(0,5);
-  const losers=marketCoins.filter(coin=>coin.change<0).sort((a,b)=>a.change-b.change).slice(0,5);
-  const marketCap=btc?.price ? `$${((btc.price*19_720_000)/1_000_000_000_000).toFixed(2)}T` : "$2.74T";
+  const marketCoins=useMemo<MarketCoin[]>(()=>marketBase.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return {...coin,price:ticker?.price??0,change:ticker?.changePercent??0,volume:ticker?.volume,quoteVolume:ticker?.quoteVolume,live:Boolean(ticker?.price)};}),[marketBase,tickerMap]);
+  const preferredSymbols=["BTC","ETH","BNB","SOL","XRP","ADA","DOGE","MATIC","POL"];
+  const preferredCoins=preferredSymbols.reduce<MarketCoin[]>((rows,symbol)=>{const coin=marketCoins.find(item=>item.symbol===symbol); if(coin) rows.push(coin); return rows;},[]);
+  const baseCoins=preferredCoins.length?preferredCoins:marketCoins.filter(coin=>coin.symbol!=="USDT").slice(0,8);
+  const visibleCoins=useMemo(()=>{
+    const source=category==="Top Gainers"
+      ? [...marketCoins].filter(coin=>coin.change>0).sort((a,b)=>b.change-a.change).slice(0,8)
+      : category==="Top Losers"
+        ? [...marketCoins].filter(coin=>coin.change<0).sort((a,b)=>a.change-b.change).slice(0,8)
+        : category==="DeFi"
+          ? marketCoins.filter(coin=>["UNI","AAVE","COMP","CRV","MKR","INJ"].includes(coin.symbol)).slice(0,8)
+          : baseCoins;
+    return source.filter(coin=>`${coin.symbol}${coin.name}${coin.pair}`.toLowerCase().includes(query.trim().toLowerCase()));
+  },[baseCoins,category,marketCoins,query]);
   const openTrade=(coin:MarketCoin)=>{window.location.href=`/markets/${coin.pair}`;};
-  return <div className="market-page relative -mx-4 -mt-2.5 min-h-screen overflow-hidden px-4 pb-2 pt-1">
+  const chips=["Watchlist","All Coins","Top Gainers","Top Losers","DeFi"];
+  return <div className="markets-ref-page -mx-4 -mt-1 min-h-screen overflow-x-hidden px-4 pb-6">
     <MarketAtmosphere/>
     <div className="relative z-10 space-y-3">
-      <div className="relative h-[50px]">
-        <Search className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-[#18ff8a]" size={18}/>
-        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search Coins..." className="market-search h-[50px] w-full rounded-[25px] py-0 pl-12 pr-4 text-sm font-bold outline-none"/>
+      <section className="markets-ref-hero">
+        <div className="relative z-10 min-w-0">
+          <h1>Markets</h1>
+          <p>Live prices, charts &amp; market data</p>
+        </div>
+        <MarketsHeroVisual/>
+      </section>
+
+      <div className="markets-ref-search-row">
+        <label className="markets-ref-search">
+          <Search size={18}/>
+          <input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search coins..." />
+        </label>
+        <button type="button" className="markets-ref-filter"><SlidersHorizontal size={16}/>Filters</button>
       </div>
 
-      <section className="market-panel p-3">
-        <div className="grid grid-cols-2 gap-2">
-          <SummaryItem label="BTC Dominance" value={btc?.live ? "58.6%" : "58.1%"} icon={BarChart3}/>
-          <SummaryItem label="Fear & Greed" value="74 Greed" icon={Zap} tone="gold"/>
-          <SummaryItem label="Market Cap" value={marketCap} icon={CircleDollarSign} tone="blue"/>
-          <SummaryItem label="24h Volume" value={totalVolume?`$${compact(totalVolume)}`:"$128.4B"} icon={LineChart}/>
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <MarketSectionTitle title="Trending Coins" meta="Live"/>
-        <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
-          {trending.map(coin=><TrendingCoinCard key={coin.symbol} coin={coin} onTrade={()=>openTrade(coin)}/>)}
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {["All","Gainers","Losers","Favorites"].map(item=><button key={item} onClick={()=>setFilter(item)} className={`market-filter-chip ${filter===item?"market-filter-active":""}`}>{item}</button>)}
-        </div>
-        <MarketSectionTitle title="Live Market" meta={`${list.length} pairs`}/>
-        <div className="space-y-2">
-          {list.map(c=><MarketLiveRow key={c.symbol} coin={c} localCurrency={localCurrency} onTrade={()=>openTrade(c)}/>)}
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
-        <MovementPanel title="Top Gainers" coins={gainers} tone="gain"/>
-        <MovementPanel title="Top Losers" coins={losers.length?losers:marketCoins.slice(0,5).map(coin=>({...coin,change:-Math.abs(coin.change || .8)}))} tone="loss"/>
+      <div className="markets-ref-chips no-scrollbar">
+        {chips.map(chip=><button key={chip} type="button" onClick={()=>setCategory(chip)} className={`markets-ref-chip ${category===chip?"markets-ref-chip-active":""}`}>{chip}</button>)}
       </div>
 
-      <CategoryChips/>
+      <section className="markets-table-card">
+        <div className="markets-table-head">
+          <span>Coin</span>
+          <span>Price</span>
+          <span>24H Change</span>
+          <span>24H Chart</span>
+          <span>Star</span>
+        </div>
+        <div>
+          {visibleCoins.length ? visibleCoins.map(coin=><MarketsTableRow key={coin.symbol} coin={coin} localCurrency={localCurrency} onTrade={()=>openTrade(coin)}/>) : <div className="markets-empty-state">No real market data found.</div>}
+        </div>
+      </section>
+
+      <MarketsPromoCard/>
     </div>
   </div>;
 }
