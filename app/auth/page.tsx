@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Lock, Mail, ShieldCheck, User } from "lucide-react";
 import { SearchableSelect } from "@/components/searchable-select";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 
@@ -74,35 +74,38 @@ export default function AuthPage() {
   const isRegister = mode === "register";
 
   return (
-    <main className="min-h-screen bg-[#08100d] text-white">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
-        <header className="flex items-center justify-between py-3">
-          <button onClick={goBack} aria-label="Go back" className="grid h-10 w-10 place-items-center rounded-full border border-line bg-panel text-slate-300">
+    <main className="auth-premium-page min-h-screen text-white">
+      <div className="auth-bg-particles" aria-hidden="true">{Array.from({length:16}).map((_,i)=><i key={i} style={{"--x":`${(i*37)%100}%`,"--y":`${8+(i*29)%84}%`,"--d":`${1+i*.2}s`} as CSSProperties}/>)}</div>
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
+        <header className="auth-header">
+          <button onClick={goBack} aria-label="Go back">
             <ArrowLeft size={20} />
           </button>
-          <button onClick={() => switchMode(isRegister ? "login" : "register")} className="rounded-full border border-lime/25 bg-lime/[.08] px-4 py-2 text-xs font-black text-lime">
+          <img src="/logo.png" alt="VOLTIX" />
+          <button onClick={() => switchMode(isRegister ? "login" : "register")} className="auth-switch-link">
             {isRegister ? "Login Now" : "Sign up Now"}
           </button>
         </header>
 
-        <section className="mt-6">
-          <img src="/logo.png" alt="VOLTIX" className="block h-[28px] w-auto object-contain opacity-100 mix-blend-normal filter-none transform-none" />
-          <h1 className="mt-8 text-4xl font-black tracking-tight">{isRegister ? "Register" : "Login"}</h1>
-          <div className="mt-7 grid grid-cols-2 rounded-2xl border border-line bg-panel p-1">
-            <button onClick={() => switchMode("login")} className={`rounded-xl py-2.5 text-sm font-black transition ${!isRegister ? "bg-lime text-ink" : "text-slate-500"}`}>Login</button>
-            <button onClick={() => switchMode("register")} className={`rounded-xl py-2.5 text-sm font-black transition ${isRegister ? "bg-lime text-ink" : "text-slate-500"}`}>Register</button>
+        <section className="auth-hero">
+          <AuthHeroVisual register={isRegister}/>
+          <h1>{isRegister ? "Create Account" : "Welcome Back"}</h1>
+          <p>{isRegister ? "Join Voltix and start trading smarter" : "Login to your Voltix account"}</p>
+          <div className="auth-mode-tabs">
+            <button onClick={() => switchMode("login")} className={!isRegister ? "active" : ""}>Login</button>
+            <button onClick={() => switchMode("register")} className={isRegister ? "active" : ""}>Register</button>
           </div>
         </section>
 
-        <form onSubmit={submit} className="mt-8 flex flex-1 flex-col">
-          <div className="space-y-4">
-            {isRegister && <AuthInput label="Full Name" value={name} onChange={setName} autoComplete="name" />}
-            <AuthInput label="Email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" />
+        <form onSubmit={submit} className="auth-card">
+          <div className="space-y-3">
+            {isRegister && <AuthInput label="Full Name" value={name} onChange={setName} autoComplete="name" icon="user" />}
+            <AuthInput label="Email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" icon="email" />
             {isRegister && (
               <>
-                <SearchableSelect label="Country" options={countryOptions} value={country} onChange={setCountry} placeholder="Search country" />
-                <SearchableSelect label="Language" options={languageOptions} value={language} onChange={setLanguage} placeholder="Search language" />
-                <AuthInput label="Referral UID (optional)" value={referralCode} onChange={setReferralCode} autoComplete="off" />
+                <SearchableSelect label="Country" options={countryOptions} value={country} onChange={setCountry} placeholder="Search country" className="auth-select" />
+                <SearchableSelect label="Language" options={languageOptions} value={language} onChange={setLanguage} placeholder="Search language" className="auth-select" />
+                <AuthInput label="Referral UID (optional)" value={referralCode} onChange={setReferralCode} autoComplete="off" icon="shield" />
               </>
             )}
             <PasswordInput label="Password" value={password} onChange={setPassword} visible={showPassword} setVisible={setShowPassword} autoComplete={isRegister ? "new-password" : "current-password"} />
@@ -110,24 +113,24 @@ export default function AuthPage() {
           </div>
 
           {!isRegister && (
-            <div className="mt-4 flex items-center justify-between text-xs">
-              <button type="button" className="font-bold text-lime">Forgot Password</button>
-              <label className="flex items-center gap-2 text-slate-400">
-                <input checked={remember} onChange={event => setRemember(event.target.checked)} type="checkbox" className="h-4 w-4 rounded border-line accent-[#c4ff3b]" />
+            <div className="auth-options">
+              <label>
+                <input checked={remember} onChange={event => setRemember(event.target.checked)} type="checkbox" />
                 Remember Me
               </label>
+              <button type="button">Forgot Password</button>
             </div>
           )}
 
           {error && <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-xs font-bold text-danger">{error}</p>}
 
-          <button disabled={loading} className="mt-7 w-full rounded-2xl bg-lime py-3 text-sm font-black text-ink shadow-[0_16px_38px_rgba(196,255,59,.18)] transition hover:bg-mint disabled:opacity-60">
+          <button disabled={loading} className="auth-submit">
             {loading ? "Please wait..." : isRegister ? "Create Account" : "Login"}
           </button>
 
-          <div className="mt-5 text-center text-sm text-slate-500">
+          <div className="auth-footer-link">
             {isRegister ? "Already have an account? " : "Don't have an account? "}
-            <button type="button" onClick={() => switchMode(isRegister ? "login" : "register")} className="font-black text-lime">
+            <button type="button" onClick={() => switchMode(isRegister ? "login" : "register")}>
               {isRegister ? "Login" : "Sign Up"}
             </button>
           </div>
@@ -137,20 +140,34 @@ export default function AuthPage() {
   );
 }
 
-function AuthInput({ label, value, onChange, autoComplete, inputMode }: { label: string; value: string; onChange: (value: string) => void; autoComplete?: string; inputMode?: "email" }) {
+function AuthHeroVisual({register}:{register:boolean}) {
+  return <svg viewBox="0 0 180 126" className="auth-hero-svg" aria-hidden="true">
+    <defs><radialGradient id="authGlow" cx="50%" cy="65%" r="58%"><stop stopColor="#18ff8a" stopOpacity=".45"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></radialGradient><linearGradient id="authV" x1="58" y1="24" x2="112" y2="90"><stop stopColor="#f7fff9"/><stop offset=".5" stopColor="#18ff8a"/><stop offset="1" stopColor="#036c44"/></linearGradient></defs>
+    <path d="M20 102H160M38 88H142M54 74H126" stroke="#18ff8a" strokeOpacity=".13"/>
+    <ellipse cx="90" cy="100" rx="58" ry="18" fill="url(#authGlow)" className="auth-svg-pulse"/>
+    <ellipse cx="90" cy="96" rx="52" ry="13" fill="#06110d" stroke="#18ff8a" strokeOpacity=".42" strokeDasharray="24 12" className="auth-svg-orbit"/>
+    <g className="auth-svg-float"><circle cx="90" cy="54" r="34" fill="rgba(24,255,138,.1)" stroke="#18ff8a" strokeOpacity=".34"/><path d="M74 34H63l19 45 8 15 8-15 19-45h-11L90 70 74 34Z" fill="url(#authV)"/></g>
+    <path d="M132 38l16 8v16c0 10-6 16-16 20-10-4-16-10-16-20V46l16-8Z" fill="#08140f" stroke="#18ff8a" strokeOpacity=".52"/>
+    {register?<path d="M132 53v14M125 60h14" stroke="#18ff8a" strokeWidth="2.4" strokeLinecap="round"/>:<path d="M124 61l6 6 12-16" stroke="#18ff8a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>}
+  </svg>;
+}
+
+function AuthInput({ label, value, onChange, autoComplete, inputMode, icon = "email" }: { label: string; value: string; onChange: (value: string) => void; autoComplete?: string; inputMode?: "email"; icon?: "email" | "user" | "shield" }) {
+  const Icon=icon==="user"?User:icon==="shield"?ShieldCheck:Mail;
   return (
-    <label className="block text-xs font-bold text-slate-400">{label}
-      <input value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} inputMode={inputMode} className="mt-2 w-full rounded-2xl border border-line bg-[#111c18] px-4 py-2.5 text-sm font-bold text-white outline-none transition focus:border-lime/50" />
+    <label className="auth-field">{label}
+      <span><Icon size={17}/><input value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} inputMode={inputMode} /></span>
     </label>
   );
 }
 
 function PasswordInput({ label, value, onChange, visible, setVisible, autoComplete }: { label: string; value: string; onChange: (value: string) => void; visible: boolean; setVisible: (value: boolean) => void; autoComplete: string }) {
   return (
-    <label className="block text-xs font-bold text-slate-400">{label}
-      <span className="mt-2 flex items-center rounded-2xl border border-line bg-[#111c18] px-4 py-2.5 transition focus-within:border-lime/50">
-        <input type={visible ? "text" : "password"} value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none" />
-        <button type="button" onClick={() => setVisible(!visible)} aria-label={visible ? "Hide password" : "Show password"} className="text-slate-500">
+    <label className="auth-field">{label}
+      <span>
+        <Lock size={17}/>
+        <input type={visible ? "text" : "password"} value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} />
+        <button type="button" onClick={() => setVisible(!visible)} aria-label={visible ? "Hide password" : "Show password"}>
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </span>
