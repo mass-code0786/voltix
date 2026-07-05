@@ -1529,19 +1529,19 @@ function AiVipRow({row,loading,start}:{row:VipTradeRow;loading:boolean;start:()=
   const accent=vipAccent(row);
   const status=row.tradeStatus??(row.available?"Live":"Closed");
   return <article className="ai-vip-row" style={{"--vip-accent":accent} as CSSProperties}>
-    <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 items-center gap-1.5">
       <AiVipBadge accent={accent}/>
-      <div className="min-w-[48px]">
-        <p className="truncate text-[18px] font-black leading-none text-white">{row.label}</p>
+      <div className="min-w-0">
+        <p className="ai-vip-title">{row.label}</p>
       </div>
     </div>
     <div className="min-w-0 flex-1">
-      <p className="text-[17px] font-black leading-none text-white">{row.dailyPercentMin.toFixed(1)}% - {row.dailyPercentMax.toFixed(1)}%</p>
-      <p className="mt-1 text-[12px] font-bold text-slate-500">Daily Return</p>
+      <p className="ai-vip-return">{row.dailyPercentMin.toFixed(1)}% - {row.dailyPercentMax.toFixed(1)}%</p>
+      <p className="ai-vip-return-label">Daily Return</p>
     </div>
-    <div className="w-[62px] shrink-0">
+    <div className="min-w-0">
       <span className="ai-status-pill" style={{color:accent,borderColor:`${accent}44`,backgroundColor:`${accent}14`}}>{status}</span>
-      <p className="mt-1 truncate text-[10px] font-bold text-slate-600">{row.currentTradeTime ?? "--:--"}</p>
+      <p className="ai-vip-time">{row.currentTradeTime ?? "--:--"}</p>
     </div>
     <button onClick={start} disabled={loading} className="ai-row-trade" style={{background:`linear-gradient(135deg, ${accent}, ${accent}aa)`,boxShadow:`0 0 22px ${accent}30`}}>{loading?"Wait":"Trade"}</button>
   </article>;
