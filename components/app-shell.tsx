@@ -1800,7 +1800,7 @@ function CopyTradeScreen({activeTrade,bitexBalance,tradeRows,startTrade,complete
 }
 function WalletScreen({notify,assets,spotBalance,futuresBalance,bitexBalance,bitexIncomeEarned,bitexTarget,activity,section,action,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];spotBalance:number;futuresBalance:number;bitexBalance:number;bitexIncomeEarned:number;bitexTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string}>}) {
  const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+bitexBalance;
-return <div className="wallet-page -mt-1 min-h-screen pb-[130px]">
+return <div className="wallet-page -mt-1 min-h-screen">
   <WalletHero/>
   <WalletTotalCard total={total} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
   <WalletTypeCards spot={spotBalance} ai={bitexBalance} futures={futuresBalance} aiProfit={bitexIncomeEarned}/>

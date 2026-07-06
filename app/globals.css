@@ -2821,6 +2821,7 @@ textarea:focus {
   margin-right: auto;
   overflow-x: hidden;
   padding-left: 16px;
+  padding-bottom: calc(170px + env(safe-area-inset-bottom));
   padding-right: 16px;
   background:
     radial-gradient(circle at 17% 0%, rgba(24,255,138,.16), transparent 8rem),
@@ -2848,12 +2849,12 @@ textarea:focus {
 .wallet-hero {
   position: relative;
   display: grid;
-  height: 156px;
-  grid-template-columns: minmax(0, 1fr) 142px;
+  height: 134px;
+  grid-template-columns: minmax(0, 1fr) 128px;
   align-items: center;
   overflow: hidden;
   border-radius: 22px;
-  padding: 14px 0 14px 16px;
+  padding: 12px 0 12px 16px;
 }
 
 .wallet-hero::before {
@@ -2889,8 +2890,9 @@ textarea:focus {
 .wallet-hero-svg {
   position: relative;
   z-index: 1;
-  height: 124px;
-  width: 148px;
+  width: 136px;
+  height: auto;
+  max-height: 112px;
   max-width: 100%;
   justify-self: end;
   filter: drop-shadow(0 0 18px rgba(24,255,138,.18));
@@ -3274,7 +3276,9 @@ textarea:focus {
   grid-template-columns: 58px minmax(0,1fr) 86px;
   align-items: center;
   gap: 10px;
+  margin-bottom: 12px;
   padding: 12px;
+  scroll-margin-bottom: calc(150px + env(safe-area-inset-bottom));
 }
 
 .wallet-security-card p {
@@ -3297,12 +3301,13 @@ textarea:focus {
 
 @media (max-width: 374px) {
   .wallet-hero {
-    height: 150px;
-    grid-template-columns: minmax(0, 1fr) minmax(102px, 126px);
+    height: 128px;
+    grid-template-columns: minmax(0, 1fr) minmax(100px, 118px);
   }
 
   .wallet-hero-svg {
-    width: 126px;
+    width: 118px;
+    max-height: 102px;
   }
 
   .wallet-total-card {
