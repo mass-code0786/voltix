@@ -1,6 +1,7 @@
 "use client";
 
 import type { ComponentType, ReactNode } from "react";
+import { useId } from "react";
 import type { LucideProps } from "lucide-react";
 import { ArrowLeft, Bell, ChevronRight, Menu, Search } from "lucide-react";
 import { CoinMark } from "./coin-mark";
@@ -88,14 +89,15 @@ type BottomNavProps<T extends string> = {
 export function BottomNav<T extends string>({ items, activeId, activeSection, labelFor, onSelect }: BottomNavProps<T>) {
   return (
     <nav className="fixed bottom-3 left-4 right-4 z-50 mx-auto max-w-[430px] lg:hidden">
-      <div className="mx-auto flex h-[66px] w-full max-w-full items-center justify-around rounded-full border border-white/[.12] bg-[rgba(5,8,7,0.88)] px-2 shadow-[0_-14px_42px_rgba(0,0,0,.48),0_0_26px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl">
+      <div className="relative mx-auto flex h-[66px] w-full max-w-full items-center justify-around rounded-full border border-white/[.12] bg-[rgba(5,8,7,0.88)] px-2 shadow-[0_-14px_42px_rgba(0,0,0,.48),0_0_26px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl">
+        <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 z-0 h-14 w-14 -translate-x-1/2 -translate-y-7 rounded-full bg-[rgba(5,8,7,0.88)] shadow-[0_-14px_42px_rgba(0,0,0,.48),0_0_26px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl" />
         {items.map(({ id, label, icon: Icon, section }) => {
           const active = activeId === id && (!section || activeSection === section);
           const center = label.toLowerCase().includes("ai");
           return (
-            <button key={`${id}-${section ?? label}`} onClick={() => onSelect(id, section)} aria-current={active ? "page" : undefined} className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-black transition ${active ? "text-[#18ff8a]" : "text-slate-500"}`}>
+            <button key={`${id}-${section ?? label}`} onClick={() => onSelect(id, section)} aria-current={active ? "page" : undefined} className={`relative z-10 flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-black transition ${active ? "text-[#18ff8a]" : "text-slate-500"}`}>
               <span className={`${center ? "-mt-7 h-14 w-14 rounded-full border-2 border-[#18ff8a] bg-[radial-gradient(circle_at_35%_24%,rgba(24,255,138,0.18),rgba(5,12,10,0.92)_68%)] shadow-[0_0_18px_rgba(24,255,138,0.45),inset_0_0_18px_rgba(24,255,138,0.12)]" : `h-7 w-8 rounded-2xl ${active ? "border-[#18ff8a]/25 bg-[#18ff8a]/10 shadow-[0_0_20px_rgba(24,255,138,.16)]" : "border-transparent bg-transparent"}`} grid place-items-center border transition`}>
-                {center ? <span className="bg-gradient-to-br from-[#18ff8a] to-[#00c96b] bg-clip-text text-lg font-black text-transparent drop-shadow-[0_0_8px_rgba(24,255,138,0.55)]">V</span> : <Icon size={19} strokeWidth={active ? 2.5 : 1.9} />}
+                {center ? <VoltixNavLogoMark /> : <Icon size={19} strokeWidth={active ? 2.5 : 1.9} />}
               </span>
               <span className={`truncate ${center ? "-mt-1" : ""}`}>{labelFor(id)}</span>
             </button>
@@ -103,6 +105,52 @@ export function BottomNav<T extends string>({ items, activeId, activeSection, la
         })}
       </div>
     </nav>
+  );
+}
+
+function VoltixNavLogoMark() {
+  const id = useId().replace(/:/g, "");
+  const frontId = `${id}-front`;
+  const highlightId = `${id}-highlight`;
+  const glassId = `${id}-glass`;
+  const glowId = `${id}-glow`;
+
+  return (
+    <svg aria-hidden="true" className="h-9 w-9 drop-shadow-[0_0_8px_rgba(24,255,138,0.55)]" viewBox="0 0 115 115" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id={frontId} x1="32" y1="23" x2="75" y2="78" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#9CFFD9" />
+          <stop offset=".48" stopColor="#1EFF88" />
+          <stop offset="1" stopColor="#00B86B" />
+        </linearGradient>
+        <linearGradient id={highlightId} x1="34" y1="25" x2="48" y2="74" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#F3FFF9" stopOpacity=".95" />
+          <stop offset=".55" stopColor="#9CFFD9" stopOpacity=".62" />
+          <stop offset="1" stopColor="#1EFF88" stopOpacity=".08" />
+        </linearGradient>
+        <linearGradient id={glassId} x1="42" y1="30" x2="73" y2="67" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FFFFFF" stopOpacity=".7" />
+          <stop offset=".45" stopColor="#CFFFF0" stopOpacity=".16" />
+          <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+        </linearGradient>
+        <filter id={glowId} x="11" y="8" width="93" height="88" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+          <feGaussianBlur stdDeviation="3.4" result="blur" />
+          <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.117 0 0 0 0 1 0 0 0 0 0.533 0 0 0 .78 0" />
+          <feBlend in="SourceGraphic" mode="screen" />
+        </filter>
+      </defs>
+      <g filter={`url(#${glowId})`}>
+        <path d="M30 22L52 76L58 88L64 76L85 22L71 22L58 58L45 22H30Z" fill="#1EFF88" opacity=".32" />
+      </g>
+      <path d="M43 25H29L52 79L58 91L64 79L86 25H72L58 62L43 25Z" fill={`url(#${frontId})`} />
+      <path d="M72 25H86L64 79L58 91L58 62L72 25Z" fill="#006B43" opacity=".92" />
+      <path d="M43 25H29L52 79L58 91L58 62L43 25Z" fill={`url(#${frontId})`} />
+      <path d="M35 28L53.5 72.5L57.8 81.3L61.4 73L75.7 28" stroke="#F4FFF9" strokeOpacity=".64" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M40 30L54 65L58 72L62 65L76 30H71L58 61L45 30H40Z" fill={`url(#${glassId})`} opacity=".78" />
+      <path d="M58 62L72 25H78L61 69L58 75V62Z" fill="#003B2A" opacity=".35" />
+      <path d="M29 25L43 25L58 62V71L50 57L34 25H29Z" fill={`url(#${highlightId})`} opacity=".72" />
+      <path d="M43 25H29L52 79L58 91L64 79L86 25H72L58 62L43 25Z" stroke="#9CFFD9" strokeOpacity=".34" strokeWidth="1" strokeLinejoin="round" />
+    </svg>
   );
 }
 
