@@ -32,9 +32,7 @@ export function dailyTradeLimit(input: {
   now: Date;
   permanentExtraTrade: boolean;
 }) {
-  const trialEnd = new Date(input.joinedAt);
-  trialEnd.setUTCDate(trialEnd.getUTCDate() + EXTRA_TRADE_TRIAL_DAYS);
-  return BASE_DAILY_TRADES + (input.permanentExtraTrade || input.now < trialEnd ? 1 : 0);
+  return BASE_DAILY_TRADES;
 }
 
 export function qualifiesForPermanentExtraTrade(directPackagesUsd: number[]) {

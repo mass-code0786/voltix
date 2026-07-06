@@ -46,6 +46,8 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
       reason: remaining <= 0 ? "Daily trade limit reached" : user.bitexBalance.lte(0) ? "Please transfer funds to AI wallet before starting copy trade." : null,
     },
     vipRank: normalizedVipRank,
+    todaysTradeCount: totalToday,
+    dailyTradeLimit: limit,
     todaysCompletedTrades: completedToday,
     todaysRemainingTrades: remaining,
     tradeRows: VIP_TRADE_ROWS.map(row => ({

@@ -45,6 +45,7 @@ type DepositRecord = { id: string; amount: number; asset: string; network: strin
 type WithdrawalRecord = { id: string; walletType: "SPOT" | "BITEX"; amount: number; fee: number; receivable: number; asset: string; address: string; network: string; txHash?: string | null; status: string; rejectionReason?: string | null; createdAt: string };
 type ActiveCopyTrade = { code?: string; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string };
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
+type CopyTradeCounts = { todaysTradeCount: number; dailyTradeLimit: number };
 type VipTradeRow = { id: string; label: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "Upcoming" | "Live" | "Closed"; message?: string | null };
 type AppCoin = typeof coins[number];
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
@@ -212,6 +213,7 @@ const coinSettingsKey = "voltix.coin-settings";
 const topCopyTraders: { country: string; name: string; monthlyReturn: number; message: string }[] = [];
 const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA","TRX","AVAX","DOT","LINK","TON","SHIB","LTC","BCH","ATOM","APT","ARB","OP","PEPE","NEAR","INJ","SEI","FIL"];
 const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, bitex: 0 }, locked: { spot: 0, futures: 0, bitex: 0 }, total: { spot: 0, futures: 0, bitex: 0 }, portfolio: 0, bitex: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
+const defaultCopyTradeCounts: CopyTradeCounts = { todaysTradeCount: 0, dailyTradeLimit: 3 };
 
 function applyCoinSettings(baseCoins: AppCoin[]): AppCoin[] {
   if (typeof window === "undefined") return baseCoins;
@@ -304,6 +306,7 @@ export default function AppShell() {
   const [toast, setToast] = useState("");
   const [activeCopyTrade, setActiveCopyTrade] = useState<ActiveCopyTrade | null>(null);
   const [copyTradeHistory, setCopyTradeHistory] = useState<CopyTradeHistory[]>([]);
+  const [copyTradeCounts, setCopyTradeCounts] = useState<CopyTradeCounts>(defaultCopyTradeCounts);
   const [vipTradeRows, setVipTradeRows] = useState<VipTradeRow[]>([]);
   const [marketCoins, setMarketCoins] = useState(() => applyCoinSettings(coins).map((coin) => ({ ...coin, balance: 0 })));
   const [walletAssets, setWalletAssets] = useState<AppCoin[]>([]);
@@ -400,6 +403,7 @@ export default function AppShell() {
       setActiveCopyTrade(null);
       setCopyTradeHistory([]);
       setVipTradeRows([]);
+      setCopyTradeCounts(defaultCopyTradeCounts);
       return;
     }
     const response = await fetch("/api/copy-trade/status");
@@ -409,6 +413,10 @@ export default function AppShell() {
     setActiveCopyTrade(status?.activeTrade ? normalizeTrade(status.activeTrade) : null);
     setCopyTradeHistory(Array.isArray(status?.history) ? status.history.map(normalizeTrade) : []);
     setVipTradeRows(Array.isArray(status?.tradeRows) ? status.tradeRows as VipTradeRow[] : []);
+    setCopyTradeCounts({
+      todaysTradeCount: Math.max(0, Number(status?.todaysTradeCount ?? 0)),
+      dailyTradeLimit: Math.max(0, Number(status?.dailyTradeLimit ?? defaultCopyTradeCounts.dailyTradeLimit)),
+    });
   }, []);
 
   const refreshAiSubscription = useCallback(async (user: CurrentUser | null) => {
@@ -727,7 +735,7 @@ export default function AppShell() {
     home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} bitexBalance={bitexBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} />,
     trade: <TradeWorkspace category={tradeCategory} />,
-    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
+    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
     wallet: <WalletScreen notify={notify} assets={walletAssets} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
@@ -757,7 +765,7 @@ export default function AppShell() {
             subtitle={t("welcomeBack")}
             initials={initials(currentUser?.name)}
             unreadNotifications={unreadNotifications}
-            variant={tab==="bitex"?"ai":"default"}
+            variant="default"
             onBack={() => selectTab("home")}
             onMenuButton={() => { setMenu(!menu); setNotificationOpen(false); }}
             onNotifications={() => { if (!currentUser) { openAuthPage("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }}
@@ -1509,15 +1517,15 @@ function TradeWorkspace({category}:{category:TradeCategory}) {
   return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category}/></div>;
 }
 
-function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,tradeRows,copyTradeHistory,startTrade,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];copyTradeHistory:CopyTradeHistory[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
+function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,tradeRows,copyTradeCounts,copyTradeHistory,startTrade,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];copyTradeCounts:CopyTradeCounts;copyTradeHistory:CopyTradeHistory[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
   const active=Boolean(subscription?.subscription?.active);
   const today=new Date().toDateString();
   const todayIncome=copyTradeHistory.reduce((sum,row)=>{
     const date=new Date(row.date);
     return Number.isNaN(date.getTime()) || date.toDateString()!==today ? sum : sum+Number(row.profit ?? 0);
   }, activeTrade?.date && new Date(activeTrade.date).toDateString()===today ? Number(activeTrade.profit ?? 0) : 0);
-  const currentTrades=activeTrade ? 1 : 0;
-  const allowedTrades=tradeRows.length;
+  const allowedTrades=copyTradeCounts.dailyTradeLimit;
+  const currentTrades=Math.min(copyTradeCounts.todaysTradeCount, allowedTrades);
   return <div className="ai-trade-page -mx-4 -mt-1 min-h-screen overflow-x-hidden px-4 pb-2">
     <section className="ai-trade-hero">
       <div className="relative z-10">
