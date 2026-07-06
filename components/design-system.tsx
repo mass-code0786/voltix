@@ -90,13 +90,13 @@ export function BottomNav<T extends string>({ items, activeId, activeSection, la
   return (
     <nav className="fixed bottom-3 left-4 right-4 z-50 mx-auto max-w-[430px] lg:hidden">
       <div className="relative mx-auto flex h-[66px] w-full max-w-full items-center justify-around rounded-full border border-white/[.12] bg-[rgba(5,8,7,0.88)] px-2 shadow-[0_-14px_42px_rgba(0,0,0,.48),0_0_26px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl">
-        <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 z-0 h-14 w-14 -translate-x-1/2 -translate-y-7 rounded-full bg-[rgba(5,8,7,0.88)] shadow-[0_-14px_42px_rgba(0,0,0,.48),0_0_26px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl" />
+        <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 z-0 h-14 w-14 -translate-x-1/2 -translate-y-7 rounded-full bg-[rgba(5,8,7,0.88)] shadow-[0_0_14px_rgba(24,255,138,0.18),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl" />
         {items.map(({ id, label, icon: Icon, section }) => {
           const active = activeId === id && (!section || activeSection === section);
           const center = label.toLowerCase().includes("ai");
           return (
             <button key={`${id}-${section ?? label}`} onClick={() => onSelect(id, section)} aria-current={active ? "page" : undefined} className={`relative z-10 flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-black transition ${active ? "text-[#18ff8a]" : "text-slate-500"}`}>
-              <span className={`${center ? "-mt-7 h-14 w-14 rounded-full border-2 border-[#18ff8a] bg-[radial-gradient(circle_at_35%_24%,rgba(24,255,138,0.18),rgba(5,12,10,0.92)_68%)] shadow-[0_0_18px_rgba(24,255,138,0.45),inset_0_0_18px_rgba(24,255,138,0.12)]" : `h-7 w-8 rounded-2xl ${active ? "border-[#18ff8a]/25 bg-[#18ff8a]/10 shadow-[0_0_20px_rgba(24,255,138,.16)]" : "border-transparent bg-transparent"}`} grid place-items-center border transition`}>
+              <span className={`${center ? "-mt-7 h-14 w-14 rounded-full border-2 border-[#18ff8a] bg-[radial-gradient(circle_at_35%_24%,rgba(24,255,138,0.18),rgba(5,12,10,0.92)_68%)] shadow-[0_0_14px_rgba(24,255,138,0.35),0_0_28px_rgba(24,255,138,0.18),inset_0_0_14px_rgba(24,255,138,0.12)]" : `h-7 w-8 rounded-2xl ${active ? "border-[#18ff8a]/25 bg-[#18ff8a]/10 shadow-[0_0_20px_rgba(24,255,138,.16)]" : "border-transparent bg-transparent"}`} grid place-items-center border transition`}>
                 {center ? <VoltixNavLogoMark /> : <Icon size={19} strokeWidth={active ? 2.5 : 1.9} />}
               </span>
               <span className={`truncate ${center ? "-mt-1" : ""}`}>{labelFor(id)}</span>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "r
 import Link from "next/link";
 import {
   ArrowDownLeft, ArrowDownToLine, ArrowLeftRight, ArrowUpRight, BarChart3, Bell,
-  Bot, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Copy, Eye, FileClock, Gift, Grid2X2,
+  Bot, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Copy, Eye, FileClock, Grid2X2,
   Headphones, Home, Landmark, LineChart, Menu, Network, Plus, QrCode, Search, SlidersHorizontal,
   Send, Settings, Share2, ShieldCheck, Star,
   Trophy, Users, Wallet, X, Zap,
@@ -839,7 +839,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, a
     { icon: Wallet, label: "AI Wallet", onClick: () => onNavigate("wallet") },
     { icon: Copy, label: "Copy Trading", onClick: onOpenCopyTrade },
     { icon: Trophy, label: "VIP Benefits", onClick: onOpenCopyTrade },
-    { icon: Gift, label: "Rewards", onClick: () => onNavigate("team") },
+    { icon: Users, label: "Invite", onClick: () => onNavigate("team") },
   ];
   return <div className="mx-auto max-w-[390px] space-y-2 overflow-x-hidden">
     {currentUser ? (
@@ -902,11 +902,13 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
           <span className="flex h-5 items-center rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 px-2 text-[8px] font-black text-[#18ff8a]">Verified</span>
         </div>
         <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>
-        <button onClick={() => setBalanceVisible(!balanceVisible)} className="mt-0.5 text-left text-[27px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
-          {balanceVisible ? usd(total) : "$ ******"}
-        </button>
-        <div className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-black leading-none ${todaysProfit >= 0 ? "border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
-          {balanceVisible ? `${todaysProfit >= 0 ? "+" : ""}${usd(todaysProfit)} today` : "Balance hidden"}
+        <div className="mt-1 flex min-w-0 flex-wrap items-end gap-x-2 gap-y-1">
+          <button onClick={() => setBalanceVisible(!balanceVisible)} className="min-w-0 text-left text-[27px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
+            {balanceVisible ? usd(total) : "$ ******"}
+          </button>
+          <div className={`inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black leading-none min-[390px]:text-[11px] ${todaysProfit >= 0 ? "border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
+            {balanceVisible ? `${todaysProfit >= 0 ? "+" : ""}${usd(todaysProfit)} today` : "Balance hidden"}
+          </div>
         </div>
       </div>
       <div className="justify-self-end"><VoltixHeroLogo /></div>
