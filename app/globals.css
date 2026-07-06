@@ -2949,22 +2949,30 @@ textarea:focus {
 
 .wallet-total-actions {
   display: grid;
-  gap: 9px;
+  gap: 11px;
   min-width: 0;
   justify-items: end;
 }
 
 .wallet-total-actions button {
   display: flex;
-  height: 46px;
-  width: min(126px, 100%);
-  max-width: 135px;
+  height: 45px;
+  width: min(108px, 100%);
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 5px;
   border-radius: 15px;
-  font-size: 13px;
+  padding: 0 18px;
+  font-size: clamp(14px, 3.95vw, 17px);
   font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.wallet-total-actions button svg {
+  height: 14px;
+  width: 14px;
+  flex-shrink: 0;
 }
 
 .wallet-total-actions button:first-child {
@@ -3281,8 +3289,9 @@ textarea:focus {
 
   .wallet-total-actions button {
     height: 44px;
-    width: 104px;
-    font-size: 11px;
+    width: 102px;
+    padding: 0 18px;
+    font-size: 14px;
   }
 
   .wallet-type-grid {
