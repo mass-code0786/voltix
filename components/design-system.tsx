@@ -33,7 +33,7 @@ type HeaderProps = {
 export function AppHeader({ title, subtitle, compactBrand = true, initials, unreadNotifications = 0, variant = "default", onBack, onMenuButton, onNotifications, onMenu }: HeaderProps) {
   if (variant === "ai") {
     return (
-      <header className="sticky top-0 z-30 h-[72px] bg-[#050807]/82 px-4 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
+      <header className="sticky top-0 z-30 h-[62px] bg-[#050807]/82 px-4 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
         <div className="mx-auto flex h-[72px] max-w-[420px] items-center justify-between gap-3 lg:max-w-6xl">
           <div className="flex min-w-0 items-center gap-2.5">
             <button onClick={onBack} className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full border border-white/[.1] bg-white/[.045] text-white shadow-[0_0_24px_rgba(24,255,138,.12),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Back">
@@ -57,7 +57,7 @@ export function AppHeader({ title, subtitle, compactBrand = true, initials, unre
   }
 
   return (
-    <header className="sticky top-0 z-30 h-[72px] bg-[#060a08]/72 px-5 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
+    <header className="sticky top-0 z-30 h-[62px] bg-[#060a08]/72 px-5 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
       <div className="mx-auto flex h-[72px] max-w-[420px] items-center justify-between gap-3 lg:max-w-6xl">
         <div className="flex h-[48px] w-fit shrink-0 items-center justify-start">
           <img src="/logo.png" alt="VOLTIX" className="block h-[21px] w-auto max-w-none object-contain opacity-100 mix-blend-normal filter-none transform-none" />
