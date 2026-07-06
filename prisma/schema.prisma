@@ -53,6 +53,11 @@ enum DepositStatus {
   CONFIRMED
   CREDITED
   FAILED
+  EXPIRED
+}
+
+enum DepositProvider {
+  NOWPAYMENTS
 }
 
 enum WithdrawalStatus {
@@ -118,6 +123,18 @@ enum NotificationType {
   ADMIN_BROADCAST
 }
 
+enum AuditRole {
+  USER
+  ADMIN
+  SYSTEM
+}
+
+enum AuditStatus {
+  SUCCESS
+  FAILED
+  WARNING
+}
+
 model User {
   id                    String           @id @default(cuid())
   email                 String           @unique
@@ -145,7 +162,6 @@ model User {
   bitexUnlocked         Boolean          @default(false)
   wallets               WalletAccount[]
   walletTransfers       WalletTransfer[]
-  addresses             DepositAddress[]
   deposits              Deposit[]
   withdrawals           Withdrawal[]
   packages              UserPackage[]
@@ -158,6 +174,8 @@ model User {
   supportTickets        SupportTicket[]
   notifications         Notification[]
   auditLogs             AuditLog[]       @relation("AuditActor")
+  userAuditLogs         AuditLog[]       @relation("AuditUser")
+  adminAuditLogs        AuditLog[]       @relation("AuditAdmin")
   sessions              Session[]
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
@@ -206,7 +224,6 @@ model Asset {
   decimals       Int
   enabled        Boolean          @default(true)
   walletAccounts WalletAccount[]
-  addresses      DepositAddress[]
   deposits       Deposit[]
   withdrawals    Withdrawal[]
 }
@@ -274,53 +291,42 @@ model ChainNetwork {
   name                  String
   requiredConfirmations Int
   enabled               Boolean          @default(true)
-  addresses             DepositAddress[]
   deposits              Deposit[]
   withdrawals           Withdrawal[]
 }
 
-model DepositAddress {
-  id              String       @id @default(cuid())
-  userId          String
-  user            User         @relation(fields: [userId], references: [id])
-  assetId         String
-  asset           Asset        @relation(fields: [assetId], references: [id])
-  networkId       String
-  network         ChainNetwork @relation(fields: [networkId], references: [id])
-  address         String
-  derivationIndex Int
-  path            String
-  active          Boolean      @default(true)
-  deposits        Deposit[]
-  createdAt       DateTime     @default(now())
-
-  @@unique([networkId, address])
-  @@unique([networkId, derivationIndex])
-  @@index([userId, assetId])
-}
-
 model Deposit {
-  id            String         @id @default(cuid())
-  userId        String
-  user          User           @relation(fields: [userId], references: [id])
-  assetId       String
-  asset         Asset          @relation(fields: [assetId], references: [id])
-  networkId     String
-  network       ChainNetwork   @relation(fields: [networkId], references: [id])
-  addressId     String
-  address       DepositAddress @relation(fields: [addressId], references: [id])
-  txHash        String?
-  eventIndex    Int            @default(0)
-  amount        Decimal        @db.Decimal(36, 18)
-  blockNumber   BigInt?
-  confirmations Int            @default(0)
-  status        DepositStatus  @default(DETECTED)
-  creditedAt    DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id])
+  assetId           String
+  asset             Asset           @relation(fields: [assetId], references: [id])
+  networkId         String
+  network           ChainNetwork    @relation(fields: [networkId], references: [id])
+  provider          DepositProvider @default(NOWPAYMENTS)
+  providerPaymentId String?         @unique
+  providerInvoiceId String?         @unique
+  providerPaymentUrl String?
+  payCurrency       String?
+  payAddress        String?
+  paymentStatus     String?
+  actuallyPaid      Decimal?        @db.Decimal(36, 18)
+  outcomeAmount     Decimal?        @db.Decimal(36, 18)
+  rawWebhookJson    Json?
+  webhookReceivedAt DateTime?
+  txHash            String?
+  eventIndex        Int             @default(0)
+  amount            Decimal         @db.Decimal(36, 18)
+  blockNumber       BigInt?
+  confirmations     Int             @default(0)
+  status            DepositStatus   @default(PENDING)
+  creditedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   @@unique([networkId, txHash, eventIndex])
   @@index([status, createdAt])
+  @@index([provider, paymentStatus, createdAt])
 }
 
 model Withdrawal {
@@ -532,17 +538,45 @@ model Income {
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  actorId    String?
-  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
-  actorType  String
-  action     String
-  entityType String
-  entityId   String
-  metadata   Json
-  ipAddress  String?
-  createdAt  DateTime @default(now())
+  id            String      @id @default(cuid())
+  createdAt     DateTime    @default(now())
+  userId        String?
+  user          User?       @relation("AuditUser", fields: [userId], references: [id], onDelete: SetNull)
+  adminId       String?
+  admin         User?       @relation("AuditAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+  role          AuditRole   @default(SYSTEM)
+  action        String
+  module        String      @default("SYSTEM")
+  description   String      @default("")
+  status        AuditStatus @default(SUCCESS)
+  ipAddress     String?
+  country       String?
+  city          String?
+  userAgent     String?
+  device        String?
+  browser       String?
+  os            String?
+  requestMethod String?
+  requestPath   String?
+  requestId     String?
+  oldValue      Json?
+  newValue      Json?
+  metadata      Json?
+  errorMessage  String?
+  durationMs    Int?
+  archivedAt    DateTime?
+  archivedById  String?
+  actorId       String?
+  actor         User?       @relation("AuditActor", fields: [actorId], references: [id])
+  actorType     String      @default("SYSTEM")
+  entityType    String      @default("AuditLog")
+  entityId      String      @default("")
 
-  @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([action])
+  @@index([module])
+  @@index([userId])
+  @@index([adminId])
+  @@index([status])
+  @@index([entityType, entityId])
 }

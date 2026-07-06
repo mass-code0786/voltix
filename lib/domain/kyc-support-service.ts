@@ -74,6 +74,13 @@ export async function getAdminKycRows() {
       formatDate(request.submittedAt),
       request.status,
       request.id,
+      request.country ?? "",
+      request.dateOfBirth?.toISOString().slice(0, 10) ?? "",
+      request.address ?? "",
+      request.frontIdImageUrl ?? "",
+      request.backIdImageUrl ?? "",
+      request.selfieImageUrl ?? "",
+      request.rejectionReason ?? "",
     ]),
   };
 }

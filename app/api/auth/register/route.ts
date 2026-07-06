@@ -5,6 +5,8 @@ import { createSession, generateUniqueUid, hashPassword } from "@/lib/auth";
 import { ensureUserWalletAccounts } from "@/lib/domain/user-wallets";
 import { prisma } from "@/lib/prisma";
 import { normalizeLanguage } from "@/lib/profile-options";
+import { rateLimitByIp } from "@/lib/security";
+import { auditFailure, auditSuccess } from "@/lib/audit";
 
 const registerSchema = z.object({
   name: z.string().trim().min(2, "Full name is required"),
@@ -20,6 +22,8 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const limited = rateLimitByIp(request, "auth-register", 5, 60 * 60 * 1000);
+  if (limited) return limited;
   const parsed = registerSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid registration details" }, { status: 400 });
@@ -51,12 +55,14 @@ export async function POST(request: Request) {
       return created;
     });
     await createSession(user.id);
+    await auditSuccess({ request, userId: user.id, role: "USER", action: "REGISTER", module: "AUTH", description: "User registered", newValue: { email: user.email, uid: user.uid, country: user.country }, metadata: { sponsorCode: sponsorCode ?? null } }).catch(() => null);
     return NextResponse.json({ authenticated: true, user }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json({ error: "Email is already registered" }, { status: 409 });
     }
     console.error("[auth] registration failed", error);
+    await auditFailure({ request, action: "REGISTER", module: "AUTH", description: "Registration failed", metadata: { email }, errorMessage: error instanceof Error ? error.message : "Registration failed" }).catch(() => null);
     return NextResponse.json({ error: "Registration failed" }, { status: 500 });
   }
 }

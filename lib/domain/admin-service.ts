@@ -95,13 +95,15 @@ export async function getAdminDeposits() {
   });
   return {
     rows: deposits.map(deposit => [
-      deposit.network.name,
+      deposit.providerPaymentId ?? deposit.id,
+      deposit.paymentStatus ?? deposit.status,
       `${deposit.user.name} / ${deposit.user.uid}`,
       money(deposit.amount),
-      "$0.00",
-      money(deposit.amount),
-      deposit.txHash ?? "",
+      deposit.payCurrency?.toUpperCase() ?? deposit.network.name,
+      deposit.actuallyPaid ? money(deposit.actuallyPaid) : "$0.00",
       deposit.status,
+      deposit.creditedAt ? "Credited" : "Not credited",
+      deposit.webhookReceivedAt ? formatDate(deposit.webhookReceivedAt) : "",
       deposit.id,
     ]),
   };
@@ -130,17 +132,102 @@ export async function getAdminWithdrawals() {
   };
 }
 
-export async function getAdminAuditLogs() {
-  const logs = await prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { actor: { select: { name: true, uid: true } } } });
+type AuditFilters = {
+  from?: string | null;
+  to?: string | null;
+  action?: string | null;
+  module?: string | null;
+  status?: string | null;
+  user?: string | null;
+  admin?: string | null;
+  country?: string | null;
+  ip?: string | null;
+  search?: string | null;
+};
+
+export async function getAdminAuditLogs(filters: AuditFilters = {}) {
+  const where: Prisma.AuditLogWhereInput = {
+    ...(filters.from || filters.to ? {
+      createdAt: {
+        ...(filters.from ? { gte: new Date(filters.from) } : {}),
+        ...(filters.to ? { lte: new Date(filters.to) } : {}),
+      },
+    } : {}),
+    ...(filters.action ? { action: { contains: filters.action, mode: "insensitive" } } : {}),
+    ...(filters.module ? { module: { contains: filters.module, mode: "insensitive" } } : {}),
+    ...(filters.status ? { status: filters.status as Prisma.EnumAuditStatusFilter<"AuditLog"> } : {}),
+    ...(filters.country ? { country: { contains: filters.country, mode: "insensitive" } } : {}),
+    ...(filters.ip ? { ipAddress: { contains: filters.ip, mode: "insensitive" } } : {}),
+  };
+  const search = filters.search?.trim();
+  if (search) {
+    where.OR = [
+      { id: { contains: search, mode: "insensitive" } },
+      { action: { contains: search, mode: "insensitive" } },
+      { ipAddress: { contains: search, mode: "insensitive" } },
+      { user: { is: { name: { contains: search, mode: "insensitive" } } } },
+      { user: { is: { email: { contains: search, mode: "insensitive" } } } },
+      { admin: { is: { name: { contains: search, mode: "insensitive" } } } },
+      { admin: { is: { email: { contains: search, mode: "insensitive" } } } },
+      { actor: { is: { name: { contains: search, mode: "insensitive" } } } },
+      { actor: { is: { email: { contains: search, mode: "insensitive" } } } },
+    ];
+  }
+  if (filters.user) {
+    where.user = { is: { OR: [{ name: { contains: filters.user, mode: "insensitive" } }, { email: { contains: filters.user, mode: "insensitive" } }, { uid: { contains: filters.user, mode: "insensitive" } }] } };
+  }
+  if (filters.admin) {
+    where.admin = { is: { OR: [{ name: { contains: filters.admin, mode: "insensitive" } }, { email: { contains: filters.admin, mode: "insensitive" } }, { uid: { contains: filters.admin, mode: "insensitive" } }] } };
+  }
+  const logs = await prisma.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, take: 500, include: { user: { select: { name: true, uid: true, email: true } }, admin: { select: { name: true, uid: true, email: true } }, actor: { select: { name: true, uid: true, email: true } } } });
+  const formatted = logs.map(log => {
+    const userLabel = log.user ? `${log.user.name} / ${log.user.uid}` : log.actor && log.actorType === "USER" ? `${log.actor.name} / ${log.actor.uid}` : "";
+    const adminLabel = log.admin ? `${log.admin.name} / ${log.admin.uid}` : log.actor && log.actorType === "ADMIN" ? `${log.actor.name} / ${log.actor.uid}` : "";
+    return {
+      id: log.id,
+      createdAt: log.createdAt.toISOString(),
+      date: log.createdAt.toLocaleDateString(),
+      time: log.createdAt.toLocaleTimeString(),
+      userLabel,
+      adminLabel,
+      userEmail: log.user?.email ?? (log.actorType === "USER" ? log.actor?.email : null) ?? null,
+      adminEmail: log.admin?.email ?? (log.actorType === "ADMIN" ? log.actor?.email : null) ?? null,
+      role: log.role,
+      action: log.action,
+      module: log.module,
+      description: log.description,
+      status: log.status,
+      ipAddress: log.ipAddress,
+      country: log.country,
+      city: log.city,
+      userAgent: log.userAgent,
+      device: log.device,
+      browser: log.browser,
+      os: log.os,
+      requestMethod: log.requestMethod,
+      requestPath: log.requestPath,
+      requestId: log.requestId,
+      oldValue: log.oldValue,
+      newValue: log.newValue,
+      metadata: log.metadata,
+      errorMessage: log.errorMessage,
+      durationMs: log.durationMs,
+    };
+  });
   return {
-    rows: logs.map(log => [
-      log.actor ? `${log.actor.name} / ${log.actor.uid}` : log.actorType,
+    rows: formatted.map(log => [
+      log.date,
+      log.time,
+      log.userLabel || log.adminLabel || "System",
+      log.role,
       log.action,
-      `${log.entityType} ${log.entityId}`,
+      log.module,
+      log.status,
       log.ipAddress ?? "",
-      JSON.stringify(log.metadata),
-      formatDate(log.createdAt),
+      log.country ?? "",
+      log.id,
     ]),
+    logs: formatted,
   };
 }
 

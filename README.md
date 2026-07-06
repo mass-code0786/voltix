@@ -1,6 +1,6 @@
 # Voltix Crypto Network
 
-Binance-inspired (not a clone) dark crypto dashboard with user and admin experiences, MLM configuration, VIP-based copy trading, double-entry wallet modeling, and blockchain webhook boundaries.
+Binance-inspired (not a clone) dark crypto dashboard with user and admin experiences, MLM configuration, VIP-based copy trading, double-entry wallet modeling, and NOWPayments deposit boundaries.
 
 ## Run locally
 
@@ -25,10 +25,10 @@ npm run db:push
 
 ## Production boundaries
 
-- Keep only an HD wallet `xpub` in the web application. Seed phrases and private keys belong in an HSM or isolated signer.
-- Derive one address per user/network with a transactionally allocated derivation index.
-- Verify webhook events independently against a trusted RPC endpoint before creating a deposit.
-- Deposit uniqueness is enforced by `(networkId, txHash, eventIndex)`.
+- Deposits use NOWPayments payment/IPN flow only.
+- Configure `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_IPN_SECRET`, and either `NOWPAYMENTS_IPN_CALLBACK_URL` or `NEXT_PUBLIC_APP_URL`.
+- Credit Spot wallet balances only after a verified NOWPayments IPN marks the payment confirmed or finished.
+- Deposit idempotency is enforced by unique NOWPayments provider payment IDs and ledger journal idempotency.
 - Every value movement posts a balanced ledger journal. Journal idempotency prevents duplicate credits.
 - Copy-code redemption uses a serializable transaction and conditional status update to prevent concurrent reuse.
 - Trade completion and income credit should run as separate retryable workers. `CopyTrade.status`, due timestamps, and journal idempotency make both jobs restart-safe.

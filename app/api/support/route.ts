@@ -4,8 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { createSupportTicket, getUserSupportTickets } from "@/lib/domain/kyc-support-service";
 
 const ticketSchema = z.object({
-  subject: z.string().trim().min(1),
-  message: z.string().trim().min(1),
+  subject: z.string().trim().min(1).max(120),
+  message: z.string().trim().min(1).max(2000),
 });
 
 export async function GET() {

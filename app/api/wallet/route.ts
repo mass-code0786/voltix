@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getUserWalletSnapshot } from "@/lib/domain/user-wallets";
 import { transferWallet } from "@/lib/domain/wallet-service";
 import { prisma } from "@/lib/prisma";
+import { auditFailure, auditSuccess } from "@/lib/audit";
 
 const transferSchema = z.object({
   fromWallet: z.enum(["SPOT", "FUTURES", "BITEX"]),
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
       amount: new Prisma.Decimal(parsed.data.amount),
       idempotencyKey: `${user.id}:${Date.now()}:${crypto.randomUUID()}`,
     });
+    await auditSuccess({ request, userId: user.id, role: "USER", action: "WALLET_TRANSFER", module: "WALLET", description: "User transferred funds between wallets", newValue: { id: transfer.id, fromWallet: transfer.fromWallet, toWallet: transfer.toWallet, amount: transfer.amount.toString(), status: transfer.status } }).catch(() => null);
     return NextResponse.json({
       transfer: {
         id: transfer.id,
@@ -49,6 +51,7 @@ export async function POST(request: Request) {
       },
     }, { status: 201 });
   } catch (error) {
+    await auditFailure({ request, userId: user.id, role: "USER", action: "WALLET_TRANSFER", module: "WALLET", description: "Wallet transfer failed", errorMessage: error instanceof Error ? error.message : "Wallet transfer failed" }).catch(() => null);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Wallet transfer failed" }, { status: 400 });
   }
 }

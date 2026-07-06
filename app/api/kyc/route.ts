@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserKyc, submitUserKyc } from "@/lib/domain/kyc-support-service";
+import { getKycDocumentTypes } from "@/lib/kyc-document-types";
+import { auditSuccess } from "@/lib/audit";
 
 const kycSchema = z.object({
   fullName: z.string().trim().min(1),
@@ -10,9 +12,12 @@ const kycSchema = z.object({
   address: z.string().trim().min(1),
   governmentIdType: z.string().trim().min(1),
   governmentIdNumber: z.string().trim().min(1),
-  frontIdImageUrl: z.string().trim().min(1),
-  backIdImageUrl: z.string().trim().min(1),
-  selfieImageUrl: z.string().trim().min(1),
+  frontIdImageUrl: z.string().trim().url("Front ID image URL must be valid"),
+  backIdImageUrl: z.string().trim().url("Back ID image URL must be valid"),
+  selfieImageUrl: z.string().trim().url("Selfie image URL must be valid"),
+}).refine(data => getKycDocumentTypes(data.country).includes(data.governmentIdType), {
+  message: "Document type is not supported for selected country",
+  path: ["governmentIdType"],
 });
 
 export async function GET() {
@@ -30,6 +35,7 @@ export async function POST(request: Request) {
   }
   try {
     const kyc = await submitUserKyc({ userId: user.id, ...parsed.data });
+    await auditSuccess({ request, userId: user.id, role: "USER", action: "KYC_SUBMIT", module: "KYC", description: "User submitted KYC for manual review", newValue: { ...parsed.data, status: kyc.status, kycId: kyc.id } }).catch(() => null);
     return NextResponse.json({ kyc, status: kyc.status }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "KYC submission failed" }, { status: 400 });

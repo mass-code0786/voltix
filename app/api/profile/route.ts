@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeLanguage } from "@/lib/profile-options";
+import { auditSuccess } from "@/lib/audit";
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -66,6 +67,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
+  const before = await profilePayload(user.id, request);
   const parsed = profileSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid profile details" }, { status: 400 });
@@ -80,5 +82,6 @@ export async function PATCH(request: Request) {
     },
   });
   const profile = await profilePayload(user.id, request);
+  await auditSuccess({ request, userId: user.id, role: "USER", action: "PROFILE_UPDATE", module: "PROFILE", description: "User profile updated", oldValue: before, newValue: profile }).catch(() => null);
   return NextResponse.json({ profile });
 }

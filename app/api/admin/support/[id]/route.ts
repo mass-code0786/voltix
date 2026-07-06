@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentAdmin } from "@/lib/auth";
 import { updateSupportTicket } from "@/lib/domain/kyc-support-service";
+import { rateLimitByAdmin } from "@/lib/security";
 
 const updateSchema = z.object({
   status: z.enum(["OPEN", "PENDING", "CLOSED"]).optional(),
@@ -12,6 +13,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const admin = await getCurrentAdmin();
   if (admin.response) return admin.response;
   if (!admin.user) return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  const limited = rateLimitByAdmin(admin.user.id);
+  if (limited) return limited;
   const parsed = updateSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid support update" }, { status: 400 });

@@ -11,7 +11,7 @@ export async function GET() {
     include: { user: true, asset: true, network: true },
   });
   return NextResponse.json({
-    status: process.env.CHAIN_WEBHOOK_SECRET ? "configured" : "missing_secret",
+    status: process.env.NOWPAYMENTS_IPN_SECRET ? "configured" : "missing_secret",
     latestDeposits: deposits.map(deposit => ({
       id: deposit.id,
       user: deposit.user.name,
@@ -19,21 +19,21 @@ export async function GET() {
       asset: deposit.asset.symbol,
       network: deposit.network.key.toUpperCase(),
       amount: Number(deposit.amount.toString()),
-      txHash: deposit.txHash,
+      txHash: deposit.providerPaymentId ?? deposit.txHash,
       confirmations: deposit.confirmations,
-      status: deposit.status,
+      status: deposit.paymentStatus ?? deposit.status,
       createdAt: deposit.createdAt.toISOString(),
     })),
-    latestConfirmations: deposits.filter(deposit => deposit.confirmations > 0).slice(0, 10).map(deposit => ({
+    latestConfirmations: deposits.filter(deposit => deposit.webhookReceivedAt).slice(0, 10).map(deposit => ({
       id: deposit.id,
-      txHash: deposit.txHash,
+      txHash: deposit.providerPaymentId ?? deposit.txHash,
       confirmations: deposit.confirmations,
-      status: deposit.status,
+      status: deposit.paymentStatus ?? deposit.status,
     })),
     processingErrors: deposits.filter(deposit => deposit.status === "FAILED").map(deposit => ({
       id: deposit.id,
-      txHash: deposit.txHash,
-      status: deposit.status,
+      txHash: deposit.providerPaymentId ?? deposit.txHash,
+      status: deposit.paymentStatus ?? deposit.status,
     })),
     checkedAt: new Date().toISOString(),
   });
