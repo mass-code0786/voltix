@@ -2815,7 +2815,13 @@ textarea:focus {
 .wallet-page {
   display: flow-root;
   width: 100%;
-  max-width: 100vw;
+  max-width: 430px;
+  box-sizing: border-box;
+  margin-left: auto;
+  margin-right: auto;
+  overflow-x: hidden;
+  padding-left: 16px;
+  padding-right: 16px;
   background:
     radial-gradient(circle at 17% 0%, rgba(24,255,138,.16), transparent 8rem),
     radial-gradient(circle at 88% 13%, rgba(24,200,255,.07), transparent 7rem),
@@ -2824,6 +2830,10 @@ textarea:focus {
 
 .wallet-glass,
 .wallet-hero {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   border: 1px solid rgba(24,255,138,.16);
   background:
     radial-gradient(circle at 12% 0%, rgba(255,255,255,.075), transparent 28%),
@@ -2881,6 +2891,7 @@ textarea:focus {
   z-index: 1;
   height: 124px;
   width: 148px;
+  max-width: 100%;
   justify-self: end;
   filter: drop-shadow(0 0 18px rgba(24,255,138,.18));
 }
@@ -2992,8 +3003,10 @@ textarea:focus {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
+  width: 100%;
   max-width: 100%;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .wallet-type-card {
@@ -3064,7 +3077,7 @@ textarea:focus {
   display: grid;
   min-height: 86px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  gap: 6px;
   margin-top: 12px;
   border-radius: 22px;
   padding: 10px 8px;
@@ -3119,6 +3132,7 @@ textarea:focus {
 
 .wallet-card-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -3270,11 +3284,11 @@ textarea:focus {
 @media (max-width: 374px) {
   .wallet-hero {
     height: 150px;
-    grid-template-columns: minmax(0, 1fr) 126px;
+    grid-template-columns: minmax(0, 1fr) minmax(102px, 126px);
   }
 
   .wallet-hero-svg {
-    width: 134px;
+    width: 126px;
   }
 
   .wallet-total-card {

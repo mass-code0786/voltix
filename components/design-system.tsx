@@ -87,8 +87,8 @@ type BottomNavProps<T extends string> = {
 
 export function BottomNav<T extends string>({ items, activeId, activeSection, labelFor, onSelect }: BottomNavProps<T>) {
   return (
-    <nav className="fixed inset-x-0 bottom-3 z-50 px-4 lg:hidden">
-      <div className="mx-auto flex h-[66px] max-w-[390px] items-center justify-around rounded-full border border-white/[.18] bg-black/70 px-2 shadow-[0_-14px_42px_rgba(0,0,0,.48),0_0_26px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl">
+    <nav className="fixed bottom-3 left-4 right-4 z-50 mx-auto max-w-[430px] lg:hidden">
+      <div className="mx-auto flex h-[66px] w-full max-w-full items-center justify-around rounded-full border border-white/[.18] bg-black/70 px-2 shadow-[0_-14px_42px_rgba(0,0,0,.48),0_0_26px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl">
         {items.map(({ id, label, icon: Icon, section }) => {
           const active = activeId === id && (!section || activeSection === section);
           const center = label.toLowerCase().includes("ai");
