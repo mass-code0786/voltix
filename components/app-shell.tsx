@@ -1832,7 +1832,7 @@ function WalletTypeCards({spot,ai,futures,aiProfit}:{spot:number;ai:number;futur
     ["AI Wallet",ai,Bot,"purple",`Profit ${usd(aiProfit)}`],
     ["Futures Wallet",futures,LineChart,"blue","Trading"],
   ] as const;
-  return <section className="wallet-type-grid">{items.map(([label,value,Icon,tone,meta])=><div key={label} className="wallet-glass wallet-type-card"><span className={`wallet-type-icon wallet-type-${tone}`}><Icon size={16}/></span><p>{label}</p><strong>{value.toFixed(2)}</strong><em>{meta}</em></div>)}</section>;
+  return <section className="wallet-type-grid">{items.map(([label,value,Icon,tone,meta])=><div key={label} className="wallet-glass wallet-type-card"><div className="wallet-type-head"><span className={`wallet-type-icon wallet-type-${tone}`}><Icon size={16}/></span><p>{label}</p></div><div className="wallet-type-body"><strong>{value.toFixed(2)}</strong><em>{meta}</em></div></div>)}</section>;
 }
 
 function WalletQuickActions({onOpenDeposit,onOpenWithdrawal,onOpenTransfer,onHistory,onAddressBook}:{onOpenDeposit:()=>void;onOpenWithdrawal:()=>void;onOpenTransfer:()=>void;onHistory:()=>void;onAddressBook:()=>void}) {

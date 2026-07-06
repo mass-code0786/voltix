@@ -3010,15 +3010,21 @@ textarea:focus {
 }
 
 .wallet-type-card {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   height: 88px;
   min-width: 0;
-  grid-template-rows: 30px minmax(22px, auto) 17px 12px;
-  align-items: start;
-  justify-items: start;
   overflow: hidden;
   border-radius: 18px;
   padding: 10px;
+}
+
+.wallet-type-head {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
 }
 
 .wallet-type-icon {
@@ -3035,6 +3041,13 @@ textarea:focus {
 .wallet-type-blue { color: #58d8ff; background: rgba(88,216,255,.11); }
 .wallet-type-purple { color: #b56cff; background: rgba(181,108,255,.12); }
 .wallet-type-gold { color: #f6c85f; background: rgba(246,200,95,.12); }
+
+.wallet-type-body {
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 3px;
+  padding-left: 2px;
+}
 
 .wallet-type-card strong,
 .wallet-type-card em {
@@ -3070,7 +3083,7 @@ textarea:focus {
   font-size: 10px;
   font-style: normal;
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .wallet-actions {
