@@ -26,8 +26,8 @@ import {
   StatCard,
   StatusBadge,
 } from "./design-system";
-import { coins } from "@/lib/market-defaults";
-import { compact, inr, usd } from "@/lib/format";
+import type { Coin } from "@/lib/market-defaults";
+import { compact, usd } from "@/lib/format";
 import { useLiveTickers } from "@/lib/use-market-data";
 import { currencyConfigForCountry, formatLocalCurrency } from "@/lib/local-currency";
 import { getTranslator } from "@/lib/i18n";
@@ -41,13 +41,12 @@ type UserWallet = "SPOT" | "FUTURES" | "BITEX";
 type WalletActivity = readonly [typeof ArrowDownLeft, string, string, string];
 type WithdrawalInput = { walletType: "SPOT" | "BITEX"; amount: number; address: string; network: string };
 type DepositInput = { amount: number; network: string; txHash?: string };
-type DepositRecord = { id: string; amount: number; asset: string; network: string; txHash?: string | null; status: string; createdAt: string };
-type WithdrawalRecord = { id: string; walletType: "SPOT" | "BITEX"; amount: number; fee: number; receivable: number; asset: string; address: string; network: string; txHash?: string | null; status: string; rejectionReason?: string | null; createdAt: string };
+type DepositAddressRecord = { id: string; network: string; networkName: string; requiredConfirmations: number; address: string; active: boolean; createdAt: string };
 type ActiveCopyTrade = { code?: string; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string };
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
 type CopyTradeCounts = { todaysTradeCount: number; dailyTradeLimit: number };
 type VipTradeRow = { id: string; label: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "Upcoming" | "Live" | "Closed"; message?: string | null };
-type AppCoin = typeof coins[number];
+type AppCoin = Coin;
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath">> & { localLogoPath?: string | null };
 type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; language?: string | null; vipRank?: string | null; role?: string | null };
@@ -209,26 +208,9 @@ const mobileTabs: { id: MobileNavTab; label: string; icon: typeof Home; section?
 ];
 
 const card = "premium-card";
-const coinSettingsKey = "voltix.coin-settings";
-const topCopyTraders: { country: string; name: string; monthlyReturn: number; message: string }[] = [];
 const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA","TRX","AVAX","DOT","LINK","TON","SHIB","LTC","BCH","ATOM","APT","ARB","OP","PEPE","NEAR","INJ","SEI","FIL"];
 const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, bitex: 0 }, locked: { spot: 0, futures: 0, bitex: 0 }, total: { spot: 0, futures: 0, bitex: 0 }, portfolio: 0, bitex: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
 const defaultCopyTradeCounts: CopyTradeCounts = { todaysTradeCount: 0, dailyTradeLimit: 3 };
-
-function applyCoinSettings(baseCoins: AppCoin[]): AppCoin[] {
-  if (typeof window === "undefined") return baseCoins;
-  try {
-    const settings = JSON.parse(window.localStorage.getItem(coinSettingsKey) ?? "{}") as Record<string,CoinSetting>;
-    return baseCoins
-      .map(coin => {
-        const setting=settings[coin.symbol] ?? {};
-        return { ...coin, ...setting, localLogoPath: setting.localLogoPath ?? coin.localLogoPath, logoPath: setting.localLogoPath ?? coin.logoPath };
-      })
-      .sort((a,b)=>(a.displayOrder??9999)-(b.displayOrder??9999));
-  } catch {
-    return baseCoins;
-  }
-}
 
 function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSetting>): AppCoin[] {
   const bySymbol = new Map(baseCoins.map(coin => [coin.symbol, coin]));
@@ -254,6 +236,11 @@ function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSet
     });
   }
   return merged.sort((a,b)=>(a.displayOrder??9999)-(b.displayOrder??9999));
+}
+
+function coinsFromApi(rows: (CoinSetting & { symbol: string })[]): AppCoin[] {
+  const settings = Object.fromEntries(rows.map(coin => [coin.symbol, coin])) as Record<string, CoinSetting>;
+  return mergeCoinSettings([], settings).map(coin => ({ ...coin, balance: 0 }));
 }
 
 function mergeAssetRecords(baseCoins: AppCoin[], assets: AssetRecord[]): AppCoin[] {
@@ -308,7 +295,9 @@ export default function AppShell() {
   const [copyTradeHistory, setCopyTradeHistory] = useState<CopyTradeHistory[]>([]);
   const [copyTradeCounts, setCopyTradeCounts] = useState<CopyTradeCounts>(defaultCopyTradeCounts);
   const [vipTradeRows, setVipTradeRows] = useState<VipTradeRow[]>([]);
-  const [marketCoins, setMarketCoins] = useState(() => applyCoinSettings(coins).map((coin) => ({ ...coin, balance: 0 })));
+  const [marketCoins, setMarketCoins] = useState<AppCoin[]>([]);
+  const [marketCoinsLoading, setMarketCoinsLoading] = useState(true);
+  const [marketCoinsError, setMarketCoinsError] = useState("");
   const [walletAssets, setWalletAssets] = useState<AppCoin[]>([]);
   const [assetTotals, setAssetTotals] = useState<AssetTotals>(emptyAssetTotals);
   const [futuresBalance, setFuturesBalance] = useState(0);
@@ -323,6 +312,7 @@ export default function AppShell() {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [aiSubscription, setAiSubscription] = useState<AiSubscriptionStatus | null>(null);
@@ -444,7 +434,9 @@ export default function AppShell() {
     if (!response.ok) throw new Error(data.error || "Assets request failed");
     const assets = Array.isArray(data.assets) ? data.assets as AssetRecord[] : [];
     const totals = data.totals as AssetTotals;
-    const history = Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
+    const historyResponse = await fetch("/api/wallet/history");
+    const historyData = await historyResponse.json().catch(() => ({}));
+    const history = Array.isArray(historyData.history) ? historyData.history as WalletHistoryRecord[] : Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
     setWalletAssets(mergeAssetRecords(marketCoins, assets));
     setAssetTotals(totals ?? emptyAssetTotals);
     setFuturesBalance(Number(totals?.total?.futures ?? 0));
@@ -475,21 +467,36 @@ export default function AppShell() {
   }, []);
 
   useEffect(() => {
+    setMarketCoinsLoading(true);
+    setMarketCoinsError("");
     fetch("/api/coins")
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => {
-        if (!Array.isArray(data.coins) || !data.coins.length) return;
-        const settings = Object.fromEntries(data.coins.map((coin: CoinSetting & {symbol:string}) => [coin.symbol, coin])) as Record<string,CoinSetting>;
-        window.localStorage.setItem(coinSettingsKey, JSON.stringify(settings));
-        setMarketCoins(current => mergeCoinSettings(current, settings).map(coin => ({ ...coin, balance: 0 })));
+        if (!Array.isArray(data.coins) || !data.coins.length) {
+          setMarketCoins([]);
+          setMarketCoinsError("No market coins available");
+          return;
+        }
+        setMarketCoins(coinsFromApi(data.coins));
       })
-      .catch(() => {});
+      .catch(() => {
+        setMarketCoins([]);
+        setMarketCoinsError("Market coins unavailable");
+      })
+      .finally(() => setMarketCoinsLoading(false));
   }, []);
 
   useEffect(() => {
     refreshMe()
       .catch(() => setUserCountry("United States"));
   }, [refreshMe]);
+
+  useEffect(() => {
+    const check = () => fetch("/api/health").then(response => setHealthOk(response.ok)).catch(() => setHealthOk(false));
+    void check();
+    const timer = window.setInterval(check, 60000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     refreshWallet(currentUser)
@@ -542,6 +549,14 @@ export default function AppShell() {
           setUnreadNotifications(0);
         }
       });
+  }, [currentUser, refreshNotifications]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const timer = window.setInterval(() => {
+      refreshNotifications(currentUser).catch(() => {});
+    }, 30000);
+    return () => window.clearInterval(timer);
   }, [currentUser, refreshNotifications]);
 
   const syncNavigation = useCallback(() => {
@@ -731,10 +746,20 @@ export default function AppShell() {
     }
   }, [currentUser, unreadNotifications]);
 
+  const deleteNotification = useCallback(async (id: string) => {
+    if (!currentUser) return;
+    const response = await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setNotifications(current => current.filter(notification => notification.id !== id));
+      setUnreadNotifications(Number(data.unreadCount ?? 0));
+    }
+  }, [currentUser]);
+
   const screen = {
     home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} bitexBalance={bitexBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
-    markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} />,
-    trade: <TradeWorkspace category={tradeCategory} />,
+    markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} loading={marketCoinsLoading} error={marketCoinsError} />,
+    trade: <TradeWorkspace category={tradeCategory} coins={marketCoins} loading={marketCoinsLoading} error={marketCoinsError} />,
     bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
     wallet: <WalletScreen notify={notify} assets={walletAssets} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>setWithdrawalOpen(true)} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
@@ -771,7 +796,10 @@ export default function AppShell() {
             onNotifications={() => { if (!currentUser) { openAuthPage("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }}
             onMenu={() => { setMenu(!menu); setNotificationOpen(false); }}
           />
-          {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
+          <div className="mx-auto flex max-w-[420px] justify-end px-4 lg:max-w-6xl lg:px-8">
+            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black ${healthOk === false ? "border-danger/30 bg-danger/10 text-danger" : "border-lime/20 bg-lime/10 text-lime"}`}>{healthOk === false ? "API Offline" : "API Online"}</span>
+          </div>
+          {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} deleteNotification={deleteNotification} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
           <div className={`mx-auto ${tab === "wallet" ? "max-w-[430px] px-0" : "max-w-[420px] px-4"} lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "bitex" || tab === "markets" ? "pb-36 pt-1 lg:py-8" : tab === "wallet" ? "pb-44 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
         </main>
@@ -810,8 +838,8 @@ function normalizeTrade(raw: ActiveCopyTrade & { startedAt?: string; remainingTi
   };
 }
 
-function NotificationMenu({ close, notifications, unreadCount, markRead }: { close: () => void; notifications: NotificationItem[]; unreadCount: number; markRead: () => void }) {
-  return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => <div key={notification.id} className={`rounded-xl p-3 ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p><p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div></div></div>) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
+function NotificationMenu({ close, notifications, unreadCount, markRead, deleteNotification }: { close: () => void; notifications: NotificationItem[]; unreadCount: number; markRead: () => void; deleteNotification: (id: string) => void }) {
+  return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => <div key={notification.id} className={`rounded-xl p-3 ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p><p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div><button onClick={() => deleteNotification(notification.id)} aria-label="Delete notification" className="rounded-lg p-1 text-slate-600 hover:bg-white/5 hover:text-danger"><X size={14}/></button></div></div>) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
 }
 
 function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerification,openHelp }: { close: () => void;notify:(message:string)=>void;user:CurrentUser|null;openLogin:()=>void;openRegister:()=>void;logout:()=>void;openVerification:()=>void;openHelp:()=>void }) {
@@ -1105,11 +1133,13 @@ function vipAccent(row: VipTradeRow) {
 function VipTradeRowItem({ row, loading, start }: { row: VipTradeRow; loading: boolean; start: () => void }) {
   const accent=vipAccent(row);
   const status=row.tradeStatus??(row.available?"Live":"Closed");
+  const label=displayVipLabel(row.label);
+  const longLabel=label.length>20;
   return <div className="vip-row flex h-[48px] items-center gap-1.5 rounded-[13px] px-2 py-1" style={{"--vip-accent":accent} as CSSProperties}>
     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[8px] font-black text-[#050807]" style={{background:`linear-gradient(145deg, ${accent}, ${accent}99)`,boxShadow:`0 0 18px ${accent}33`}}>VIP</div>
     <div className="min-w-0 flex-1">
       <div className="flex min-w-0 items-center gap-1.5">
-        <p className="shrink-0 whitespace-nowrap text-[13px] font-black leading-none text-white">{row.label}</p>
+        <p className={`shrink-0 whitespace-nowrap font-black leading-none text-white ${longLabel ? "text-[10px] min-[390px]:text-[11px]" : "text-[13px]"}`}>{label}</p>
         <span className="flex h-[18px] shrink-0 items-center rounded-full border px-1.5 text-[8px] font-black" style={{borderColor:`${accent}33`,backgroundColor:`${accent}14`,color:accent}}>{status}</span>
       </div>
       <p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{row.dailyPercentMin.toFixed(1)}% - {row.dailyPercentMax.toFixed(1)}% Daily Return</p>
@@ -1170,8 +1200,11 @@ function formatRemaining(seconds:number) {
   return `${String(Math.floor(safe/60)).padStart(2,"0")}:${String(safe%60).padStart(2,"0")}`;
 }
 
+type LeaderboardTrader = { id: string; name: string; uid: string; vipRank: string; roi: number; winRate: number; totalProfit: number; followers: number; totalTrades: number };
 function TopCopyTraders({ t = getTranslator("en") }: { t?: ReturnType<typeof getTranslator> }) {
-  return <GlassCard className="overflow-hidden rounded-[28px]"><SectionHeader title={t("topCopyTraders")} />{topCopyTraders.length?<div className="divide-y divide-line/60">{topCopyTraders.map((trader,index)=>{const assetIndex=index+1;return <div key={`${trader.country}-${trader.name}`} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-5"><img src={`/trader-flags/flag-${assetIndex}.png`} alt={`${trader.country} flag`} className="h-5 w-7 shrink-0 rounded object-cover ring-1 ring-white/10 sm:h-6 sm:w-8" /><img src={`/traders/trader-${assetIndex}.png`} alt={`${trader.name} profile`} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-lime/25 sm:h-10 sm:w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{trader.name}</p><p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-500">{trader.message}</p></div><div className="w-[42px] shrink-0 text-right sm:w-[54px]"><p className="text-xs font-black text-lime sm:text-sm">+{trader.monthlyReturn}%</p><p className="text-[9px] text-slate-500 sm:text-[10px]">/ month</p></div><img src={`/trader-charts/chart-${assetIndex}.png`} alt={`${trader.name} monthly profit chart`} className="h-[34px] w-[54px] shrink-0 rounded-md border border-line bg-black/20 object-cover" /></div>;})}</div>:<EmptyState title={t("noCopyTraders")} icon={Users} />}</GlassCard>;
+  const [traders,setTraders]=useState<LeaderboardTrader[]>([]);
+  useEffect(()=>{let active=true;fetch("/api/copy-traders/leaderboard").then(r=>r.ok?r.json():Promise.reject()).then(data=>{if(active)setTraders(Array.isArray(data.traders)?data.traders:[]);}).catch(()=>{if(active)setTraders([]);});return()=>{active=false};},[]);
+  return <GlassCard className="overflow-hidden rounded-[28px]"><SectionHeader title={t("topCopyTraders")} />{traders.length?<div className="divide-y divide-line/60">{traders.map((trader,index)=><div key={trader.id} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-5"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-lime/10 text-xs font-black text-lime ring-1 ring-lime/25 sm:h-10 sm:w-10">{index+1}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{trader.name}</p><p className="mt-0.5 text-[10px] leading-snug text-slate-500">ROI {trader.roi.toFixed(2)}% · Win {trader.winRate.toFixed(1)}% · {trader.totalTrades} trades</p></div><div className="w-[86px] shrink-0 text-right"><p className="text-xs font-black text-lime sm:text-sm">{usd(trader.totalProfit)}</p><p className="text-[9px] text-slate-500 sm:text-[10px]">{trader.followers} followers</p></div></div>)}</div>:<EmptyState title={t("noCopyTraders")} icon={Users} />}</GlassCard>;
 }
 function formatMarketPrice(value:number) {
   if (!value) return "--";
@@ -1452,7 +1485,7 @@ function MarketsPromoCard() {
   </section>;
 }
 
-function MarketsScreen({coins:marketBase,userCountry}:{t: ReturnType<typeof getTranslator>; coins:AppCoin[];userCountry:string}) {
+function MarketsScreen({coins:marketBase,userCountry,loading,error}:{t: ReturnType<typeof getTranslator>; coins:AppCoin[];userCountry:string;loading:boolean;error:string}) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All Coins");
   const live=useLiveTickers();
@@ -1506,7 +1539,7 @@ function MarketsScreen({coins:marketBase,userCountry}:{t: ReturnType<typeof getT
           <span>Star</span>
         </div>
         <div>
-          {visibleCoins.length ? visibleCoins.map(coin=><MarketsTableRow key={coin.symbol} coin={coin} localCurrency={localCurrency} onTrade={()=>openTrade(coin)}/>) : <div className="markets-empty-state">No real market data found.</div>}
+          {visibleCoins.length ? visibleCoins.map(coin=><MarketsTableRow key={coin.symbol} coin={coin} localCurrency={localCurrency} onTrade={()=>openTrade(coin)}/>) : <div className="markets-empty-state">{loading ? "Loading market data..." : error || "No real market data found."}</div>}
         </div>
       </section>
 
@@ -1515,8 +1548,8 @@ function MarketsScreen({coins:marketBase,userCountry}:{t: ReturnType<typeof getT
   </div>;
 }
 
-function TradeWorkspace({category}:{category:TradeCategory}) {
-  return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category}/></div>;
+function TradeWorkspace({category,coins,loading,error}:{category:TradeCategory;coins:AppCoin[];loading:boolean;error:string}) {
+  return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category} coins={coins} loading={loading} error={error}/></div>;
 }
 
 function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,tradeRows,copyTradeCounts,copyTradeHistory,startTrade,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];copyTradeCounts:CopyTradeCounts;copyTradeHistory:CopyTradeHistory[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
@@ -1538,7 +1571,8 @@ function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,trad
     </section>
     <AiTopStats balance={bitexBalance} todayIncome={todayIncome} currentTrades={currentTrades} allowedTrades={allowedTrades} active={active}/>
     <AiTradeOverviewCard history={copyTradeHistory} todayIncome={todayIncome}/>
-    <AiVipRowsCard rows={tradeRows.slice(0,5)} startTrade={startTrade} notify={notify}/>
+    <TopCopyTraders/>
+    <VipTradeRowsCard rows={tradeRows.slice(0,5)} startTrade={startTrade} notify={notify}/>
     <AiInfoStrip/>
     <AiSubscriptionPanel currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin} notify={notify}/>
   </div>;
@@ -1622,61 +1656,6 @@ function AiIncomeChart({data,todayIncome}:{data:number[];todayIncome:number}) {
     {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((day,i)=><text key={day} x={28+(i/6)*168} y="135" textAnchor="middle" fill="#64748b" fontSize="9">{day}</text>)}
     <g transform="translate(118 12)" className="ai-tooltip"><rect width="78" height="24" rx="10" fill="#0b1712" stroke="#18ff8a" strokeOpacity=".34"/><text x="39" y="15" textAnchor="middle" fill="#18ff8a" fontSize="10" fontWeight="800">{todayIncome?usd(todayIncome):"$0 Today"}</text></g>
   </svg>;
-}
-
-function AiVipRowsCard({rows,startTrade,notify}:{rows:VipTradeRow[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;notify:(message:string)=>void}) {
-  const [loadingRow,setLoadingRow]=useState("");
-  const [error,setError]=useState("");
-  const tradeTime=rows.find(row=>row.currentTradeTime)?.currentTradeTime ?? "--:--:--";
-  const start=async(row:VipTradeRow)=>{
-    setError("");
-    if(!row.available){setError(row.message || "Trade not available.");return;}
-    if(!row.eligible){setError(row.message || "You are not eligible for this trade.");return;}
-    setLoadingRow(row.id);
-    const result=await startTrade(row.id);
-    setLoadingRow("");
-    if(!result.ok){setError(result.message);return;}
-    notify("Copy trade started");
-  };
-  return <section className="ai-glass ai-vip-card home-depth-card">
-    <div className="mb-2 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-1.5"><h2>VIP Trade Rows</h2><ShieldCheck size={14} className="text-[#18ff8a]"/></div>
-      <p>Trade Time: <span>{tradeTime}</span></p>
-    </div>
-    <div className="space-y-2">{rows.length?rows.map(row=><AiVipRow key={row.id} row={row} loading={loadingRow===row.id} start={()=>start(row)}/>):<EmptyState title="No VIP trade rows available" icon={LineChart}/>}</div>
-    {error&&<p className="mt-3 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-xs font-bold text-danger">{error}</p>}
-  </section>;
-}
-
-function AiVipBadge({accent}:{accent:string}) {
-  return <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true" className="shrink-0" style={{filter:`drop-shadow(0 0 14px ${accent}44)`}}>
-    <path d="M23 3 39 11v15c0 9-6 14-16 17C13 40 7 35 7 26V11Z" fill={`${accent}22`} stroke={accent} strokeWidth="1.3"/>
-    <path d="M15 18h16l-8 12Z" fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round"/>
-    <text x="23" y="14" textAnchor="middle" fill={accent} fontSize="8" fontWeight="900">VIP</text>
-  </svg>;
-}
-
-function AiVipRow({row,loading,start}:{row:VipTradeRow;loading:boolean;start:()=>void}) {
-  const accent=vipAccent(row);
-  const status=row.tradeStatus??(row.available?"Live":"Closed");
-  const label=displayVipLabel(row.label);
-  return <article className="vip-row ai-vip-row" style={{"--vip-accent":accent} as CSSProperties}>
-    <div className="flex min-w-0 items-center gap-1.5">
-      <AiVipBadge accent={accent}/>
-      <div className="min-w-0">
-        <p className={`ai-vip-title ${label.length>18?"ai-vip-title-long":""}`}>{label}</p>
-      </div>
-    </div>
-    <div className="min-w-0 flex-1">
-      <p className="ai-vip-return">{row.dailyPercentMin.toFixed(1)}% - {row.dailyPercentMax.toFixed(1)}%</p>
-      <p className="ai-vip-return-label">Daily Return</p>
-    </div>
-    <div className="min-w-0">
-      <span className="ai-status-pill" style={{color:accent,borderColor:`${accent}44`,backgroundColor:`${accent}14`}}>{status}</span>
-      <p className="ai-vip-time">{row.currentTradeTime ?? "--:--"}</p>
-    </div>
-    <button onClick={start} disabled={loading} className="ai-row-trade" style={{background:`linear-gradient(135deg, ${accent}, ${accent}aa)`,boxShadow:`0 0 22px ${accent}30`}}>{loading?"Wait":"Trade"}</button>
-  </article>;
 }
 
 function displayVipLabel(label:string) {
@@ -1786,10 +1765,14 @@ function TradeMenu({close,select}:{close:()=>void;select:(category:TradeCategory
   return <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/75 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Choose trading category"><button onClick={close} className="absolute inset-0" aria-label="Close trade menu"/><div className="relative w-full max-w-md rounded-[28px] border border-line bg-[#101916] p-4 shadow-2xl"><div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15"/><div className="mb-4 px-1"><h3 className="text-xl font-black">Choose Trade</h3><p className="mt-1 text-xs text-slate-500">Select a trading category to continue</p></div><div className="space-y-2">{options.map(({id,label,description,icon:Icon})=><button key={id} onClick={()=>select(id)} className="flex w-full items-center gap-4 rounded-2xl border border-line bg-white/[.035] p-3.5 text-left transition hover:border-lime/30 hover:bg-white/[.07]"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><Icon size={21}/></span><span className="min-w-0 flex-1"><span className="block text-sm font-black">{label}</span><span className="mt-1 block text-[11px] text-slate-500">{description}</span></span><ChevronRight size={18} className="text-slate-600"/></button>)}</div><button onClick={close} aria-label="Close" className="mx-auto mt-5 grid h-14 w-14 place-items-center rounded-full border border-white/10 bg-white/[.07] text-white shadow-xl"><X size={27}/></button></div></div>;
 }
 
-function TradingCategoryPage({category: _category}:{category:Exclude<TradeCategory,"copy">}) {
+function TradingCategoryPage({category: _category,coins,loading,error}:{category:Exclude<TradeCategory,"copy">;coins:AppCoin[];loading:boolean;error:string}) {
   const [symbol,setSymbol]=useState("BTCUSDT");
-  const pairOptions=coins.filter(coin=>coin.symbol!=="USDT").slice(0,8).map(coin=>`${coin.symbol}USDT`);
-  return <div className="space-y-5"><label className="flex w-fit items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Pair<select value={symbol} onChange={event=>setSymbol(event.target.value)} className="bg-transparent text-xs font-black text-white outline-none">{pairOptions.map(pair=><option key={pair} value={pair} className="bg-ink">{pair.replace("USDT","/USDT")}</option>)}</select></label><CandlestickChart symbol={symbol}/><OrderBookPanel symbol={symbol}/><section className={`${card} p-5`}><div className="flex items-center justify-between"><h3 className="font-bold">Order entry</h3><span className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold text-slate-400">{symbol.replace("USDT","/USDT")}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><button className="rounded-xl bg-mint py-3 text-xs font-black text-ink">Buy</button><button className="rounded-xl bg-danger py-3 text-xs font-black text-white">Sell</button></div></section></div>;
+  const pairOptions=useMemo(()=>coins.filter(coin=>coin.isActive&&coin.symbol!=="USDT").slice(0,8).map(coin=>coin.pair),[coins]);
+  useEffect(()=>{
+    if(pairOptions.length&&!pairOptions.includes(symbol))setSymbol(pairOptions[0]);
+  },[pairOptions,symbol]);
+  if(!pairOptions.length)return <section className={`${card} p-5 text-sm text-slate-400`}>{loading?"Loading trading pairs...":error||"No trading pairs available."}</section>;
+  return <div className="space-y-5"><label className="flex w-fit items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Pair<select value={symbol} onChange={event=>setSymbol(event.target.value)} className="bg-transparent text-xs font-black text-white outline-none">{pairOptions.map(pair=><option key={pair} value={pair} className="bg-ink">{pair.replace("USDT","/USDT")}</option>)}</select></label><CandlestickChart symbol={symbol}/><OrderBookPanel symbol={symbol}/><section className={`${card} p-5`}><div className="flex items-center justify-between"><h3 className="font-bold">Order entry</h3><span className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold text-slate-400">{symbol.replace("USDT","/USDT")}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><button disabled className="rounded-xl bg-mint/40 py-3 text-xs font-black text-ink/70">Buy Coming Soon</button><button disabled className="rounded-xl bg-danger/40 py-3 text-xs font-black text-white/70">Sell Coming Soon</button></div></section></div>;
 }
 
 function CopyTradeScreen({activeTrade,bitexBalance,tradeRows,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void}) {
@@ -1869,7 +1852,7 @@ function ShieldLockSvg() {
 
 function ActivityRows({rows}:{rows:readonly WalletActivity[]}) { return <div className="mt-4 space-y-4">{rows.length?rows.map(([I,t,a,s],index)=><div className="flex items-center gap-3" key={`${t}-${a}-${index}`}><div className="rounded-xl bg-white/5 p-2.5 text-slate-400"><I size={17}/></div><div className="flex-1"><p className="text-sm font-semibold">{t}</p><p className="text-[10px] text-mint">{s}</p></div><p className="text-xs font-bold">{a}</p></div>):<p className="py-6 text-center text-xs text-slate-500">No records available</p>}</div> }
 
-function DepositModal({close,notify,createDeposit}:{close:()=>void;notify:(s:string)=>void;createDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string}>}) { const addr=""; const [amount,setAmount]=useState(""); const [network,setNetwork]=useState("BSC"); const [txHash,setTxHash]=useState(""); const [error,setError]=useState(""); const [submitting,setSubmitting]=useState(false); const copyAddress=()=>{if(!addr){notify("Deposit address unavailable");return;}navigator.clipboard?.writeText(addr);notify("Address copied");}; const value=Number(amount); const submit=async()=>{if(value<=0){setError("Enter a valid deposit amount");return;}setSubmitting(true);const result=await createDeposit({amount:value,network,txHash});setSubmitting(false);if(!result.ok)setError(result.message||"Deposit request failed");}; return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex justify-between"><div><h3 className="text-xl font-black">Deposit to Main/Spot wallet</h3><p className="mt-1 text-xs text-slate-500">Send only USDT on BNB Smart Chain</p></div><button onClick={close}><X/></button></div><div className="mx-auto my-6 grid h-44 w-44 place-items-center rounded-2xl bg-white p-3"><div className="grid h-full w-full grid-cols-5 gap-1 bg-ink p-2">{Array.from({length:25}).map((_,i)=><i key={i} className={`${[0,1,2,5,7,10,11,12,14,17,20,22,23,24].includes(i)?"bg-white":"bg-ink"}`}/>)}</div></div><p className="text-center text-[10px] uppercase tracking-widest text-slate-500">Your unique deposit address</p><button onClick={copyAddress} className="mt-3 flex w-full items-center gap-3 rounded-xl border border-line bg-ink p-3 text-left"><span className="min-w-0 flex-1 break-all text-xs text-slate-300">{addr || "Deposit address unavailable"}</span><Copy size={16} className="shrink-0 text-lime"/></button><label className="mt-4 block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");}} placeholder="0.00" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>setNetwork(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label><label className="mt-4 block text-xs font-bold text-slate-400">Tx hash optional<input value={txHash} onChange={e=>{setTxHash(e.target.value);setError("");}} placeholder="Transaction hash" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<div className="mt-4 rounded-xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. After 12 network confirmations, funds are credited only to the Main/Spot wallet.</div><button onClick={submit} disabled={submitting} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">{submitting?"Submitting...":"Submit Deposit Request"}</button></div></div> }
+function DepositModal({close,notify,createDeposit}:{close:()=>void;notify:(s:string)=>void;createDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string}>}) { const [addresses,setAddresses]=useState<DepositAddressRecord[]>([]); const [amount,setAmount]=useState(""); const [network,setNetwork]=useState("BSC"); const [txHash,setTxHash]=useState(""); const [error,setError]=useState(""); const [submitting,setSubmitting]=useState(false); useEffect(()=>{let active=true;fetch("/api/deposit-addresses").then(r=>r.ok?r.json():Promise.reject()).then(data=>{if(active&&Array.isArray(data.addresses)){setAddresses(data.addresses);const first=data.addresses[0] as DepositAddressRecord|undefined;if(first)setNetwork(first.network);}}).catch(()=>{if(active)setError("Deposit address unavailable");});return()=>{active=false};},[]); const selected=addresses.find(item=>item.network===network); const addr=selected?.address ?? ""; const copyAddress=()=>{if(!addr){notify("Deposit address unavailable");return;}navigator.clipboard?.writeText(addr);notify("Address copied");}; const value=Number(amount); const submit=async()=>{if(value<=0){setError("Enter a valid deposit amount");return;}setSubmitting(true);const result=await createDeposit({amount:value,network,txHash});setSubmitting(false);if(!result.ok)setError(result.message||"Deposit request failed");}; return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex justify-between"><div><h3 className="text-xl font-black">Deposit to Main/Spot wallet</h3><p className="mt-1 text-xs text-slate-500">Send only USDT on the selected network</p></div><button onClick={close}><X/></button></div><div className="mx-auto my-6 grid h-44 w-44 place-items-center rounded-2xl bg-white p-3">{addr?<img src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(addr)}`} alt="Deposit address QR code" className="h-full w-full object-contain"/>:<div className="grid h-full w-full place-items-center bg-ink p-2 text-center text-[10px] font-bold text-slate-500">Address unavailable</div>}</div><p className="text-center text-[10px] uppercase tracking-widest text-slate-500">Your permanent deposit address</p><button onClick={copyAddress} className="mt-3 flex w-full items-center gap-3 rounded-xl border border-line bg-ink p-3 text-left"><span className="min-w-0 flex-1 break-all text-xs text-slate-300">{addr || "Deposit address unavailable"}</span><Copy size={16} className="shrink-0 text-lime"/></button><label className="mt-4 block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");}} placeholder="0.00" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>setNetwork(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white">{addresses.length?addresses.map(item=><option key={item.network} value={item.network}>{item.networkName}</option>):<option value="BSC">BNB Smart Chain</option>}</select></label><label className="mt-4 block text-xs font-bold text-slate-400">Tx hash optional<input value={txHash} onChange={e=>{setTxHash(e.target.value);setError("");}} placeholder="Transaction hash" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<div className="mt-4 rounded-xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. Required confirmations: {selected?.requiredConfirmations ?? 12}. Funds are credited only to the Main/Spot wallet after approval.</div><button onClick={submit} disabled={submitting} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">{submitting?"Submitting...":"Submit Deposit Request"}</button></div></div> }
 
 function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:CurrentUser|null}) {
   const [shareOpen,setShareOpen]=useState(false);

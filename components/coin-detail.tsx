@@ -48,8 +48,8 @@ function CoinPlatformSvg(){return <svg viewBox="0 0 92 76" aria-hidden="true">
 </svg>;}
 
 function TradeActions(){return <section className="coin-action-card">
-  <Link href="/?view=trade" className="coin-action-buy">Buy</Link>
-  <Link href="/?view=trade" className="coin-action-sell">Sell</Link>
+  <button disabled className="coin-action-buy opacity-60">Buy Coming Soon</button>
+  <button disabled className="coin-action-sell opacity-60">Sell Coming Soon</button>
   <button type="button" className="coin-action-watch"><Star size={15}/> Watchlist</button>
   <Link href="/?view=wallet&action=deposit" className="coin-action-deposit">Deposit <ArrowUpRight size={14}/></Link>
 </section>;}
