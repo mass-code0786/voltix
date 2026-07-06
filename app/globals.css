@@ -2849,12 +2849,12 @@ textarea:focus {
 .wallet-hero {
   position: relative;
   display: grid;
-  height: 134px;
+  height: 114px;
   grid-template-columns: minmax(0, 1fr) 128px;
   align-items: center;
   overflow: hidden;
   border-radius: 22px;
-  padding: 12px 0 12px 16px;
+  padding: 10px 0 10px 16px;
 }
 
 .wallet-hero::before {
@@ -2916,13 +2916,13 @@ textarea:focus {
 
 .wallet-total-card {
   display: grid;
-  min-height: 142px;
+  min-height: 121px;
   grid-template-columns: minmax(0, 1fr) minmax(78px, 86px);
   align-items: center;
   gap: 8px;
   margin-top: 12px;
   border-radius: 22px;
-  padding: 11px 14px;
+  padding: 9px 14px;
   overflow: hidden;
 }
 
@@ -3301,7 +3301,7 @@ textarea:focus {
 
 @media (max-width: 374px) {
   .wallet-hero {
-    height: 128px;
+    height: 109px;
     grid-template-columns: minmax(0, 1fr) minmax(100px, 118px);
   }
 
@@ -3311,9 +3311,9 @@ textarea:focus {
   }
 
   .wallet-total-card {
-    min-height: 140px;
+    min-height: 119px;
     grid-template-columns: minmax(0, 1fr) 78px;
-    padding: 10px 12px;
+    padding: 9px 12px;
   }
 
   .wallet-total-card h2 {
