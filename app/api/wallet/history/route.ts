@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserWalletHistory } from "@/lib/domain/asset-service";
 import { prisma } from "@/lib/prisma";
+import { displayWalletName } from "@/lib/wallet-labels";
 
 const emptyHistory = { authenticated: false, assets: [], totals: {}, history: [] };
 
@@ -21,7 +22,7 @@ export async function GET() {
     ...deposits.map(row => ({
       id: row.id,
       type: "DEPOSIT",
-      walletType: "SPOT",
+      walletType: displayWalletName("SPOT"),
       asset: row.asset.symbol,
       direction: "CREDIT",
       amount: Number(row.amount.toString()),
@@ -36,7 +37,7 @@ export async function GET() {
     ...withdrawals.map(row => ({
       id: row.id,
       type: "WITHDRAWAL",
-      walletType: row.walletType,
+      walletType: displayWalletName(row.walletType),
       asset: row.asset.symbol,
       direction: "DEBIT",
       amount: Number(row.amount.toString()),
@@ -51,12 +52,12 @@ export async function GET() {
     ...transfers.map(row => ({
       id: row.id,
       type: "TRANSFER",
-      walletType: row.fromWallet,
+      walletType: displayWalletName(row.fromWallet),
       asset: "USDT",
       direction: "DEBIT",
       amount: Number(row.amount.toString()),
       signedAmount: -Number(row.amount.toString()),
-      title: `Transfer ${row.fromWallet} to ${row.toWallet}`,
+      title: `Transfer ${displayWalletName(row.fromWallet)} to ${displayWalletName(row.toWallet)}`,
       referenceType: "WALLET_TRANSFER",
       referenceId: row.id,
       status: row.status,
@@ -66,7 +67,7 @@ export async function GET() {
     ...incomes.map(row => ({
       id: row.id,
       type: "INCOME",
-      walletType: "BITEX",
+      walletType: displayWalletName("BITEX"),
       asset: "USDT",
       direction: "CREDIT",
       amount: Number(row.amount.toString()),
@@ -81,7 +82,7 @@ export async function GET() {
     ...trades.map(row => ({
       id: row.id,
       type: "COPY_TRADE",
-      walletType: "BITEX",
+      walletType: displayWalletName("BITEX"),
       asset: "USDT",
       direction: "DEBIT",
       amount: Number(row.principalAmount.toString()),

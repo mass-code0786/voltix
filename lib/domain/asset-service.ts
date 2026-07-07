@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, type WalletType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ensureUserWalletAccounts } from "./user-wallets";
+import { displayWalletName } from "@/lib/wallet-labels";
 
 type AssetClient = Pick<PrismaClient, "asset" | "walletAccount" | "ledgerEntry" | "copyTrade" | "user"> | Prisma.TransactionClient;
 
@@ -100,7 +101,7 @@ function formatLedgerEntry(entry: {
   return {
     id: entry.id,
     journalId: entry.journal.id,
-    walletType: entry.account.type,
+    walletType: displayWalletName(entry.account.type),
     asset: entry.account.asset.symbol,
     direction: entry.direction,
     amount: decimalToNumber(entry.amount),

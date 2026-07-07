@@ -43,7 +43,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
     remainingTime: active?.remainingTime ?? 0,
     eligibility: {
       eligible: remaining > 0 && user.bitexBalance.gt(0),
-      reason: remaining <= 0 ? "Daily trade limit reached" : user.bitexBalance.lte(0) ? "Please transfer funds to AI wallet before starting copy trade." : null,
+      reason: remaining <= 0 ? "Daily trade limit reached" : user.bitexBalance.lte(0) ? "Please transfer funds to AI Wallet before starting copy trade." : null,
     },
     vipRank: normalizedVipRank,
     todaysTradeCount: totalToday,
@@ -97,7 +97,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
       select: { id: true },
     });
     if (!activePackage) throw new Error("Active package required.");
-    if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to AI wallet before starting copy trade.");
+    if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
     const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
     if (tradeAmount.lt(MIN_COPY_TRADE_STAKE)) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.`);
 
@@ -118,7 +118,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
       where: { id: input.userId, bitexBalance: { gte: tradeAmount } },
       data: { bitexBalance: { decrement: tradeAmount } },
     });
-    if (locked.count !== 1) throw new Error("Insufficient AI wallet balance");
+    if (locked.count !== 1) throw new Error("Insufficient AI Wallet balance");
 
     const dailyPercent = new Prisma.Decimal(getVipDailyIncomePercent(normalizedVipRank));
     const perTradePercent = dailyPercent.div(limit);
@@ -210,7 +210,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       userId: trade.userId,
       type: "COPY_TRADE_INCOME",
       title: "Copy trade income credited",
-      message: `${profitAmount.toString()} USDT income has been credited to your AI wallet.`,
+      message: `${profitAmount.toString()} USDT income has been credited to your AI Wallet.`,
       metadata: { tradeId: trade.id, incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString() },
     });
     const progress = await tx.user.update({

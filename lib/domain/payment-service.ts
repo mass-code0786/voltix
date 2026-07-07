@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { ensureUserWalletAccounts } from "./user-wallets";
 import { postBalancedJournal } from "./ledger";
 import { createNotification } from "./notification-service";
+import { displayWalletName } from "@/lib/wallet-labels";
 
 const WITHDRAWAL_FIXED_FEE = new Prisma.Decimal(2);
 const WITHDRAWAL_PERCENTAGE_RATE = new Prisma.Decimal("0.05");
@@ -219,7 +220,7 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
       if (user.bitexPrincipal.gt(0) && user.bitexIncomeEarned.lt(user.bitexPrincipal.mul(2))) {
         throw new Error("AI withdrawal will unlock after completing 2x copy trade income.");
       }
-      if (user.bitexBalance.lt(input.amount)) throw new Error("Insufficient AI wallet balance");
+      if (user.bitexBalance.lt(input.amount)) throw new Error("Insufficient AI Wallet balance");
     }
 
     const withdrawal = await tx.withdrawal.create({
@@ -332,7 +333,7 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
     const debit = withdrawal.walletType === "BITEX"
       ? await tx.user.updateMany({ where: { id: withdrawal.userId, bitexBalance: { gte: withdrawal.amount } }, data: { bitexBalance: { decrement: withdrawal.amount } } })
       : await tx.user.updateMany({ where: { id: withdrawal.userId, spotBalance: { gte: withdrawal.amount } }, data: { spotBalance: { decrement: withdrawal.amount } } });
-    if (debit.count !== 1) throw new Error(`Insufficient ${withdrawal.walletType} wallet balance`);
+    if (debit.count !== 1) throw new Error(`Insufficient ${displayWalletName(withdrawal.walletType)} balance`);
 
     const [sourceAccount, externalPayable, feeAccount] = await Promise.all([
       tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: withdrawal.userId, assetId: withdrawal.assetId, type: withdrawal.walletType } } }),
@@ -453,7 +454,7 @@ function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: st
 function formatWithdrawal(withdrawal: { id: string; walletType: WalletType; amount: Prisma.Decimal; feeAmount: Prisma.Decimal; receivableAmount: Prisma.Decimal; address: string; txHash: string | null; status: string; rejectionReason: string | null; createdAt: Date; asset: { symbol: string }; network: { key: string; name: string } }) {
   return {
     id: withdrawal.id,
-    walletType: withdrawal.walletType,
+    walletType: displayWalletName(withdrawal.walletType),
     amount: Number(withdrawal.amount.toString()),
     fee: Number(withdrawal.feeAmount.toString()),
     receivable: Number(withdrawal.receivableAmount.toString()),

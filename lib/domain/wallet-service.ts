@@ -2,6 +2,7 @@ import { Prisma, WalletType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { postBalancedJournal } from "./ledger";
 import { ensureUserWalletAccounts } from "./user-wallets";
+import { displayWalletName } from "@/lib/wallet-labels";
 
 const WITHDRAWAL_FIXED_FEE = new Prisma.Decimal(2);
 const WITHDRAWAL_PERCENTAGE_RATE = new Prisma.Decimal("0.05");
@@ -38,7 +39,7 @@ export async function transferWallet(input: {
       where: { id: input.userId, [sourceField]: { gte: input.amount } },
       data: { [sourceField]: { decrement: input.amount } },
     });
-    if (debit.count !== 1) throw new Error(`Insufficient ${input.fromWallet} wallet balance`);
+    if (debit.count !== 1) throw new Error(`Insufficient ${displayWalletName(input.fromWallet)} balance`);
 
     await tx.user.update({
       where: { id: input.userId },
@@ -112,7 +113,7 @@ export async function createWithdrawal(input: { userId: string; walletType: With
       if (user.bitexPrincipal.gt(0) && user.bitexIncomeEarned.lt(user.bitexPrincipal.mul(2))) {
         throw new Error("AI withdrawal will unlock after completing 2x copy trade income.");
       }
-      if (user.bitexBalance.lt(input.amount)) throw new Error("Insufficient AI wallet balance");
+      if (user.bitexBalance.lt(input.amount)) throw new Error("Insufficient AI Wallet balance");
       return tx.withdrawal.create({
         data: {
           userId: input.userId,
@@ -167,7 +168,7 @@ export async function approveBitexWithdrawal(input: { withdrawalId: string; admi
     const user = await tx.user.findUniqueOrThrow({ where: { id: withdrawal.userId } });
     if (user.bitexPrincipal.gt(0) && user.bitexIncomeEarned.lt(user.bitexPrincipal.mul(2))) throw new Error("AI 2x target is not complete");
     const debit = await tx.user.updateMany({ where: { id: withdrawal.userId, bitexBalance: { gte: withdrawal.amount } }, data: { bitexBalance: { decrement: withdrawal.amount } } });
-    if (debit.count !== 1) throw new Error("Insufficient AI wallet balance");
+    if (debit.count !== 1) throw new Error("Insufficient AI Wallet balance");
     const [bitexAccount, externalPayable] = await Promise.all([
       tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: withdrawal.userId, assetId: withdrawal.assetId, type: "BITEX" } } }),
       tx.walletAccount.findFirstOrThrow({ where: { userId: null, assetId: withdrawal.assetId, type: "SPOT" } }),

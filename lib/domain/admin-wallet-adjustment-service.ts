@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createNotification } from "./notification-service";
 import { postBalancedJournal } from "./ledger";
 import { ensureUserWalletAccounts } from "./user-wallets";
+import { displayWalletName } from "@/lib/wallet-labels";
 
 type UserWallet = Extract<WalletType, "SPOT" | "FUTURES" | "BITEX">;
 type AdjustmentAction = "CREDIT" | "DEBIT";
@@ -72,7 +73,7 @@ export async function adjustAdminWallet(input: {
       referenceType: "ADMIN_WALLET_ADJUSTMENT",
       referenceId: adjustment.id,
       idempotencyKey: `admin-wallet-adjustment:${input.idempotencyKey}`,
-      memo: `Admin ${input.action === "CREDIT" ? "Credit" : "Deduct"} ${input.walletType}: ${input.reason.trim()}`,
+      memo: `Admin ${input.action === "CREDIT" ? "Credit" : "Deduct"} ${displayWalletName(input.walletType)}: ${input.reason.trim()}`,
       lines: input.action === "CREDIT"
         ? [
             { accountId: treasuryAccount.id, direction: "DEBIT", amount: input.amount },
@@ -94,7 +95,7 @@ export async function adjustAdminWallet(input: {
       userId: user.id,
       type: "ADMIN_WALLET_ADJUSTMENT",
       title: input.action === "CREDIT" ? "Wallet credited" : "Wallet deducted",
-      message: `${input.amount.toString()} ${asset.symbol} ${input.action === "CREDIT" ? "was credited to" : "was deducted from"} your ${walletLabel(input.walletType)}. Reason: ${input.reason.trim()}`,
+      message: `${input.amount.toString()} ${asset.symbol} ${input.action === "CREDIT" ? "was credited to" : "was deducted from"} your ${displayWalletName(input.walletType)}. Reason: ${input.reason.trim()}`,
       metadata: {
         adjustmentId: completed.id,
         action: input.action,
@@ -164,7 +165,7 @@ async function debitWalletBalance(tx: Prisma.TransactionClient, userId: string, 
     where: { id: userId, [field]: { gte: amount } },
     data: { [field]: { decrement: amount } },
   });
-  if (result.count !== 1) throw new Error(`Insufficient ${walletLabel(walletType)} balance`);
+  if (result.count !== 1) throw new Error(`Insufficient ${displayWalletName(walletType)} balance`);
 }
 
 async function ensureSystemAccount(tx: Prisma.TransactionClient, assetId: string, type: WalletType) {
@@ -185,12 +186,6 @@ function balanceField(walletType: UserWallet) {
   if (walletType === "SPOT") return "spotBalance";
   if (walletType === "FUTURES") return "futuresBalance";
   return "bitexBalance";
-}
-
-function walletLabel(walletType: UserWallet) {
-  if (walletType === "SPOT") return "Spot Wallet";
-  if (walletType === "FUTURES") return "Futures Wallet";
-  return "AI Wallet";
 }
 
 function formatAdjustment(adjustment: {

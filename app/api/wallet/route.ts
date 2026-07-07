@@ -6,6 +6,7 @@ import { getUserWalletSnapshot } from "@/lib/domain/user-wallets";
 import { transferWallet } from "@/lib/domain/wallet-service";
 import { prisma } from "@/lib/prisma";
 import { auditFailure, auditSuccess } from "@/lib/audit";
+import { displayWalletName } from "@/lib/wallet-labels";
 
 const transferSchema = z.object({
   fromWallet: z.enum(["SPOT", "FUTURES", "BITEX"]),
@@ -44,6 +45,8 @@ export async function POST(request: Request) {
         id: transfer.id,
         fromWallet: transfer.fromWallet,
         toWallet: transfer.toWallet,
+        fromWalletName: displayWalletName(transfer.fromWallet),
+        toWalletName: displayWalletName(transfer.toWallet),
         amount: Number(transfer.amount.toString()),
         receivedAmount: Number(transfer.receivedAmount.toString()),
         status: transfer.status,

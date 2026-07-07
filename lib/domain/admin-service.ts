@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AI_ACTIVE_PRINCIPAL_THRESHOLD, isAiWalletActive } from "@/lib/domain/user-activation";
+import { displayWalletName } from "@/lib/wallet-labels";
 
 export async function getAdminOverview() {
   const [
@@ -114,7 +115,7 @@ export async function getAdminWallets() {
       user: `${adjustment.user.name} / ${adjustment.user.uid}`,
       userEmail: adjustment.user.email,
       admin: `${adjustment.admin.name} / ${adjustment.admin.uid}`,
-      walletType: adjustment.walletType,
+      walletType: displayWalletName(adjustment.walletType),
       action: adjustment.action,
       amount: decimalToNumber(adjustment.amount),
       asset: adjustment.asset.symbol,
@@ -157,7 +158,7 @@ export async function getAdminWithdrawals() {
   });
   const rows = withdrawals.map(withdrawal => [
     `${withdrawal.user.name} / ${withdrawal.user.uid}`,
-    withdrawal.walletType,
+    displayWalletName(withdrawal.walletType),
     money(withdrawal.amount),
     withdrawal.address,
     withdrawal.network.name,
@@ -167,8 +168,8 @@ export async function getAdminWithdrawals() {
     withdrawal.id,
   ]);
   return {
-    spotRows: rows.filter(row => row[1] === "SPOT"),
-    bitexRows: rows.filter(row => row[1] === "BITEX"),
+    spotRows: rows.filter(row => row[1] === "Spot Wallet"),
+    bitexRows: rows.filter(row => row[1] === "AI Wallet"),
   };
 }
 
@@ -284,7 +285,7 @@ export async function getAdminLedger() {
       return [
         journal.id,
         credit?.account.user ? `${credit.account.user.name} / ${credit.account.user.uid}` : "",
-        journal.referenceType,
+        journalTypeLabel(journal.referenceType),
         accountLabel(debit),
         accountLabel(credit),
         money(credit?.amount ?? 0),
@@ -348,7 +349,12 @@ export async function getAdminSlots() {
 export const emptyRows = { rows: [] as string[][] };
 
 function accountLabel(entry: { account: { type: string; asset: { symbol: string } } } | undefined) {
-  return entry ? `${entry.account.type} ${entry.account.asset.symbol}` : "";
+  return entry ? `${displayWalletName(entry.account.type as "SPOT" | "FUTURES" | "BITEX" | "FEE")} ${entry.account.asset.symbol}` : "";
+}
+
+function journalTypeLabel(referenceType: string) {
+  if (referenceType === "BITEX_WITHDRAWAL") return "AI Wallet Withdrawal";
+  return referenceType.replaceAll("_", " ");
 }
 
 function decimalToNumber(value: Prisma.Decimal | number) {
