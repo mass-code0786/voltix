@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const unsafeMethods = new Set(["POST", "PATCH", "DELETE", "PUT"]);
 const csrfExemptPrefixes = ["/api/webhooks/nowpayments", "/api/scheduler/income"];
 const safeAuthEndpoints = new Set(["/api/auth/logout"]);
+const productionOrigin = "https://voltix.zenithsoftech.com";
 
 export function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/") && unsafeMethods.has(request.method) && !isCsrfExempt(request.nextUrl.pathname)) {
@@ -35,6 +36,7 @@ function validateOrigin(request: NextRequest) {
 function allowedOrigins(request: NextRequest) {
   const values = new Set<string>();
   values.add(request.nextUrl.origin);
+  values.add(productionOrigin);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
   if (appUrl) {
     try {
