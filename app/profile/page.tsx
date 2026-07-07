@@ -263,8 +263,22 @@ export default function ProfilePage() {
   };
 
   const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/");
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Logout failed");
+      setProfile(null);
+      setDashboard(null);
+      setTeam(null);
+      setAi(null);
+      setIncome(null);
+      setUnreadNotifications(0);
+      window.location.replace("/auth?mode=login");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Logout failed");
+    }
   };
 
   const copyUid = async () => {

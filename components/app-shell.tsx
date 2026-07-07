@@ -313,7 +313,6 @@ export default function AppShell() {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [aiSubscription, setAiSubscription] = useState<AiSubscriptionStatus | null>(null);
@@ -462,6 +461,39 @@ export default function AppShell() {
     setUnreadNotifications(Number(data.unreadCount ?? 0));
   }, []);
 
+  const clearAuthenticatedState = useCallback(() => {
+    applyAuthenticatedUser(null);
+    setDashboard(null);
+    applyWalletSnapshot(null);
+    setWalletAssets([]);
+    setAssetTotals(emptyAssetTotals);
+    setWalletActivity([]);
+    setActiveCopyTrade(null);
+    setCopyTradeHistory([]);
+    setVipTradeRows([]);
+    setCopyTradeCounts(defaultCopyTradeCounts);
+    setAiSubscription(null);
+    setNotifications([]);
+    setUnreadNotifications(0);
+    setNotificationOpen(false);
+    setTransferOpen(null);
+    setWithdrawalOpen(false);
+    setVerificationOpen(false);
+  }, [applyAuthenticatedUser, applyWalletSnapshot]);
+
+  const logout = useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Logout failed");
+      clearAuthenticatedState();
+      setMenu(false);
+      window.location.replace("/auth?mode=login");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Logout failed");
+    }
+  }, [clearAuthenticatedState]);
+
   const openAuthPage = useCallback((mode: "login" | "register" = "login") => {
     const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     window.location.href = `/auth?mode=${mode}&returnTo=${encodeURIComponent(returnTo)}`;
@@ -491,13 +523,6 @@ export default function AppShell() {
     refreshMe()
       .catch(() => setUserCountry("United States"));
   }, [refreshMe]);
-
-  useEffect(() => {
-    const check = () => fetch("/api/health").then(response => setHealthOk(response.ok)).catch(() => setHealthOk(false));
-    void check();
-    const timer = window.setInterval(check, 60000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     refreshWallet(currentUser)
@@ -795,11 +820,8 @@ export default function AppShell() {
             onNotifications={() => { if (!currentUser) { openAuthPage("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }}
             onMenu={() => { setMenu(!menu); setNotificationOpen(false); }}
           />
-          <div className="mx-auto flex max-w-[420px] justify-end px-4 lg:max-w-6xl lg:px-8">
-            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black ${healthOk === false ? "border-danger/30 bg-danger/10 text-danger" : "border-lime/20 bg-lime/10 text-lime"}`}>{healthOk === false ? "API Offline" : "API Online"}</span>
-          </div>
           {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} deleteNotification={deleteNotification} />}
-          {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={async()=>{await fetch("/api/auth/logout",{method:"POST"});await refreshMe();setMenu(false);notify("Logged out");}} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
+          {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={logout} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
           <div className={`mx-auto ${tab === "wallet" ? "max-w-[430px] px-0" : "max-w-[420px] px-4"} lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "bitex" || tab === "markets" ? "pb-36 pt-1 lg:py-8" : tab === "wallet" ? "pb-44 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
         </main>
       </div>
@@ -841,7 +863,7 @@ function NotificationMenu({ close, notifications, unreadCount, markRead, deleteN
   return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => <div key={notification.id} className={`rounded-xl p-3 ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p><p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div><button onClick={() => deleteNotification(notification.id)} aria-label="Delete notification" className="rounded-lg p-1 text-slate-600 hover:bg-white/5 hover:text-danger"><X size={14}/></button></div></div>) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
 }
 
-function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerification,openHelp }: { close: () => void;notify:(message:string)=>void;user:CurrentUser|null;openLogin:()=>void;openRegister:()=>void;logout:()=>void;openVerification:()=>void;openHelp:()=>void }) {
+function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerification,openHelp }: { close: () => void;notify:(message:string)=>void;user:CurrentUser|null;openLogin:()=>void;openRegister:()=>void;logout:()=>Promise<void>;openVerification:()=>void;openHelp:()=>void }) {
   const uid=user?.uid?.trim();
   const isAdminUser = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   const copyUid=()=>{if(!uid){notify("UID unavailable");return;}navigator.clipboard?.writeText(uid);notify("UID copied");};
