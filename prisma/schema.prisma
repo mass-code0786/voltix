@@ -121,6 +121,7 @@ enum NotificationType {
   KYC_STATUS
   ADMIN_TRADE_CODE
   ADMIN_BROADCAST
+  ADMIN_WALLET_ADJUSTMENT
 }
 
 enum AuditRole {
@@ -164,6 +165,8 @@ model User {
   walletTransfers       WalletTransfer[]
   deposits              Deposit[]
   withdrawals           Withdrawal[]
+  walletAdjustments     AdminWalletAdjustment[] @relation("WalletAdjustmentUser")
+  adminWalletAdjustments AdminWalletAdjustment[] @relation("WalletAdjustmentAdmin")
   packages              UserPackage[]
   aiSubscriptions       AiSubscription[]
   assignedCodes         TradeCode[]
@@ -226,6 +229,7 @@ model Asset {
   walletAccounts WalletAccount[]
   deposits       Deposit[]
   withdrawals    Withdrawal[]
+  walletAdjustments AdminWalletAdjustment[]
 }
 
 model CoinMetadata {
@@ -354,6 +358,29 @@ model Withdrawal {
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+}
+
+model AdminWalletAdjustment {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation("WalletAdjustmentUser", fields: [userId], references: [id])
+  adminId         String
+  admin           User     @relation("WalletAdjustmentAdmin", fields: [adminId], references: [id])
+  assetId         String
+  asset           Asset    @relation(fields: [assetId], references: [id])
+  walletType      WalletType
+  action          String
+  amount          Decimal  @db.Decimal(36, 18)
+  reason          String
+  idempotencyKey  String   @unique
+  status          String   @default("SUCCESS")
+  ledgerJournalId String?  @unique
+  depositId       String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
 }
 
 model MlmPlan {

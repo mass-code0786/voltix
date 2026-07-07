@@ -73,7 +73,18 @@ export async function getAdminUsers() {
 }
 
 export async function getAdminWallets() {
-  const users = await prisma.user.findMany({ orderBy: { updatedAt: "desc" }, take: 100 });
+  const [users, adjustments] = await Promise.all([
+    prisma.user.findMany({ orderBy: { updatedAt: "desc" }, take: 100 }),
+    prisma.adminWalletAdjustment.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      include: {
+        user: { select: { name: true, uid: true, email: true } },
+        admin: { select: { name: true, uid: true, email: true } },
+        asset: true,
+      },
+    }),
+  ]);
   return {
     rows: users.map(user => [
       `${user.name} / ${user.uid}`,
@@ -84,6 +95,34 @@ export async function getAdminWallets() {
       `${money(user.bitexIncomeEarned)} / ${money(user.bitexTargetAmount)}`,
       user.bitexUnlocked ? "Unlocked" : "Locked",
     ]),
+    users: users.map(user => ({
+      id: user.id,
+      name: user.name,
+      uid: user.uid,
+      email: user.email,
+      spot: decimalToNumber(user.spotBalance),
+      futures: decimalToNumber(user.futuresBalance),
+      bitex: decimalToNumber(user.bitexBalance),
+      bitexPrincipal: decimalToNumber(user.bitexPrincipal),
+      bitexIncomeEarned: decimalToNumber(user.bitexIncomeEarned),
+      bitexTargetAmount: decimalToNumber(user.bitexTargetAmount),
+      bitexUnlocked: user.bitexUnlocked,
+    })),
+    adjustments: adjustments.map(adjustment => ({
+      id: adjustment.id,
+      user: `${adjustment.user.name} / ${adjustment.user.uid}`,
+      userEmail: adjustment.user.email,
+      admin: `${adjustment.admin.name} / ${adjustment.admin.uid}`,
+      walletType: adjustment.walletType,
+      action: adjustment.action,
+      amount: decimalToNumber(adjustment.amount),
+      asset: adjustment.asset.symbol,
+      reason: adjustment.reason,
+      status: adjustment.status,
+      ledgerJournalId: adjustment.ledgerJournalId,
+      depositId: adjustment.depositId,
+      createdAt: adjustment.createdAt.toISOString(),
+    })),
   };
 }
 
