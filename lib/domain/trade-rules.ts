@@ -1,7 +1,4 @@
 export const BASE_DAILY_TRADES = 3;
-export const EXTRA_TRADE_TRIAL_DAYS = 5;
-export const REQUIRED_QUALIFIED_DIRECTS = 5;
-export const MIN_QUALIFIED_PACKAGE_USD = 50;
 export const RETURN_PERCENT_MIN = 2;
 export const RETURN_PERCENT_MAX = 2.5;
 export const COPY_TRADE_STAKE_RATE = 0.01;
@@ -27,16 +24,8 @@ export function isValidUid(uid: string) {
   return /^\d{6,12}$/.test(uid);
 }
 
-export function dailyTradeLimit(input: {
-  joinedAt: Date;
-  now: Date;
-  permanentExtraTrade: boolean;
-}) {
+export function dailyTradeLimit() {
   return BASE_DAILY_TRADES;
-}
-
-export function qualifiesForPermanentExtraTrade(directPackagesUsd: number[]) {
-  return directPackagesUsd.filter((amount) => amount >= MIN_QUALIFIED_PACKAGE_USD).length >= REQUIRED_QUALIFIED_DIRECTS;
 }
 
 export function calculateTradeIncome(principal: number, returnPercent: number) {

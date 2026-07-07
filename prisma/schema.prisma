@@ -391,7 +391,7 @@ model MlmPlan {
   directPercent         Decimal       @db.Decimal(5, 2)
   matchingPercent       Decimal       @db.Decimal(5, 2)
   levelPercents         Json
-  minQualifiedDirectUsd Decimal       @default(50) @db.Decimal(18, 2)
+  minQualifiedDirectUsd Decimal       @default(100) @db.Decimal(18, 2)
   active                Boolean       @default(true)
   packages              UserPackage[]
   createdAt             DateTime      @default(now())

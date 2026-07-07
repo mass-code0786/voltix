@@ -240,7 +240,7 @@ CREATE TABLE "MlmPlan" (
     "directPercent" DECIMAL(5,2) NOT NULL,
     "matchingPercent" DECIMAL(5,2) NOT NULL,
     "levelPercents" JSONB NOT NULL,
-    "minQualifiedDirectUsd" DECIMAL(18,2) NOT NULL DEFAULT 50,
+    "minQualifiedDirectUsd" DECIMAL(18,2) NOT NULL DEFAULT 100,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

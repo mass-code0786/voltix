@@ -47,7 +47,7 @@ export async function POST(request: Request) {
           language,
           passwordHash: await hashPassword(password),
           referredById: sponsor?.id,
-          extraTradeTrialEndsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+          extraTradeTrialEndsAt: new Date(0),
         },
         select: { id: true, uid: true, name: true, email: true, country: true, language: true, vipRank: true },
       });

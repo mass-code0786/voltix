@@ -13,7 +13,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   await settleDueCopyTrades(userId, now);
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { joinedAt: true, permanentExtraTrade: true, vipRank: true, bitexBalance: true },
+    select: { vipRank: true, bitexBalance: true },
   });
   const dayStart = new Date(now);
   dayStart.setUTCHours(0, 0, 0, 0);
@@ -32,7 +32,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
       take: 20,
     }),
   ]);
-  const limit = dailyTradeLimit({ joinedAt: user.joinedAt, now, permanentExtraTrade: user.permanentExtraTrade });
+  const limit = dailyTradeLimit();
   const remaining = Math.max(0, limit - totalToday);
   const active = activeTrade ? serializeTrade(activeTrade, now) : null;
   const tradeWindow = await getCurrentTradeWindow(now);
@@ -96,7 +96,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
       where: { userId: input.userId, status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
       select: { id: true },
     });
-    if (!activePackage) throw new Error("Active package required.");
+    if (!activePackage) throw new Error("Package required.");
     if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
     const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
     if (tradeAmount.lt(MIN_COPY_TRADE_STAKE)) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.`);
@@ -104,7 +104,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
     const tradesToday = await tx.copyTrade.count({ where: { userId: input.userId, startedAt: { gte: dayStart } } });
-    const limit = dailyTradeLimit({ joinedAt: user.joinedAt, now, permanentExtraTrade: user.permanentExtraTrade });
+    const limit = dailyTradeLimit();
     if (tradesToday >= limit) throw new Error("Daily trade limit reached");
     const slotStart = tradeSlotStart(slot.utcTime, now);
     const slotEnd = new Date(slotStart.getTime() + slot.durationMinutes * 60_000);
