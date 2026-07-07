@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient, UserStatus } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
+import { isAiWalletActive } from "@/lib/domain/user-activation";
 
 type TeamClient = Pick<PrismaClient, "user" | "userPackage"> | Prisma.TransactionClient;
 
@@ -6,7 +7,7 @@ type ReferralUser = {
   id: string;
   uid: string;
   name: string;
-  status: UserStatus;
+  bitexPrincipal: Prisma.Decimal;
   referredById: string | null;
   joinedAt: Date;
 };
@@ -22,7 +23,7 @@ export async function getTeamSnapshot(client: TeamClient, userId: string, origin
       id: true,
       uid: true,
       name: true,
-      status: true,
+      bitexPrincipal: true,
       referredById: true,
       joinedAt: true,
     },
@@ -60,7 +61,7 @@ export async function getTeamSnapshot(client: TeamClient, userId: string, origin
   const packageByUser = new Map(packages.map(row => [row.userId, decimalToNumber(row._sum.amountUsd ?? 0)]));
   const teamVolume = Array.from(packageByUser.values()).reduce((total, amount) => total + amount, 0);
   const directTeamCount = referralsBySponsor.get(sponsor.id)?.length ?? 0;
-  const activeUsersCount = network.filter(member => member.status === "ACTIVE").length;
+  const activeUsersCount = network.filter(isAiWalletActive).length;
 
   return {
     referralUid: sponsor.uid,
@@ -80,7 +81,7 @@ export async function getTeamSnapshot(client: TeamClient, userId: string, origin
         initials: initials(member.name),
         level: member.level,
         packageAmount: packageByUser.get(member.id) ?? 0,
-        status: member.status === "ACTIVE" ? "Active" : member.status,
+        status: isAiWalletActive(member) ? "Active" : "Inactive",
         joinedAt: member.joinedAt.toISOString(),
       })),
   };

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { AI_ACTIVE_PRINCIPAL_THRESHOLD, isAiWalletActive } from "@/lib/domain/user-activation";
 
 export async function getAdminOverview() {
   const [
@@ -18,7 +19,7 @@ export async function getAdminOverview() {
     recentAudit,
   ] = await Promise.all([
     prisma.user.count(),
-    prisma.user.count({ where: { status: "ACTIVE" } }),
+    prisma.user.count({ where: { bitexPrincipal: { gte: AI_ACTIVE_PRINCIPAL_THRESHOLD } } }),
     prisma.deposit.count(),
     prisma.withdrawal.count(),
     prisma.deposit.aggregate({ _sum: { amount: true } }),
@@ -67,7 +68,7 @@ export async function getAdminUsers() {
       money(user.futuresBalance),
       money(user.bitexBalance),
       `${money(user.bitexIncomeEarned)} / ${money(user.bitexTargetAmount)}`,
-      user.status,
+      isAiWalletActive(user) ? "AI Active" : "Inactive",
     ]),
   };
 }
