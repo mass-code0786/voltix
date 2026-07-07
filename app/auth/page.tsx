@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Eye, EyeOff, Lock, Mail, ShieldCheck, User } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, ShieldCheck, User } from "lucide-react";
 import { SearchableSelect } from "@/components/searchable-select";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 
@@ -41,11 +41,6 @@ export default function AuthPage() {
     window.history.replaceState({}, "", `/auth?${params.toString()}`);
   };
 
-  const goBack = () => {
-    if (window.history.length > 1) router.back();
-    else router.push(returnTo);
-  };
-
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
@@ -78,9 +73,6 @@ export default function AuthPage() {
       <div className="auth-bg-particles" aria-hidden="true">{Array.from({length:16}).map((_,i)=><i key={i} style={{"--x":`${(i*37)%100}%`,"--y":`${8+(i*29)%84}%`,"--d":`${1+i*.2}s`} as CSSProperties}/>)}</div>
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
         <header className="auth-header">
-          <button onClick={goBack} aria-label="Go back">
-            <ArrowLeft size={20} />
-          </button>
           <img src="/logo.png" alt="VOLTIX" />
           <button onClick={() => switchMode(isRegister ? "login" : "register")} className="auth-switch-link">
             {isRegister ? "Login Now" : "Sign up Now"}
