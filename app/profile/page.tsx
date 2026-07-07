@@ -266,7 +266,7 @@ export default function ProfilePage() {
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
+      const response = await fetch("/api/auth/logout", { method: "POST", credentials: "include", cache: "no-store" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Logout failed");
       setProfile(null);

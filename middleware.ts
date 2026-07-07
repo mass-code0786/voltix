@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const unsafeMethods = new Set(["POST", "PATCH", "DELETE", "PUT"]);
 const csrfExemptPrefixes = ["/api/webhooks/nowpayments", "/api/scheduler/income"];
+const safeAuthEndpoints = new Set(["/api/auth/logout"]);
 
 export function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/") && unsafeMethods.has(request.method) && !isCsrfExempt(request.nextUrl.pathname)) {
@@ -46,6 +47,7 @@ function allowedOrigins(request: NextRequest) {
 }
 
 function isCsrfExempt(pathname: string) {
+  if (safeAuthEndpoints.has(pathname)) return true;
   return csrfExemptPrefixes.some(prefix => pathname.startsWith(prefix));
 }
 

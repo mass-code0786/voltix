@@ -6,6 +6,12 @@ import { prisma } from "@/lib/prisma";
 const scrypt = promisify(scryptCallback);
 const sessionCookieName = "voltix_session";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
+const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+};
 
 export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
@@ -31,10 +37,7 @@ export async function createSession(userId: string) {
   await prisma.session.create({ data: { userId, tokenHash: hashSessionToken(token), expiresAt } });
   const cookieStore = await cookies();
   cookieStore.set(sessionCookieName, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
+    ...sessionCookieOptions,
     maxAge: sessionMaxAgeSeconds,
   });
 }
@@ -44,10 +47,7 @@ export async function clearSession() {
   const token = cookieStore.get(sessionCookieName)?.value;
   if (token) await prisma.session.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
   cookieStore.set(sessionCookieName, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
+    ...sessionCookieOptions,
     maxAge: 0,
   });
 }

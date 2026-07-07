@@ -483,7 +483,7 @@ export default function AppShell() {
 
   const logout = useCallback(async () => {
     try {
-      const response = await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
+      const response = await fetch("/api/auth/logout", { method: "POST", credentials: "include", cache: "no-store" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Logout failed");
       clearAuthenticatedState();
