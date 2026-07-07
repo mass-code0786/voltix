@@ -3,21 +3,23 @@ import { prisma } from "@/lib/prisma";
 import { MIN_COPY_TRADE_STAKE_USD, VIP_TRADE_ROWS, dailyTradeLimit, getVipDailyIncomePercent, getVipTradeRow, getVipTradeRowForRank, normalizeVipRank, tradeTimeline } from "./trade-rules";
 import { postBalancedJournal } from "./ledger";
 import { createNotification } from "./notification-service";
+import { isAiWalletActive } from "./user-activation";
 
 const COPY_TRADE_STAKE_RATE = new Prisma.Decimal("0.01");
 const MIN_COPY_TRADE_STAKE = new Prisma.Decimal(MIN_COPY_TRADE_STAKE_USD);
 const INELIGIBLE_TRADE_MESSAGE = "You are not eligible for this trade.";
 const TRADE_UNAVAILABLE_MESSAGE = "Trade not available.";
+const TRADE_TIMEZONE = "UTC";
 
 export async function getCopyTradeStatus(userId: string, now = new Date()) {
   await settleDueCopyTrades(userId, now);
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { vipRank: true, bitexBalance: true },
+    select: { vipRank: true, bitexBalance: true, bitexPrincipal: true },
   });
   const dayStart = new Date(now);
   dayStart.setUTCHours(0, 0, 0, 0);
-  const [activeTrade, completedToday, totalToday, history] = await Promise.all([
+  const [activeTrade, completedToday, totalToday, history, activePackage] = await Promise.all([
     prisma.copyTrade.findFirst({
       where: { userId, status: TradeStatus.ACTIVE },
       include: { code: true },
@@ -31,6 +33,10 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
       orderBy: { startedAt: "desc" },
       take: 20,
     }),
+    prisma.userPackage.findFirst({
+      where: { userId, status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      select: { id: true },
+    }),
   ]);
   const limit = dailyTradeLimit();
   const remaining = Math.max(0, limit - totalToday);
@@ -38,12 +44,13 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   const tradeWindow = await getCurrentTradeWindow(now);
   const normalizedVipRank = normalizeVipRank(user.vipRank);
   const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
+  const aiActive = isAiWalletActive(user);
   return {
     activeTrade: active,
     remainingTime: active?.remainingTime ?? 0,
     eligibility: {
-      eligible: remaining > 0 && user.bitexBalance.gt(0),
-      reason: remaining <= 0 ? "Daily trade limit reached" : user.bitexBalance.lte(0) ? "Please transfer funds to AI Wallet before starting copy trade." : null,
+      eligible: remaining > 0 && aiActive,
+      reason: remaining <= 0 ? "Daily trade limit reached" : !aiActive ? "AI Wallet activation required" : null,
     },
     vipRank: normalizedVipRank,
     todaysTradeCount: totalToday,
@@ -52,13 +59,35 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
     todaysRemainingTrades: remaining,
     tradeRows: VIP_TRADE_ROWS.map(row => ({
       ...row,
+      vipRange: displayVipRange(row.label),
+      dailyReturnMin: row.dailyPercentMin,
+      dailyReturnMax: row.dailyPercentMax,
       eligible: row.vipRanks.includes(normalizedVipRank),
-      available: tradeWindow.status === "Live",
+      available: tradeWindow.status === "LIVE",
       tradeAmount: Number(tradeAmount.toString()),
       perTradePercent: Number(new Prisma.Decimal(row.dailyPercentMin).div(limit).toString()),
-      currentTradeTime: tradeWindow.time,
+      currentTradeTime: tradeWindow.openTime,
       tradeStatus: tradeWindow.status,
-      message: tradeWindow.status === "Live" ? null : TRADE_UNAVAILABLE_MESSAGE,
+      openTime: tradeWindow.openTime,
+      closeTime: tradeWindow.closeTime,
+      timezone: tradeWindow.timezone,
+      secondsUntilOpen: tradeWindow.secondsUntilOpen,
+      secondsUntilClose: tradeWindow.secondsUntilClose,
+      canTrade: row.vipRanks.includes(normalizedVipRank) && tradeWindow.status === "LIVE" && remaining > 0 && aiActive && Boolean(activePackage),
+      reason: tradeCannotTradeReason({
+        rowEligible: row.vipRanks.includes(normalizedVipRank),
+        windowStatus: tradeWindow.status,
+        remaining,
+        aiActive,
+        hasActivePackage: Boolean(activePackage),
+      }),
+      message: tradeCannotTradeReason({
+        rowEligible: row.vipRanks.includes(normalizedVipRank),
+        windowStatus: tradeWindow.status,
+        remaining,
+        aiActive,
+        hasActivePackage: Boolean(activePackage),
+      }),
     })),
     history: history.map(trade => serializeTrade(trade, now)),
   };
@@ -89,6 +118,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
     if (!row) throw new Error(INELIGIBLE_TRADE_MESSAGE);
     const normalizedVipRank = normalizeVipRank(user.vipRank);
     if (!row.vipRanks.includes(normalizedVipRank)) throw new Error(INELIGIBLE_TRADE_MESSAGE);
+    if (!isAiWalletActive(user)) throw new Error("AI Wallet activation required");
 
     const slot = await findOpenTradeSlot(now, tx);
     if (!slot) throw new Error(TRADE_UNAVAILABLE_MESSAGE);
@@ -242,11 +272,25 @@ async function findOpenTradeSlot(now: Date, client: Prisma.TransactionClient | t
 
 async function getCurrentTradeWindow(now: Date) {
   const slots = await prisma.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
-  const openSlot = slots.find(slot => isSlotOpen(slot.utcTime, slot.durationMinutes, now));
-  if (openSlot) return { time: openSlot.utcTime, status: "Live" as const };
-  const upcoming = slots.find(slot => tradeSlotStart(slot.utcTime, now) > now);
-  if (upcoming) return { time: upcoming.utcTime, status: "Upcoming" as const };
-  return { time: slots.at(-1)?.utcTime ?? "--:--", status: "Closed" as const };
+  const windows = slots.map(slot => {
+    const start = tradeSlotStart(slot.utcTime, now);
+    const end = new Date(start.getTime() + slot.durationMinutes * 60_000);
+    return { slot, start, end };
+  });
+  const live = windows.find(window => now >= window.start && now < window.end);
+  if (live) return tradeWindowPayload("LIVE", live.start, live.end, now);
+  const upcoming = windows.find(window => window.start > now);
+  if (upcoming) return tradeWindowPayload("UPCOMING", upcoming.start, upcoming.end, now);
+  const last = windows.at(-1);
+  if (last) return tradeWindowPayload("CLOSED", last.start, last.end, now);
+  return {
+    status: "CLOSED" as const,
+    openTime: "--:--",
+    closeTime: "--:--",
+    timezone: TRADE_TIMEZONE,
+    secondsUntilOpen: 0,
+    secondsUntilClose: 0,
+  };
 }
 
 function isSlotOpen(utcTime: string, durationMinutes: number, now: Date) {
@@ -260,6 +304,35 @@ function tradeSlotStart(utcTime: string, now: Date) {
   const start = new Date(now);
   start.setUTCHours(Number.isFinite(hours) ? hours : 0, Number.isFinite(minutes) ? minutes : 0, 0, 0);
   return start;
+}
+
+function tradeWindowPayload(status: "LIVE" | "UPCOMING" | "CLOSED", start: Date, end: Date, now: Date) {
+  return {
+    status,
+    openTime: formatUtcTime(start),
+    closeTime: formatUtcTime(end),
+    timezone: TRADE_TIMEZONE,
+    secondsUntilOpen: status === "UPCOMING" ? Math.max(0, Math.ceil((start.getTime() - now.getTime()) / 1000)) : 0,
+    secondsUntilClose: status === "LIVE" ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 1000)) : 0,
+  };
+}
+
+function formatUtcTime(value: Date) {
+  return `${String(value.getUTCHours()).padStart(2, "0")}:${String(value.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+function tradeCannotTradeReason(input: { rowEligible: boolean; windowStatus: "LIVE" | "UPCOMING" | "CLOSED"; remaining: number; aiActive: boolean; hasActivePackage: boolean }) {
+  if (!input.rowEligible) return INELIGIBLE_TRADE_MESSAGE;
+  if (!input.aiActive) return "AI Wallet activation required";
+  if (input.remaining <= 0) return "Daily trade limit reached";
+  if (input.windowStatus === "UPCOMING") return "Trade window upcoming";
+  if (input.windowStatus === "CLOSED") return TRADE_UNAVAILABLE_MESSAGE;
+  if (!input.hasActivePackage) return "Package required.";
+  return null;
+}
+
+function displayVipRange(label: string) {
+  return label.replace(/\s+/g, " ").trim();
 }
 
 function serializeTrade(trade: Awaited<ReturnType<typeof prisma.copyTrade.findFirst>> & { code?: { code: string } | null }, now: Date) {
