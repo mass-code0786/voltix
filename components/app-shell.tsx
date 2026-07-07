@@ -13,6 +13,7 @@ import { CoinMark } from "./coin-mark";
 import { Sparkline } from "./sparkline";
 import { CandlestickChart } from "./candlestick-chart";
 import { OrderBookPanel } from "./order-book";
+import { buildReferralLink, getClientAppOrigin } from "@/lib/app-url";
 import {
   ActionTile,
   AppHeader,
@@ -1893,7 +1894,12 @@ function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:Cu
   },[currentUser]);
   const stats=team?.stats ?? {};
   const members=team?.members ?? [];
-  const referralLink=team?.referralLink ?? "";
+  const referralLink=useMemo(() => {
+    const fallback = buildReferralLink(team?.referralUid, getClientAppOrigin()) ?? "";
+    const link = team?.referralLink || fallback;
+    if (/^https?:\/\/localhost(?::\d+)?\b/i.test(link)) return fallback;
+    return link;
+  }, [team?.referralLink, team?.referralUid]);
   const qualifiedDirects=members.filter(member=>member.level===1&&member.packageAmount>=50).length;
   const progress=Math.min(100,(qualifiedDirects/5)*100);
   const copyReferral=()=>{if(!referralLink){notify("Referral link unavailable");return;}navigator.clipboard?.writeText(referralLink);fetch("/api/audit/referral-copy",{method:"POST"}).catch(()=>{});notify("Referral link copied");};

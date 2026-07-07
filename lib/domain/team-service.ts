@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { buildReferralLink } from "@/lib/app-url";
 import { isAiWalletActive } from "@/lib/domain/user-activation";
 
 type TeamClient = Pick<PrismaClient, "user" | "userPackage"> | Prisma.TransactionClient;
@@ -12,7 +13,7 @@ type ReferralUser = {
   joinedAt: Date;
 };
 
-export async function getTeamSnapshot(client: TeamClient, userId: string, origin: string) {
+export async function getTeamSnapshot(client: TeamClient, userId: string, origin?: string) {
   const sponsor = await client.user.findUniqueOrThrow({
     where: { id: userId },
     select: { id: true, uid: true },
@@ -65,7 +66,7 @@ export async function getTeamSnapshot(client: TeamClient, userId: string, origin
 
   return {
     referralUid: sponsor.uid,
-    referralLink: `${origin.replace(/\/$/, "")}/join/${sponsor.uid}`,
+    referralLink: buildReferralLink(sponsor.uid, origin),
     stats: {
       directTeamCount,
       totalNetworkCount: network.length,

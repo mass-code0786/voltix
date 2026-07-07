@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { AppHeader, BottomNav } from "@/components/design-system";
 import { SearchableSelect } from "@/components/searchable-select";
+import { buildReferralLink, getClientAppOrigin } from "@/lib/app-url";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 import { usd } from "@/lib/format";
 
@@ -150,6 +151,14 @@ export default function ProfilePage() {
   const currentVip = profile?.vipRank?.trim() || "—";
   const nextVip = currentVip.match(/\d+/) ? `VIP ${Number(currentVip.match(/\d+/)?.[0] ?? 0) + 1}` : "—";
   const vipProgress = 0;
+  const displayProfile = useMemo(() => {
+    if (!profile) return null;
+    const fallback = buildReferralLink(profile.referralUid || profile.uid, getClientAppOrigin());
+    const referralLink = profile.referralLink && !/^https?:\/\/localhost(?::\d+)?\b/i.test(profile.referralLink)
+      ? profile.referralLink
+      : fallback;
+    return { ...profile, referralLink };
+  }, [profile]);
 
   useEffect(() => {
     let active = true;
@@ -288,8 +297,8 @@ export default function ProfilePage() {
   };
 
   const copyReferral = async () => {
-    if (!profile?.referralLink) return;
-    await navigator.clipboard?.writeText(profile.referralLink);
+    if (!displayProfile?.referralLink) return;
+    await navigator.clipboard?.writeText(displayProfile.referralLink);
     notify("Referral link copied");
   };
 
@@ -314,11 +323,11 @@ export default function ProfilePage() {
       <div className="mx-auto w-full max-w-[420px] px-4 pb-40 pt-1 lg:max-w-3xl">
         {loading ? (
           <div className="profile-glass mt-1 rounded-[22px] p-5 text-sm text-slate-400">Loading profile...</div>
-        ) : profile ? (
+        ) : displayProfile ? (
           <div className="space-y-3">
             <ProfileHero
-              profile={profile}
-              initialsText={initials(profile.fullName)}
+              profile={displayProfile}
+              initialsText={initials(displayProfile.fullName)}
               kycTone={kycTone}
               totalBalance={totalBalance}
               totalIncome={totalIncome}
@@ -332,7 +341,7 @@ export default function ProfilePage() {
             <section>
               <div className="profile-menu-card">
                 <ProfileRow icon={UserRound} tone="green" title="Account Information" subtitle="Name, email, country and profile details" onClick={() => setActivePanel(activePanel === "account" ? null : "account")} />
-                <ProfileRow icon={ShieldCheck} tone="green" title="KYC Verification" subtitle="Identity verification status" pill={kycLabel(profile.kycStatus)} pillTone={profile.kycStatus === "APPROVED" ? "green" : "muted"} onClick={() => router.push("/?view=home")} />
+                <ProfileRow icon={ShieldCheck} tone="green" title="KYC Verification" subtitle="Identity verification status" pill={kycLabel(displayProfile.kycStatus)} pillTone={displayProfile.kycStatus === "APPROVED" ? "green" : "muted"} onClick={() => router.push("/?view=home")} />
                 <ProfileRow icon={LockKeyhole} tone="purple" title="Security" subtitle="Password and account access" onClick={() => setActivePanel(activePanel === "security" ? null : "security")} />
                 <ProfileRow icon={CreditCard} tone="blue" title="Bank & Payment Methods" subtitle="Deposit and withdrawal methods" onClick={() => router.push("/?view=wallet")} />
                 <ProfileRow icon={Network} tone="yellow" title="Referral & Team" subtitle="Referral link and network overview" onClick={() => router.push("/?view=team")} />
@@ -347,7 +356,7 @@ export default function ProfilePage() {
 
             <ProfilePanels
               activePanel={activePanel}
-              profile={profile}
+              profile={displayProfile}
               name={name}
               setName={setName}
               country={country}

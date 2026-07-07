@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getTeamSnapshot } from "@/lib/domain/team-service";
+import { getServerAppOrigin } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
 
 const emptyTeam = {
@@ -15,13 +16,12 @@ const emptyTeam = {
   members: [],
 };
 
-export async function GET(request: Request) {
+export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ authenticated: false, team: emptyTeam }, { status: 401 });
   }
 
-  const origin = new URL(request.url).origin;
-  const team = await getTeamSnapshot(prisma, user.id, origin);
+  const team = await getTeamSnapshot(prisma, user.id, getServerAppOrigin());
   return NextResponse.json({ authenticated: true, userId: user.id, team });
 }

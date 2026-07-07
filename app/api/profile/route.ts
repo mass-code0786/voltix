@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeLanguage } from "@/lib/profile-options";
 import { auditSuccess } from "@/lib/audit";
+import { buildReferralLink } from "@/lib/app-url";
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -12,13 +13,11 @@ const profileSchema = z.object({
   profileImageUrl: z.string().trim().optional(),
 });
 
-function referralLink(request: Request, uid: string | null | undefined) {
-  if (!uid) return null;
-  const origin = new URL(request.url).origin;
-  return `${origin}/?ref=${encodeURIComponent(uid)}`;
+function referralLink(uid: string | null | undefined) {
+  return buildReferralLink(uid);
 }
 
-async function profilePayload(userId: string, request: Request) {
+async function profilePayload(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -50,16 +49,16 @@ async function profilePayload(userId: string, request: Request) {
     language: user.language,
     vipRank: user.vipRank,
     referralUid: user.uid,
-    referralLink: referralLink(request, user.uid),
+    referralLink: referralLink(user.uid),
     memberSince: user.joinedAt.toISOString(),
     kycStatus: latestKyc,
   };
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
-  const profile = await profilePayload(user.id, request);
+  const profile = await profilePayload(user.id);
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   return NextResponse.json({ profile });
 }
@@ -67,7 +66,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
-  const before = await profilePayload(user.id, request);
+  const before = await profilePayload(user.id);
   const parsed = profileSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid profile details" }, { status: 400 });
@@ -81,7 +80,7 @@ export async function PATCH(request: Request) {
       profileImageUrl: parsed.data.profileImageUrl || null,
     },
   });
-  const profile = await profilePayload(user.id, request);
+  const profile = await profilePayload(user.id);
   await auditSuccess({ request, userId: user.id, role: "USER", action: "PROFILE_UPDATE", module: "PROFILE", description: "User profile updated", oldValue: before, newValue: profile }).catch(() => null);
   return NextResponse.json({ profile });
 }
