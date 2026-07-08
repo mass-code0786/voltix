@@ -175,6 +175,29 @@ export async function getAdminWithdrawals() {
   };
 }
 
+export async function getAdminP2PTransfers() {
+  const transfers = await prisma.p2PTransfer.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: {
+      sender: { select: { name: true, uid: true, email: true } },
+      receiver: { select: { name: true, uid: true, email: true } },
+      asset: true,
+    },
+  });
+  return {
+    rows: transfers.map(transfer => [
+      `${transfer.sender.name} / ${transfer.sender.uid}`,
+      `${transfer.receiver.name} / ${transfer.receiver.uid}`,
+      transfer.asset.symbol,
+      money(transfer.amount),
+      transfer.status,
+      formatDate(transfer.createdAt),
+      transfer.note ?? "",
+    ]),
+  };
+}
+
 type AuditFilters = {
   from?: string | null;
   to?: string | null;

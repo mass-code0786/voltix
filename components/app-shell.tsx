@@ -99,6 +99,8 @@ type AssetRecord = {
   balance: number;
   enabled: boolean;
 };
+type P2PAsset = Pick<AssetRecord, "symbol" | "name" | "balance" | "enabled">;
+type P2PTransferInput = { receiver: string; asset: string; amount: number; note?: string; idempotencyKey: string };
 type WalletHistoryRecord = {
   id: string;
   walletType: UserWallet;
@@ -312,6 +314,7 @@ export default function AppShell() {
   const [marketCoinsLoading, setMarketCoinsLoading] = useState(true);
   const [marketCoinsError, setMarketCoinsError] = useState("");
   const [walletAssets, setWalletAssets] = useState<AppCoin[]>([]);
+  const [p2pAssets, setP2PAssets] = useState<P2PAsset[]>([]);
   const [assetTotals, setAssetTotals] = useState<AssetTotals>(emptyAssetTotals);
   const [futuresBalance, setFuturesBalance] = useState(0);
   const [bitexBalance, setBitexBalance] = useState(0);
@@ -319,6 +322,7 @@ export default function AppShell() {
   const [bitexPrincipalLocked, setBitexPrincipalLocked] = useState(0);
   const [bitexIncomeEarned, setBitexIncomeEarned] = useState(0);
   const [transferOpen, setTransferOpen] = useState<{ from: UserWallet; to: UserWallet } | null>(null);
+  const [p2pOpen, setP2POpen] = useState(false);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -437,6 +441,7 @@ export default function AppShell() {
   const refreshAssets = useCallback(async (user: CurrentUser | null) => {
     if (!user) {
       setWalletAssets([]);
+      setP2PAssets([]);
       setAssetTotals(emptyAssetTotals);
       setWalletActivity([]);
       return;
@@ -450,6 +455,7 @@ export default function AppShell() {
     const historyData = await historyResponse.json().catch(() => ({}));
     const history = Array.isArray(historyData.history) ? historyData.history as WalletHistoryRecord[] : Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
     setWalletAssets(mergeAssetRecords(marketCoins, assets));
+    setP2PAssets(assets.filter(asset => asset.walletType === "SPOT" && asset.enabled && Number(asset.balance ?? 0) > 0).map(asset => ({ symbol: asset.symbol, name: asset.name, balance: Number(asset.balance ?? 0), enabled: asset.enabled })));
     setAssetTotals(totals ?? emptyAssetTotals);
     setFuturesBalance(Number(totals?.total?.futures ?? 0));
     setBitexBalance(Number(totals?.total?.bitex ?? 0));
@@ -478,6 +484,7 @@ export default function AppShell() {
     setDashboard(null);
     applyWalletSnapshot(null);
     setWalletAssets([]);
+    setP2PAssets([]);
     setAssetTotals(emptyAssetTotals);
     setWalletActivity([]);
     setActiveCopyTrade(null);
@@ -581,6 +588,7 @@ export default function AppShell() {
       .catch(() => {
         if (!currentUser) {
           setWalletAssets([]);
+          setP2PAssets([]);
           setAssetTotals(emptyAssetTotals);
           setWalletActivity([]);
         }
@@ -738,6 +746,15 @@ export default function AppShell() {
     return { ok: true, message: "" };
   }, [assetTotals, bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, notify, refreshAssets]);
 
+  const sendP2PTransfer = useCallback(async (input: P2PTransferInput) => {
+    const response = await fetch("/api/p2p/transfer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, message: data.error || "P2P transfer failed" };
+    await Promise.all([refreshAssets(currentUser), refreshWallet(currentUser), refreshDashboard(currentUser), refreshNotifications(currentUser)]);
+    notify(`${input.amount.toFixed(2)} ${input.asset} sent`);
+    return { ok: true, message: "", transfer: data.transfer };
+  }, [currentUser, notify, refreshAssets, refreshDashboard, refreshNotifications, refreshWallet]);
+
   const startCopyTrade = useCallback(async (rowId: string) => {
     const response = await fetch("/api/copy-trade/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rowId }) });
     const data = await response.json();
@@ -801,7 +818,7 @@ export default function AppShell() {
   }, [currentUser]);
 
   const screen = {
-    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} bitexBalance={bitexBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
+    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} bitexBalance={bitexBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} loading={marketCoinsLoading} error={marketCoinsError} />,
     trade: <TradeWorkspace category={tradeCategory} coins={marketCoins} loading={marketCoinsLoading} error={marketCoinsError} />,
     bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
@@ -850,6 +867,7 @@ export default function AppShell() {
       {tradeMenuOpen&&<TradeMenu close={()=>setTradeMenuOpen(false)} select={openTrade}/>} 
       {transferOpen&&<WalletTransferModal initialFrom={transferOpen.from} initialTo={transferOpen.to} balances={{SPOT:Number(assetTotals.total?.spot??0),FUTURES:futuresBalance,BITEX:bitexBalance}} close={()=>setTransferOpen(null)} transfer={transferWallet}/>} 
       {withdrawalOpen&&<WithdrawalModal balances={{SPOT:Number(assetTotals.total?.spot??0),BITEX:bitexBalance}} bitexUnlocked={bitexPrincipalLocked>0&&bitexIncomeEarned>=bitexPrincipalLocked*2} close={()=>setWithdrawalOpen(false)} withdraw={createWithdrawal}/>} 
+      {p2pOpen&&<P2PTransferModal assets={p2pAssets} close={()=>setP2POpen(false)} sendTransfer={sendP2PTransfer}/>}
       {verificationOpen&&<VerificationRequestModal close={()=>setVerificationOpen(false)} notify={notify} user={currentUser}/>} 
       {helpOpen&&<HelpCenterModal close={()=>setHelpOpen(false)} notify={notify}/>} 
       {toast && <div className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 whitespace-nowrap rounded-full border border-lime/20 bg-[#17231e] px-5 py-3 text-xs font-bold shadow-2xl lg:bottom-8"><span className="mr-2 text-lime">?</span>{toast}</div>}
@@ -890,7 +908,7 @@ function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerif
   return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">{user?.name?.trim() || "Account"}</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>{uid?`UID ${uid}`:"Not logged in"}</span>{uid&&<button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button>}<span>· {user?.vipRank || "Pro"} member</span></div></div>{user?<><Link href="/profile" onClick={close} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Settings size={17}/> Profile & Settings</Link><button onClick={logout} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Logout</button></>:<><button onClick={openLogin} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Login</button><button onClick={openRegister} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Users size={17}/> Register</button></>}<button onClick={openVerification} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button>{isAdminUser && <Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link>}</div></>;
 }
 
-function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, assets, dashboard, balanceVisible, setBalanceVisible, copyTradeHistory, bitexBalance, userCountry, aiSubscription, vipTradeRows, startTrade, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; bitexBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
+function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, onOpenP2P, assets, dashboard, balanceVisible, setBalanceVisible, copyTradeHistory, bitexBalance, userCountry, aiSubscription, vipTradeRows, startTrade, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; bitexBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
   const total = dashboard?.summary?.totalPortfolio ?? 0;
   const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
   const aiCopyTradingIncome = dashboard?.summary?.aiCopyTradingIncome ?? 0;
@@ -907,7 +925,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, a
   const shortcuts: { icon: typeof Home; label: string; onClick: () => void }[] = [
     { icon: Wallet, label: "AI Wallet", onClick: () => onNavigate("wallet") },
     { icon: Copy, label: "Copy Trading", onClick: onOpenCopyTrade },
-    { icon: Trophy, label: "VIP Benefits", onClick: onOpenCopyTrade },
+    { icon: Send, label: "P2P", onClick: onOpenP2P },
     { icon: Users, label: "Invite", onClick: () => onNavigate("team") },
   ];
   return <div className="mx-auto max-w-[390px] space-y-2 overflow-x-hidden">
@@ -1965,6 +1983,24 @@ function ReferralShareSheet({link,close,copied}:{link:string;close:()=>void;copi
 }
 
 function ShareLogo({label,className,onClick,children}:{label:string;className:string;onClick:()=>void;children:React.ReactNode}) { return <button onClick={onClick} aria-label={label} className={`grid h-11 w-11 place-items-center rounded-full text-sm font-black ${className}`}>{children}</button> }
+
+function P2PTransferModal({assets,close,sendTransfer}:{assets:P2PAsset[];close:()=>void;sendTransfer:(input:P2PTransferInput)=>Promise<{ok:boolean;message:string;transfer?:unknown}>}) {
+  const ordered=useMemo(()=>[...assets].sort((a,b)=>a.symbol==="USDT"?-1:b.symbol==="USDT"?1:a.symbol.localeCompare(b.symbol)),[assets]);
+  const [asset,setAsset]=useState(ordered[0]?.symbol ?? "USDT");
+  const [receiver,setReceiver]=useState("");
+  const [amount,setAmount]=useState("");
+  const [note,setNote]=useState("");
+  const [error,setError]=useState("");
+  const [confirming,setConfirming]=useState(false);
+  const [submitting,setSubmitting]=useState(false);
+  const [idempotencyKey,setIdempotencyKey]=useState("");
+  const selected=ordered.find(item=>item.symbol===asset) ?? ordered[0];
+  const value=Number(amount)||0;
+  const reset=()=>{setError("");setConfirming(false);};
+  const review=()=>{setError("");if(!selected){setError("No available asset to send");return;}if(!receiver.trim()){setError("Enter receiver UID or email");return;}if(value<=0){setError("Enter a valid amount");return;}if(value>selected.balance){setError(`Insufficient ${selected.symbol} balance`);return;}setIdempotencyKey(crypto.randomUUID());setConfirming(true);};
+  const submit=async()=>{if(!selected||submitting)return;setSubmitting(true);const result=await sendTransfer({receiver:receiver.trim(),asset:selected.symbol,amount:value,note:note.trim()||undefined,idempotencyKey});setSubmitting(false);if(!result.ok){setConfirming(false);setError(result.message||"P2P transfer failed");return;}close();};
+  return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="flex max-h-[92vh] w-full max-w-md flex-col rounded-t-3xl border border-line bg-[#111c18] sm:rounded-3xl"><header className="flex items-start justify-between border-b border-line p-5"><div><h3 className="text-xl font-black">P2P Transfer</h3><p className="mt-1 text-xs text-slate-500">Internal user-to-user Spot Wallet transfer.</p></div><button onClick={close} aria-label="Close P2P transfer"><X/></button></header>{confirming&&selected?<><div className="flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl border border-lime/20 bg-lime/[.06] p-4"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-lime text-ink"><Send size={19}/></span><p className="text-sm font-bold text-white">You are sending {value.toFixed(8).replace(/\.?0+$/,"")} {selected.symbol} to {receiver.trim()}</p></div></div><div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Asset" value={selected.symbol}/><LineItem label="Amount" value={`${value.toFixed(8).replace(/\.?0+$/,"")} ${selected.symbol}`}/><LineItem label="Receiver" value={receiver.trim()}/>{note.trim()&&<LineItem label="Note" value={note.trim()}/>}</div>{error&&<p className="text-xs text-danger">{error}</p>}</div><div className="grid grid-cols-2 gap-3 border-t border-line p-4"><button onClick={()=>setConfirming(false)} disabled={submitting} className="rounded-xl border border-line py-3 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button><button onClick={submit} disabled={submitting} className="rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60">{submitting?"Sending...":"Confirm"}</button></div></>:<><div className="flex-1 space-y-4 overflow-y-auto p-5"><label className="block text-xs font-bold text-slate-400">Select coin/asset<select value={asset} onChange={e=>{setAsset(e.target.value);reset();}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white">{ordered.length?ordered.map(item=><option key={item.symbol} value={item.symbol}>{item.symbol} - {item.name}</option>):<option value="USDT">No available assets</option>}</select></label><div className="rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Available balance" value={selected?`${selected.balance.toFixed(8).replace(/\.?0+$/,"")} ${selected.symbol}`:"0"}/><LineItem label="Source" value="Spot Wallet"/></div><label className="block text-xs font-bold text-slate-400">Receiver UID or email<input value={receiver} onChange={e=>{setReceiver(e.target.value);reset();}} placeholder="UID or email" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Amount<div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);reset();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-white outline-none"/>{selected&&<button onClick={()=>{setAmount(String(selected.balance));reset();}} className="px-4 text-xs font-black text-lime">MAX</button>}<span className="pr-4 text-xs text-slate-500">{selected?.symbol??""}</span></div></label><label className="block text-xs font-bold text-slate-400">Note optional<textarea value={note} onChange={e=>{setNote(e.target.value);reset();}} rows={3} maxLength={160} className="mt-2 w-full resize-none rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label>{error&&<p className="text-xs text-danger">{error}</p>}</div><div className="border-t border-line p-4"><button onClick={review} disabled={!ordered.length} className="w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">Confirm Transfer</button></div></>}</div></div>;
+}
 
 function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{initialFrom:UserWallet;initialTo:UserWallet;balances:Record<UserWallet,number>;close:()=>void;transfer:(from:UserWallet,to:UserWallet,amount:number)=>Promise<boolean>}) {
   const sourceWallets:UserWallet[]=["SPOT","FUTURES"];

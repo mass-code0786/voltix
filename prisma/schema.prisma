@@ -118,6 +118,7 @@ enum NotificationType {
   COPY_TRADE_INCOME
   REFERRAL_INCOME
   AI_SUBSCRIPTION_PURCHASE
+  P2P_TRANSFER
   KYC_STATUS
   ADMIN_TRADE_CODE
   ADMIN_BROADCAST
@@ -163,6 +164,8 @@ model User {
   bitexUnlocked         Boolean          @default(false)
   wallets               WalletAccount[]
   walletTransfers       WalletTransfer[]
+  p2pTransfersSent      P2PTransfer[]   @relation("P2PSender")
+  p2pTransfersReceived  P2PTransfer[]   @relation("P2PReceiver")
   deposits              Deposit[]
   withdrawals           Withdrawal[]
   walletAdjustments     AdminWalletAdjustment[] @relation("WalletAdjustmentUser")
@@ -220,6 +223,28 @@ model WalletTransfer {
   @@index([status, createdAt])
 }
 
+model P2PTransfer {
+  id              String               @id @default(cuid())
+  senderId        String
+  sender          User                 @relation("P2PSender", fields: [senderId], references: [id])
+  receiverId      String
+  receiver        User                 @relation("P2PReceiver", fields: [receiverId], references: [id])
+  assetId         String
+  asset           Asset                @relation(fields: [assetId], references: [id])
+  amount          Decimal              @db.Decimal(36, 18)
+  note            String?
+  status          WalletTransferStatus @default(PENDING)
+  idempotencyKey  String               @unique
+  ledgerJournalId String?              @unique
+  completedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([senderId, createdAt])
+  @@index([receiverId, createdAt])
+  @@index([status, createdAt])
+}
+
 model Asset {
   id             String           @id @default(cuid())
   symbol         String           @unique
@@ -230,6 +255,7 @@ model Asset {
   deposits       Deposit[]
   withdrawals    Withdrawal[]
   walletAdjustments AdminWalletAdjustment[]
+  p2pTransfers   P2PTransfer[]
 }
 
 model CoinMetadata {
@@ -490,7 +516,7 @@ model TradeSlot {
   id              String      @id @default(cuid())
   label           String
   utcTime         String
-  durationMinutes Int         @default(20)
+  durationMinutes Int         @default(30)
   creditDelayMins Int         @default(10)
   enabled         Boolean     @default(true)
   codes           TradeCode[]
