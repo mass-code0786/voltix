@@ -32,7 +32,7 @@ export async function getAdminOverview() {
     prisma.withdrawal.count({ where: { status: "PENDING" } }),
     prisma.kycRequest.count({ where: { status: "PENDING" } }),
     prisma.supportTicket.count({ where: { status: { in: ["OPEN", "PENDING"] } } }),
-    prisma.copyTrade.count({ where: { status: "ACTIVE" } }),
+    prisma.copyTrade.count({ where: { status: { in: ["PENDING", "ACTIVE"] } } }),
     prisma.copyTrade.count({ where: { status: "COMPLETED" } }),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 10, include: { actor: { select: { name: true, uid: true } } } }),
   ]);

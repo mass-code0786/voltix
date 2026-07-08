@@ -572,10 +572,16 @@ export default function AppShell() {
   useEffect(() => {
     if (!currentUser) return;
     const timer = window.setInterval(() => {
-      refreshCopyTradeStatus(currentUser).catch(() => {});
+      refreshCopyTradeStatus(currentUser)
+        .then(() => Promise.all([
+          refreshWallet(currentUser),
+          refreshAssets(currentUser),
+          refreshDashboard(currentUser),
+        ]))
+        .catch(() => {});
     }, 20_000);
     return () => window.clearInterval(timer);
-  }, [currentUser, refreshCopyTradeStatus]);
+  }, [currentUser, refreshAssets, refreshCopyTradeStatus, refreshDashboard, refreshWallet]);
 
   useEffect(() => {
     refreshAiSubscription(currentUser)

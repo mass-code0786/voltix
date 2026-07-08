@@ -7,7 +7,7 @@ export async function GET() {
   if (admin.response) return admin.response;
   const [activeSubscriptions, dueTrades, latestIncome, latestTrade] = await Promise.all([
     prisma.aiSubscription.count({ where: { active: true, expiresAt: { gt: new Date() } } }),
-    prisma.copyTrade.count({ where: { status: { in: ["ACTIVE", "COMPLETED"] }, creditDueAt: { lte: new Date() } } }),
+    prisma.copyTrade.count({ where: { status: { in: ["PENDING", "ACTIVE", "COMPLETED"] }, creditDueAt: { lte: new Date() } } }),
     prisma.income.findFirst({ orderBy: { createdAt: "desc" } }),
     prisma.copyTrade.findFirst({ orderBy: { updatedAt: "desc" } }),
   ]);

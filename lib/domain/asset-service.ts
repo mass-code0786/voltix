@@ -16,7 +16,7 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
       orderBy: [{ type: "asc" }, { asset: { symbol: "asc" } }],
     }),
     client.copyTrade.aggregate({
-      where: { userId, status: { in: ["ACTIVE", "COMPLETED"] } },
+      where: { userId, status: { in: ["PENDING", "ACTIVE", "COMPLETED"] } },
       _sum: { principalAmount: true },
     }),
     client.user.findUniqueOrThrow({

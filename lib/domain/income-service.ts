@@ -32,11 +32,11 @@ export async function getAdminIncomeHistory() {
 }
 
 export async function runIncomeScheduler(now = new Date()) {
-  await settleDueCopyTrades(undefined, now);
+  const copyTrades = await settleDueCopyTrades(undefined, now);
   const { runAiAutoCopyTradeJob } = await import("./ai-subscription-service");
   const ai = await runAiAutoCopyTradeJob(now);
   const vip = await runVipSalaryJob(now);
-  return { copyTradesSettled: true, aiAutoCopy: ai, vipSalary: vip };
+  return { copyTradesSettled: copyTrades, aiAutoCopy: ai, vipSalary: vip };
 }
 
 export async function postFirstDepositReferralIncome(depositId: string, adminUserId?: string) {
