@@ -9,7 +9,8 @@ const COPY_TRADE_STAKE_RATE = new Prisma.Decimal("0.01");
 const MIN_COPY_TRADE_STAKE = new Prisma.Decimal(MIN_COPY_TRADE_STAKE_USD);
 const INELIGIBLE_TRADE_MESSAGE = "You are not eligible for this trade.";
 const TRADE_UNAVAILABLE_MESSAGE = "Trade not available.";
-const TRADE_TIMEZONE = "UTC";
+const TRADE_TIMEZONE = "IST";
+const TRADE_DISPLAY_TIMEZONE = "Asia/Kolkata";
 const MIN_TRADE_WINDOW_MINUTES = 30;
 
 export async function getCopyTradeStatus(userId: string, now = new Date()) {
@@ -80,6 +81,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
       secondsUntilOpen: tradeWindow.secondsUntilOpen,
       secondsUntilClose: tradeWindow.secondsUntilClose,
       canTrade,
+      canTradeWhenLive: audit.aiWallet.pass && audit.vip.pass && audit.dailyLimit.pass && audit.package.pass,
       reason,
       message: reason,
       conditionAudit: audit,
@@ -95,10 +97,13 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   });
   return {
     serverNow: now.toISOString(),
+    nextOpenTime: tradeWindow.nextOpenTime,
     timezone: tradeWindow.timezone,
     openTime: tradeWindow.openTime,
     closeTime: tradeWindow.closeTime,
     tradeStatus: tradeWindow.status,
+    secondsUntilOpen: tradeWindow.secondsUntilOpen,
+    secondsUntilClose: tradeWindow.secondsUntilClose,
     canTrade: Boolean(currentRow?.canTrade),
     reason: currentRow?.reason ?? null,
     userVipRank: normalizedVipRank,
@@ -316,8 +321,9 @@ async function getCurrentTradeWindow(now: Date) {
   if (last) return tradeWindowPayload("CLOSED", last.start, last.end, now, last.slot);
   return {
     status: "CLOSED" as const,
-    openTime: "--:--",
-    closeTime: "--:--",
+    nextOpenTime: null,
+    openTime: "",
+    closeTime: "",
     timezone: TRADE_TIMEZONE,
     secondsUntilOpen: 0,
     secondsUntilClose: 0,
@@ -342,11 +348,12 @@ function tradeSlotStart(utcTime: string, now: Date, dayOffset = 0) {
 function tradeWindowPayload(status: "LIVE" | "UPCOMING" | "CLOSED", start: Date, end: Date, now: Date, slot: { id: string; label: string; utcTime: string; durationMinutes: number } | null) {
   return {
     status,
-    openTime: formatUtcTime(start),
-    closeTime: formatUtcTime(end),
+    nextOpenTime: status === "UPCOMING" ? start.toISOString() : null,
+    openTime: formatTradeDisplayTime(start),
+    closeTime: formatTradeDisplayTime(end),
     timezone: TRADE_TIMEZONE,
     secondsUntilOpen: status === "UPCOMING" ? Math.max(0, Math.ceil((start.getTime() - now.getTime()) / 1000)) : 0,
-    secondsUntilClose: status === "LIVE" ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 1000)) : 0,
+    secondsUntilClose: status === "LIVE" || status === "UPCOMING" ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 1000)) : 0,
     slot: slot ? {
       id: slot.id,
       label: slot.label,
@@ -356,8 +363,13 @@ function tradeWindowPayload(status: "LIVE" | "UPCOMING" | "CLOSED", start: Date,
   };
 }
 
-function formatUtcTime(value: Date) {
-  return `${String(value.getUTCHours()).padStart(2, "0")}:${String(value.getUTCMinutes()).padStart(2, "0")}`;
+function formatTradeDisplayTime(value: Date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: TRADE_DISPLAY_TIMEZONE,
+  }).format(value);
 }
 
 function effectiveTradeSlotDuration(durationMinutes: number) {
