@@ -17,7 +17,7 @@ const SETTLEABLE_TRADE_STATUSES = [TradeStatus.PENDING, TradeStatus.ACTIVE, Trad
 const REQUIRED_TRADE_SLOTS = [
   { label: "Window 1", utcTime: "08:30" },
   { label: "Window 2", utcTime: "12:30" },
-  { label: "Window 3", utcTime: "17:10" },
+  { label: "Window 3", utcTime: "18:10" },
 ] as const;
 
 export async function getCopyTradeStatus(userId: string, now = new Date()) {
