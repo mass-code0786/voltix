@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeLanguage } from "@/lib/profile-options";
 import { auditSuccess } from "@/lib/audit";
 import { buildReferralLink } from "@/lib/app-url";
+import { refreshUserVipRank } from "@/lib/domain/vip-rank-service";
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -18,6 +19,7 @@ function referralLink(uid: string | null | undefined) {
 }
 
 async function profilePayload(userId: string) {
+  await refreshUserVipRank(userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
