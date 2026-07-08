@@ -83,9 +83,7 @@ export default function TopUpTeamPage() {
         </div>
         <div className="mt-5 flex items-end justify-between gap-4">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-wider text-lime">My Network</p>
             <h1 className="mt-1 text-2xl font-black">Top-up Team</h1>
-            <p className="mt-2 max-w-lg text-xs leading-5 text-slate-400">Direct referrals with credited deposits are shown first. Expand each member to view their direct top-up referrals.</p>
           </div>
           <div className="hidden rounded-2xl border border-lime/20 bg-lime/10 p-3 text-lime sm:block"><Network size={24}/></div>
         </div>
