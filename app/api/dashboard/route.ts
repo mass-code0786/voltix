@@ -13,6 +13,7 @@ const emptyDashboard = {
     totalPortfolio: 0,
     todaysProfit: 0,
     totalIncome: 0,
+    aiCopyTradingIncome: 0,
     activePackageAmount: 0,
   },
   wallet: {

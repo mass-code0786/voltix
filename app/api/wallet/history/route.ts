@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { displayWalletName } from "@/lib/wallet-labels";
 
 const emptyHistory = { authenticated: false, assets: [], totals: {}, history: [] };
+const copyTradeIncomeTypes = new Set(["COPY_TRADE"]);
+const referralIncomeTypes = new Set(["DIRECT", "LEVEL", "BOT_COMMISSION"]);
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -17,8 +19,8 @@ export async function GET() {
     prisma.income.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100 }),
     prisma.copyTrade.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100 }),
   ]);
-  const history = [
-    ...ledger.map(row => ({ ...row, type: "LEDGER", sortAt: row.createdAt })),
+  const primaryReferences = new Set<string>();
+  const historyRows = [
     ...deposits.map(row => ({
       id: row.id,
       type: "DEPOSIT",
@@ -27,10 +29,10 @@ export async function GET() {
       direction: "CREDIT",
       amount: Number(row.amount.toString()),
       signedAmount: Number(row.amount.toString()),
-      title: `Deposit ${row.network.key.toUpperCase()}`,
+      title: "Deposit",
       referenceType: "DEPOSIT",
       referenceId: row.id,
-      status: row.status,
+      status: cleanStatus(row.status),
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
@@ -42,10 +44,10 @@ export async function GET() {
       direction: "DEBIT",
       amount: Number(row.amount.toString()),
       signedAmount: -Number(row.amount.toString()),
-      title: `Withdrawal ${row.network.key.toUpperCase()}`,
+      title: "Withdrawal",
       referenceType: "WITHDRAWAL",
       referenceId: row.id,
-      status: row.status,
+      status: cleanStatus(row.status),
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
@@ -60,22 +62,22 @@ export async function GET() {
       title: `Transfer ${displayWalletName(row.fromWallet)} to ${displayWalletName(row.toWallet)}`,
       referenceType: "WALLET_TRANSFER",
       referenceId: row.id,
-      status: row.status,
+      status: cleanStatus(row.status),
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
     ...incomes.map(row => ({
       id: row.id,
       type: "INCOME",
-      walletType: displayWalletName("BITEX"),
+      walletType: displayWalletName(copyTradeIncomeTypes.has(row.type) ? "BITEX" : "SPOT"),
       asset: "USDT",
       direction: "CREDIT",
       amount: Number(row.amount.toString()),
       signedAmount: Number(row.amount.toString()),
-      title: `${row.type.replaceAll("_", " ")} income`,
+      title: incomeTitle(row.type),
       referenceType: row.sourceType,
       referenceId: row.sourceId,
-      status: "POSTED",
+      status: "Completed",
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
@@ -90,10 +92,52 @@ export async function GET() {
       title: "Copy trade",
       referenceType: "COPY_TRADE",
       referenceId: row.id,
-      status: row.status,
+      status: cleanStatus(row.status),
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
-  ].sort((a, b) => Date.parse(b.sortAt) - Date.parse(a.sortAt)).slice(0, 150).map(({ sortAt: _sortAt, ...row }) => row);
+  ];
+
+  for (const row of historyRows) primaryReferences.add(referenceKey(row.referenceType, row.referenceId));
+
+  const fallbackLedger = ledger
+    .filter(row => !primaryReferences.has(referenceKey(row.referenceType, row.referenceId)))
+    .map(row => ({
+      ...row,
+      type: "LEDGER",
+      title: ledgerTitle(row.referenceType, row.title, row.direction),
+      status: cleanStatus(row.status),
+      sortAt: row.createdAt,
+    }));
+
+  const history = [...historyRows, ...fallbackLedger].sort((a, b) => Date.parse(b.sortAt) - Date.parse(a.sortAt)).slice(0, 150).map(({ sortAt: _sortAt, ...row }) => row);
   return NextResponse.json({ authenticated: true, assets: [], totals: {}, history });
+}
+
+function referenceKey(referenceType: string, referenceId: string) {
+  return `${referenceType}:${referenceId}`;
+}
+
+function incomeTitle(type: string) {
+  if (copyTradeIncomeTypes.has(type)) return "AI Trade Profit";
+  if (referralIncomeTypes.has(type)) return "Referral Income";
+  if (type === "VIP_SALARY") return "VIP Salary";
+  return "Income";
+}
+
+function ledgerTitle(referenceType: string, memo: string, direction: string) {
+  if (referenceType === "ADMIN_WALLET_ADJUSTMENT") return direction === "CREDIT" ? "Admin Credit" : "Admin Debit";
+  if (referenceType === "COPY_TRADE_INCOME") return "AI Trade Profit";
+  if (referenceType === "WALLET_TRANSFER") return "Wallet Transfer";
+  if (referenceType.includes("DEPOSIT")) return "Deposit";
+  if (referenceType.includes("WITHDRAWAL")) return "Withdrawal";
+  if (referenceType.includes("REFERRAL") || memo.toLowerCase().includes("referral")) return "Referral Income";
+  return memo || "Wallet Activity";
+}
+
+function cleanStatus(status: string) {
+  if (status === "POSTED" || status === "CREDITED" || status === "COMPLETED" || status === "APPROVED" || status === "INCOME_CREDITED") return "Completed";
+  if (status === "PENDING" || status === "CONFIRMING" || status === "CONFIRMED" || status === "DETECTED") return "Pending";
+  if (status === "REJECTED" || status === "FAILED" || status === "EXPIRED") return "Failed";
+  return status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
 }

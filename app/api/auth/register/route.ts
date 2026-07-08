@@ -32,8 +32,10 @@ export async function POST(request: Request) {
   const { name, email, password, country, referralCode } = parsed.data;
   const language = normalizeLanguage(parsed.data.language);
   const sponsorCode = referralCode?.toUpperCase();
-  const sponsor = sponsorCode ? await prisma.user.findUnique({ where: { uid: sponsorCode }, select: { id: true } }) : null;
-  if (sponsorCode && !sponsor) return NextResponse.json({ error: "Invalid referral or sponsor code" }, { status: 400 });
+  const sponsor = sponsorCode ? await prisma.user.findUnique({ where: { uid: sponsorCode }, select: { id: true, status: true } }) : null;
+  if (sponsorCode && (!sponsor || sponsor.status !== "ACTIVE")) {
+    return NextResponse.json({ error: "Invalid referral or sponsor code" }, { status: 400 });
+  }
 
   try {
     const user = await prisma.$transaction(async tx => {

@@ -141,6 +141,7 @@ type DashboardSnapshot = {
     totalPortfolio?: number;
     todaysProfit?: number;
     totalIncome?: number;
+    aiCopyTradingIncome?: number;
     activePackageAmount?: number;
   };
   wallet?: WalletSnapshot;
@@ -255,6 +256,7 @@ function mergeAssetRecords(baseCoins: AppCoin[], assets: AssetRecord[]): AppCoin
   }
   return Array.from(grouped.values()).map((asset, index) => {
     const base = bySymbol.get(asset.symbol);
+    const logoPath = assetLogoPath(asset.symbol, base);
     return {
       ...(base ?? {
         symbol: asset.symbol,
@@ -264,16 +266,24 @@ function mergeAssetRecords(baseCoins: AppCoin[], assets: AssetRecord[]): AppCoin
         change: 0,
         color: "#94a3b8",
         spark: [20,21,20,22,21,23,22,24,23],
-        logoPath: `/coin-logos/${asset.symbol.toLowerCase()}.png`,
-        localLogoPath: `/coin-logos/${asset.symbol.toLowerCase()}.png`,
+        logoPath,
+        localLogoPath: logoPath,
         isActive: asset.enabled,
         displayOrder: 9999 + index,
       }),
       name: base?.name ?? asset.name,
+      logoPath,
+      localLogoPath: logoPath,
       balance: Number(asset.balance ?? 0),
       isActive: asset.enabled,
     };
   }).sort((a,b)=>(a.displayOrder??9999)-(b.displayOrder??9999));
+}
+
+function assetLogoPath(symbol: string, base?: AppCoin) {
+  const normalized = symbol.toUpperCase();
+  if (normalized === "USDT" || normalized === "USDTBEP20" || normalized === "USDTTRC20" || normalized === "USDTERC20") return "/coin-logos/usdt.png";
+  return base?.localLogoPath ?? base?.logoPath ?? `/coin-logos/${symbol.toLowerCase()}.png`;
 }
 
 function mapLedgerHistory(rows: WalletHistoryRecord[]): WalletActivity[] {
@@ -883,7 +893,7 @@ function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerif
 function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, assets, dashboard, balanceVisible, setBalanceVisible, copyTradeHistory, bitexBalance, userCountry, aiSubscription, vipTradeRows, startTrade, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; bitexBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
   const total = dashboard?.summary?.totalPortfolio ?? 0;
   const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
-  const totalIncome = dashboard?.summary?.totalIncome ?? 0;
+  const aiCopyTradingIncome = dashboard?.summary?.aiCopyTradingIncome ?? 0;
   const live=useLiveTickers();
   const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
   const localCurrency=useMemo(()=>currencyConfigForCountry(userCountry),[userCountry]);
@@ -915,7 +925,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, a
       {shortcuts.map(({icon:Icon,label,onClick}) => <HomeActionTile key={label} icon={Icon} label={label} onClick={onClick} />)}
     </div>
 
-    <AiOverviewCard totalIncome={totalIncome} history={copyTradeHistory} balanceVisible={balanceVisible} />
+    <AiOverviewCard totalIncome={aiCopyTradingIncome} history={copyTradeHistory} balanceVisible={balanceVisible} />
     <VipTradeRowsCard rows={vipTradeRows} startTrade={startTrade} notify={notify} />
     <HomeAiSubscriptionCard currentUser={currentUser} status={aiSubscription} purchaseAi={purchaseAi} onOpenAuth={onOpenAuth} notify={notify} />
 
@@ -1899,7 +1909,7 @@ function WalletBalancesCard({assets,onOpenDeposit,onOpenWithdrawal}:{assets:(App
 
 function WalletAssetRow({asset,onOpenDeposit,onOpenWithdrawal}:{asset:AppCoin&{volume?:number;live?:boolean};onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
   const value=asset.balance*asset.price;
-  return <article className="wallet-asset-row"><CoinOrb symbol={asset.symbol} color={asset.color} size={42}/><div className="min-w-0"><div className="flex items-center gap-1.5"><p>{asset.symbol}</p><span>{asset.symbol==="USDT"?"BEP20":"Spot"}</span></div><em>{asset.name}</em></div><div className="min-w-0 text-right"><strong>{compact(asset.balance)}</strong><small>{usd(value)}</small></div><div className="wallet-asset-actions">{asset.symbol==="USDT"?<><button onClick={onOpenDeposit}>+</button><button onClick={onOpenWithdrawal}>-</button></>:<ChevronRight size={18}/>}</div></article>;
+  return <article className="wallet-asset-row"><CoinMark symbol={asset.symbol} color={asset.color} logoPath={assetLogoPath(asset.symbol, asset)} /><div className="min-w-0"><div className="flex items-center gap-1.5"><p>{asset.symbol}</p><span>{asset.symbol==="USDT"?"BEP20":"Spot"}</span></div><em>{asset.name}</em></div><div className="min-w-0 text-right"><strong>{compact(asset.balance)}</strong><small>{usd(value)}</small></div><div className="wallet-asset-actions">{asset.symbol==="USDT"?<><button onClick={onOpenDeposit}>+</button><button onClick={onOpenWithdrawal}>-</button></>:<ChevronRight size={18}/>}</div></article>;
 }
 
 function WalletSecurityCard() {
