@@ -5,6 +5,7 @@ export type CoinMetadataSeed = {
   color: string;
   pair?: string;
   enabled?: boolean;
+  logoUrl?: string;
 };
 
 type CoinRow = readonly [string, string, string, string, string?];
@@ -30,7 +31,17 @@ export const coinCatalog: CoinMetadataSeed[] = ([
   ["IOTA","IOTA","iota","#ffffff"],["ZEC","Zcash","zcash","#ecb244"],["DASH","Dash","dash","#008de4"],["ROSE","Oasis","oasis-network","#0092f6"],["KSM","Kusama","kusama","#111111"],
   ["WOO","WOO","woo-network","#111111"],["1INCH","1inch","1inch","#94a3b8"],["ZIL","Zilliqa","zilliqa","#49c1bf"],["BAT","Basic Attention Token","basic-attention-token","#ff5000"],["ANKR","Ankr","ankr","#2f66f6"],
   ["HOT","Holo","holotoken","#7c3aed"],["CELO","Celo","celo","#35d07f"],["QTUM","Qtum","qtum","#2e9ad0"],["ZRX","0x Protocol","0x","#302c2c"],["KNC","Kyber Network Crystal","kyber-network-crystal","#31cb9e"],
-] satisfies CoinRow[]).map(([symbol,name,coingeckoId,color,pair])=>({symbol,name,coingeckoId,color,pair,enabled:true}));
+  ["POL","Polygon Ecosystem Token","polygon-ecosystem-token","#8247e5"],["ONDO","Ondo","ondo-finance","#111111"],["HYPE","Hyperliquid","hyperliquid","#00d7b0"],["XDC","XDC Network","xdce-crowd-sale","#2f80ed"],["FLR","Flare","flare-networks","#e62058"],
+  ["KAIA","Kaia","kaia","#00a870"],["NEXO","NEXO","nexo","#1a3f95"],["PENGU","Pudgy Penguins","pudgy-penguins","#8fd8ff"],["VIRTUAL","Virtuals Protocol","virtual-protocol","#f5f5f5"],["AERO","Aerodrome Finance","aerodrome-finance","#2b63ff"],
+  ["THETA","Theta Network","theta-token","#2ab8e6"],["BSV","Bitcoin SV","bitcoin-cash-sv","#eab300"],["CORE","Core","coredaoorg","#ff7a00"],["XCN","Onyxcoin","chain-2","#111111"],["BRETT","Brett","based-brett","#4da2ff"],
+  ["AIOZ","AIOZ Network","aioz-network","#7a5cff"],["MOVE","Movement","movement","#f5f5f5"],["MOG","Mog Coin","mog-coin","#f5d742"],["AKT","Akash Network","akash-network","#ff414c"],["BEAM","Beam","beam-2","#06f7c8"],
+  ["GNO","Gnosis","gnosis","#04795b"],["LPT","Livepeer","livepeer","#00eb88"],["ENS","Ethereum Name Service","ethereum-name-service","#5298ff"],["PENDLE","Pendle","pendle","#1ed6a5"],["JOE","Trader Joe","joe","#e84142"],
+  ["TWT","Trust Wallet","trust-wallet-token","#3375bb"],["SFP","SafePal","safepal","#4b8cff"],["GMT","GMT","stepn","#c7ff00"],["BLUR","Blur","blur","#ff8700"],["MASK","Mask Network","mask-network","#1c68f3"],
+  ["SUPER","SuperVerse","superfarm","#ff2d55"],["IOST","IOST","iostoken","#111111"],["SKL","SKALE","skale","#00d4ff"],["SUSHI","Sushi","sushi","#fa52a0"],["YFI","yearn.finance","yearn-finance","#006ae3"],
+  ["BAL","Balancer","balancer","#1e1e1e"],["CVX","Convex Finance","convex-finance","#3b82f6"],["LRC","Loopring","loopring","#1c60ff"],["ELF","aelf","aelf","#2b5cff"],["ONE","Harmony","harmony","#00aee9"],
+  ["WAVES","Waves","waves","#0155ff"],["RVN","Ravencoin","ravencoin","#384182"],["SC","Siacoin","siacoin","#20ee82"],["DGB","DigiByte","digibyte","#006ad2"],["HNT","Helium","helium","#474dff"],
+  ["TFUEL","Theta Fuel","theta-fuel","#ff8f00"],["OSMO","Osmosis","osmosis","#760dbb"],["WEMIX","WEMIX","wemix-token","#111111"],["PRIME","Echelon Prime","echelon-prime","#f5f5f5"],["ZETA","ZetaChain","zetachain","#005741"],
+] satisfies CoinRow[]).map(([symbol,name,coingeckoId,color,pair])=>({symbol,name,coingeckoId,color,pair,enabled:true,logoUrl:`https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`}));
 
 export const enabledCoinSymbols = new Set(coinCatalog.filter(coin=>coin.enabled!==false).map(coin=>coin.symbol));
 export const catalogBySymbol = new Map(coinCatalog.map((coin,index)=>[coin.symbol,{...coin,displayOrder:index+1}]));

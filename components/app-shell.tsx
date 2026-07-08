@@ -51,7 +51,7 @@ type CopyTradeCounts = { todaysTradeCount: number; dailyTradeLimit: number };
 type VipTradeRow = { id: string; label: string; vipRange?: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; dailyReturnMin?: number; dailyReturnMax?: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "UPCOMING" | "LIVE" | "CLOSED"; openTime?: string; closeTime?: string; timezone?: string; secondsUntilOpen?: number; secondsUntilClose?: number; canTrade?: boolean; reason?: string | null; message?: string | null };
 type AppCoin = Coin;
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
-type CoinSetting = Partial<Omit<AppCoin,"localLogoPath">> & { localLogoPath?: string | null };
+type CoinSetting = Partial<Omit<AppCoin,"localLogoPath"|"logoUrl">> & { localLogoPath?: string | null; logoUrl?: string | null };
 type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; language?: string | null; vipRank?: string | null; role?: string | null };
 type WalletSnapshot = {
   balances?: {
@@ -119,6 +119,17 @@ type TeamMember = {
   initials: string;
   level: number;
   businessAmount: number;
+  status: string;
+  joinedAt: string;
+};
+type TopUpTeamMember = {
+  id: string;
+  name: string;
+  uid: string;
+  level: number;
+  depositedAmount: number;
+  aiWalletActiveAmount: number;
+  vipRank: string;
   status: string;
   joinedAt: string;
 };
@@ -237,6 +248,7 @@ function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSet
       spark: [20,21,20,22,21,23,22,24,23],
       logoPath: setting.localLogoPath ?? `/coin-logos/${symbol.toLowerCase()}.png`,
       localLogoPath: setting.localLogoPath ?? `/coin-logos/${symbol.toLowerCase()}.png`,
+      logoUrl: setting.logoUrl ?? null,
       isActive: setting.isActive ?? true,
       displayOrder: setting.displayOrder ?? 9999,
     });
@@ -1471,10 +1483,14 @@ function MarketsHeroVisual() {
 }
 
 function MarketCoinLogo({coin}:{coin:MarketCoin}) {
-  const [failed,setFailed]=useState(false);
-  useEffect(()=>setFailed(false),[coin.localLogoPath]);
-  if (coin.localLogoPath && !failed) {
-    return <span className="markets-ref-logo"><img src={coin.localLogoPath} alt={`${coin.symbol} logo`} onError={()=>setFailed(true)}/></span>;
+  const [localFailed,setLocalFailed]=useState(false);
+  const [remoteFailed,setRemoteFailed]=useState(false);
+  useEffect(()=>{setLocalFailed(false);setRemoteFailed(false);},[coin.localLogoPath,coin.logoUrl]);
+  if (coin.localLogoPath && !localFailed) {
+    return <span className="markets-ref-logo"><img src={coin.localLogoPath} alt={`${coin.symbol} logo`} onError={()=>setLocalFailed(true)}/></span>;
+  }
+  if (coin.logoUrl && !remoteFailed) {
+    return <span className="markets-ref-logo"><img src={coin.logoUrl} alt={`${coin.symbol} logo`} onError={()=>setRemoteFailed(true)}/></span>;
   }
   return <span className="markets-ref-logo"><MarketCoinFallback symbol={coin.symbol} color={coin.color}/></span>;
 }
@@ -1519,7 +1535,7 @@ function MarketsTableRow({coin,localCurrency,onTrade}:{coin:MarketCoin;localCurr
     </button>
     <div className="markets-price-cell">
       <strong>{formatMarketPrice(coin.price)}</strong>
-      <span>{coin.live?formatLocalCurrency(coin.price, localCurrency):"Live data"}</span>
+      <span>{coin.live?formatLocalCurrency(coin.price, localCurrency):"--"}</span>
     </div>
     <div className={`markets-change-pill ${positive?"markets-change-up":"markets-change-down"}`}>{coin.live?`${positive?"+":""}${coin.change.toFixed(2)}%`:"--"}</div>
     <div className="markets-chart-cell"><MarketsMiniSpark coin={coin}/>{volume>0&&<span>${compact(volume)}</span>}</div>
@@ -1558,19 +1574,23 @@ function MarketsScreen({coins:marketBase,userCountry,loading,error}:{t: ReturnTy
   const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
   const localCurrency=useMemo(()=>currencyConfigForCountry(userCountry),[userCountry]);
   const marketCoins=useMemo<MarketCoin[]>(()=>marketBase.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return {...coin,price:ticker?.price??0,change:ticker?.changePercent??0,volume:ticker?.volume,quoteVolume:ticker?.quoteVolume,live:Boolean(ticker?.price)};}),[marketBase,tickerMap]);
+  const displayMarketCoins=useMemo(()=>marketCoins.slice(0,150),[marketCoins]);
   const preferredSymbols=["BTC","ETH","BNB","SOL","XRP","ADA","DOGE","MATIC","POL"];
-  const preferredCoins=preferredSymbols.reduce<MarketCoin[]>((rows,symbol)=>{const coin=marketCoins.find(item=>item.symbol===symbol); if(coin) rows.push(coin); return rows;},[]);
-  const baseCoins=preferredCoins.length?preferredCoins:marketCoins.filter(coin=>coin.symbol!=="USDT").slice(0,8);
+  const preferredCoins=preferredSymbols.reduce<MarketCoin[]>((rows,symbol)=>{const coin=displayMarketCoins.find(item=>item.symbol===symbol); if(coin) rows.push(coin); return rows;},[]);
+  const baseCoins=preferredCoins.length?preferredCoins:displayMarketCoins.filter(coin=>coin.symbol!=="USDT").slice(0,8);
   const visibleCoins=useMemo(()=>{
+    const normalizedQuery=query.trim().toLowerCase();
     const source=category==="Top Gainers"
-      ? [...marketCoins].filter(coin=>coin.change>0).sort((a,b)=>b.change-a.change).slice(0,8)
+      ? [...displayMarketCoins].filter(coin=>coin.change>0).sort((a,b)=>b.change-a.change).slice(0,8)
       : category==="Top Losers"
-        ? [...marketCoins].filter(coin=>coin.change<0).sort((a,b)=>a.change-b.change).slice(0,8)
+        ? [...displayMarketCoins].filter(coin=>coin.change<0).sort((a,b)=>a.change-b.change).slice(0,8)
         : category==="DeFi"
-          ? marketCoins.filter(coin=>["UNI","AAVE","COMP","CRV","MKR","INJ"].includes(coin.symbol)).slice(0,8)
-          : baseCoins;
-    return source.filter(coin=>`${coin.symbol}${coin.name}${coin.pair}`.toLowerCase().includes(query.trim().toLowerCase()));
-  },[baseCoins,category,marketCoins,query]);
+          ? displayMarketCoins.filter(coin=>["UNI","AAVE","COMP","CRV","MKR","INJ"].includes(coin.symbol)).slice(0,8)
+          : category==="Watchlist"
+            ? baseCoins
+            : displayMarketCoins;
+    return source.filter(coin=>`${coin.symbol}${coin.name}${coin.pair}`.toLowerCase().includes(normalizedQuery));
+  },[baseCoins,category,displayMarketCoins,query]);
   const openTrade=(coin:MarketCoin)=>{window.location.href=`/markets/${coin.pair}`;};
   const chips=["Watchlist","All Coins","Top Gainers","Top Losers","DeFi"];
   return <div className="markets-ref-page -mx-4 -mt-1 min-h-screen overflow-x-hidden px-4 pb-6">
@@ -1944,6 +1964,7 @@ function DepositModal({close,notify,createDeposit}:{close:()=>void;notify:(s:str
 
 function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:CurrentUser|null}) {
   const [shareOpen,setShareOpen]=useState(false);
+  const [topUpOpen,setTopUpOpen]=useState(false);
   const [team,setTeam]=useState<TeamSnapshot | null>(null);
   useEffect(()=>{
     let active=true;
@@ -1966,9 +1987,19 @@ function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:Cu
     return link;
   }, [team?.referralLink, team?.referralUid]);
   const copyReferral=()=>{if(!referralLink){notify("Referral link unavailable");return;}navigator.clipboard?.writeText(referralLink);fetch("/api/audit/referral-copy",{method:"POST"}).catch(()=>{});notify("Referral link copied");};
-  return <div className="space-y-5"><div><h2 className="text-2xl font-black">My Network</h2><p className="mt-1 text-sm text-slate-500">Grow your team and unlock rewards</p></div><section className="rounded-2xl border border-lime/20 bg-gradient-to-br from-[#18291f] to-panel px-4 py-3"><div className="flex min-w-0 items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Referral Link</p><p className="mt-1 truncate text-xs font-bold text-white sm:text-sm">{referralLink || "Referral link unavailable"}</p></div><div className="flex shrink-0 items-center gap-2"><button onClick={copyReferral} aria-label="Copy referral link" className="grid h-9 w-9 place-items-center rounded-xl bg-lime text-ink"><Copy size={15}/></button><button onClick={()=>referralLink&&setShareOpen(true)} aria-label="Share referral link" className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-white/5 text-lime"><Share2 size={15}/></button></div></div></section><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Direct team" value={String(stats.directTeamCount ?? 0)} /><Stat label="Total network" value={String(stats.totalNetworkCount ?? 0)} /><Stat label="Active" value={String(stats.activeUsersCount ?? 0)} /><Stat label="Team volume" value={usd(stats.teamVolume ?? 0)} /></div><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line p-5"><div><h3 className="font-bold">Team members</h3><p className="mt-1 text-xs text-slate-500">Across all levels</p></div><button className="flex items-center gap-1 text-xs text-slate-400">All levels <ChevronDown size={14}/></button></div>{members.length?members.map((m,i)=><div key={m.id} className="flex items-center gap-3 border-b border-line/60 p-4 last:border-0"><div className={`grid h-10 w-10 place-items-center rounded-full text-xs font-black ${i<3?"bg-lime/10 text-lime":"bg-white/5 text-slate-400"}`}>{m.initials}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{m.name}</p><span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-500">L{m.level}</span></div><p className="mt-1 text-[10px] text-slate-500">Joined {joinedLabel(m.joinedAt)}</p></div><div className="text-right"><p className="text-xs font-bold">{usd(m.businessAmount)}</p><p className="mt-1 text-[10px] text-mint">• {m.status}</p></div></div>):<div className="p-5 text-xs text-slate-500">No team members yet</div>}</section>{shareOpen&&referralLink&&<ReferralShareSheet link={referralLink} close={()=>setShareOpen(false)} copied={()=>{copyReferral();setShareOpen(false);}}/>}</div>
-}
 
+  return <div className="space-y-5">
+    <div><h2 className="text-2xl font-black">My Network</h2><p className="mt-1 text-sm text-slate-500">Grow your team and unlock rewards</p></div>
+    <section className="rounded-2xl border border-lime/20 bg-gradient-to-br from-[#18291f] to-panel px-4 py-3"><div className="flex min-w-0 items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Referral Link</p><p className="mt-1 truncate text-xs font-bold text-white sm:text-sm">{referralLink || "Referral link unavailable"}</p></div><div className="flex shrink-0 items-center gap-2"><button onClick={copyReferral} aria-label="Copy referral link" className="grid h-9 w-9 place-items-center rounded-xl bg-lime text-ink"><Copy size={15}/></button><button onClick={()=>referralLink&&setShareOpen(true)} aria-label="Share referral link" className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-white/5 text-lime"><Share2 size={15}/></button></div></div></section>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Direct team" value={String(stats.directTeamCount ?? 0)} /><Stat label="Total network" value={String(stats.totalNetworkCount ?? 0)} /><Stat label="Active" value={String(stats.activeUsersCount ?? 0)} /><Stat label="Team volume" value={usd(stats.teamVolume ?? 0)} /></div>
+    <section className={`${card} overflow-hidden`}>
+      <div className="flex items-center justify-between gap-3 border-b border-line p-5"><div className="min-w-0"><h3 className="font-bold">Team members</h3><p className="mt-1 text-xs text-slate-500">Across all levels</p></div><div className="flex shrink-0 items-center gap-2"><button onClick={()=>setTopUpOpen(true)} className="rounded-xl border border-lime/30 bg-lime px-3 py-2 text-[10px] font-black text-ink shadow-[0_0_18px_rgba(24,255,138,.18)]">Top-up Team</button><button className="flex items-center gap-1 text-xs text-slate-400">All levels <ChevronDown size={14}/></button></div></div>
+      {members.length?members.map((m,i)=><div key={m.id} className="flex items-center gap-3 border-b border-line/60 p-4 last:border-0"><div className={`grid h-10 w-10 place-items-center rounded-full text-xs font-black ${i<3?"bg-lime/10 text-lime":"bg-white/5 text-slate-400"}`}>{m.initials}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{m.name}</p><span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-500">L{m.level}</span></div><p className="mt-1 text-[10px] text-slate-500">Joined {joinedLabel(m.joinedAt)}</p></div><div className="text-right"><p className="text-xs font-bold">{usd(m.businessAmount)}</p><p className="mt-1 text-[10px] text-mint">• {m.status}</p></div></div>):<div className="p-5 text-xs text-slate-500">No team members yet</div>}
+    </section>
+    {shareOpen&&referralLink&&<ReferralShareSheet link={referralLink} close={()=>setShareOpen(false)} copied={()=>{copyReferral();setShareOpen(false);}}/>}
+    {topUpOpen&&<TopUpTeamSheet close={()=>setTopUpOpen(false)}/>}
+  </div>;
+}
 function joinedLabel(value:string) {
   const joined=new Date(value);
   if(Number.isNaN(joined.getTime())) return "recently";
@@ -1983,6 +2014,14 @@ function ReferralShareSheet({link,close,copied}:{link:string;close:()=>void;copi
 }
 
 function ShareLogo({label,className,onClick,children}:{label:string;className:string;onClick:()=>void;children:React.ReactNode}) { return <button onClick={onClick} aria-label={label} className={`grid h-11 w-11 place-items-center rounded-full text-sm font-black ${className}`}>{children}</button> }
+
+function TopUpTeamSheet({close}:{close:()=>void}) {
+  const [members,setMembers]=useState<TopUpTeamMember[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  useEffect(()=>{let active=true;fetch("/api/team/top-up").then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(!active)return;setMembers(Array.isArray(data.members)?data.members:[]);setError("");}).catch(()=>{if(!active)return;setMembers([]);setError("Top-up team unavailable");}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[]);
+  return <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Top-up Team"><button className="absolute inset-0" onClick={close} aria-label="Close top-up team"/><div className="relative flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-3xl border border-line bg-[#101916] shadow-2xl sm:mb-4 sm:rounded-3xl"><div className="mx-auto mt-4 h-1 w-10 rounded-full bg-white/15"/><header className="flex items-start justify-between border-b border-line px-5 pb-4 pt-3"><div><h3 className="text-lg font-black">Top-up Team</h3><p className="mt-1 text-xs text-slate-500">Members with credited deposits</p></div><button onClick={close} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400"><X size={16}/></button></header><div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-5">{loading?<div className="rounded-2xl border border-line bg-white/[.03] p-5 text-xs text-slate-500">Loading top-up team...</div>:error?<div className="rounded-2xl border border-line bg-white/[.03] p-5 text-xs text-danger">{error}</div>:members.length?members.map(member=><article key={member.id} className="rounded-2xl border border-line bg-white/[.03] p-4"><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><h4 className="truncate text-sm font-black text-white">{member.name}</h4><span className="shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">L{member.level}</span></div><p className="mt-1 truncate text-[10px] text-slate-500">UID {member.uid}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${member.status==="Active"?"bg-lime/10 text-lime":"bg-white/5 text-slate-500"}`}>{member.status}</span></div><div className="mt-4 grid grid-cols-2 gap-2 text-xs"><LineItem label="Deposit/top-up" value={usd(member.depositedAmount)}/><LineItem label="AI Wallet" value={usd(member.aiWalletActiveAmount)}/><LineItem label="VIP rank" value={member.vipRank}/><LineItem label="Joined" value={joinedLabel(member.joinedAt)}/></div></article>):<div className="rounded-2xl border border-line bg-white/[.03] p-5 text-center text-xs text-slate-500">No top-up team members yet</div>}</div></div></div>;
+}
 
 function P2PTransferModal({assets,close,sendTransfer}:{assets:P2PAsset[];close:()=>void;sendTransfer:(input:P2PTransferInput)=>Promise<{ok:boolean;message:string;transfer?:unknown}>}) {
   const ordered=useMemo(()=>[...assets].sort((a,b)=>a.symbol==="USDT"?-1:b.symbol==="USDT"?1:a.symbol.localeCompare(b.symbol)),[assets]);

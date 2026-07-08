@@ -8,7 +8,7 @@ async function main() {
   for (const coin of coinCatalog) {
     const displayOrder=catalogBySymbol.get(coin.symbol)?.displayOrder??9999;
     const pair=coin.pair??`${coin.symbol}USDT`;
-    await prisma.coinMetadata.upsert({ where:{symbol:coin.symbol}, update:{name:coin.name,pair,isActive:coin.enabled!==false,displayOrder}, create:{symbol:coin.symbol,name:coin.name,pair,isActive:coin.enabled!==false,displayOrder,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`} });
+    await prisma.coinMetadata.upsert({ where:{symbol:coin.symbol}, update:{name:coin.name,pair,isActive:coin.enabled!==false,displayOrder,logoUrl:coin.logoUrl,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`}, create:{symbol:coin.symbol,name:coin.name,pair,isActive:coin.enabled!==false,displayOrder,logoUrl:coin.logoUrl,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`} });
   }
   const usdt = await prisma.asset.upsert({
     where: { symbol: "USDT" }, update: {},

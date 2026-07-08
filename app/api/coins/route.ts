@@ -38,7 +38,7 @@ export async function POST(request:Request){
   if(!symbol||!body.name?.trim())return NextResponse.json({error:"Symbol and name are required"},{status:400});
   const pair=(body.pair??`${symbol}USDT`).toUpperCase().replace(/[^A-Z0-9]/g,"");
   const count=await prisma.coinMetadata.count();
-  const coin=await prisma.coinMetadata.create({data:{symbol,name:body.name.trim(),pair,isActive:body.isActive??true,displayOrder:body.displayOrder??count+1,localLogoPath:`/coin-logos/${symbol.toLowerCase()}.png`}});
+  const coin=await prisma.coinMetadata.create({data:{symbol,name:body.name.trim(),pair,isActive:body.isActive??true,displayOrder:body.displayOrder??count+1,logoUrl:`https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,localLogoPath:`/coin-logos/${symbol.toLowerCase()}.png`}});
   await auditSuccess({ request, adminId: admin.user.id, role: "ADMIN", action: "COIN_CREATE", module: "COINS", description: "Admin created coin", newValue: coin }).catch(() => null);
   return NextResponse.json({coin},{status:201});
 }
@@ -47,11 +47,14 @@ async function ensureCatalogCoins(){
   const existing=await prisma.coinMetadata.findMany({select:{symbol:true}});
   const seen=new Set(existing.map(coin=>coin.symbol));
   const missing=coinCatalog.filter(coin=>!seen.has(coin.symbol));
-  if(!missing.length)return;
-  await prisma.coinMetadata.createMany({
+  await Promise.all(coinCatalog.filter(coin=>seen.has(coin.symbol)).map(coin=>{
+    const catalog=catalogBySymbol.get(coin.symbol)!;
+    return prisma.coinMetadata.update({where:{symbol:coin.symbol},data:{name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,logoUrl:coin.logoUrl,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`}});
+  }));
+  if(missing.length)await prisma.coinMetadata.createMany({
     data:missing.map(coin=>{
       const catalog=catalogBySymbol.get(coin.symbol)!;
-      return {symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`};
+      return {symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,logoUrl:coin.logoUrl,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`};
     }),
     skipDuplicates:true,
   });
@@ -60,6 +63,6 @@ async function ensureCatalogCoins(){
 function catalogFallbackCoins(){
   return coinCatalog.map(coin=>{
     const catalog=catalogBySymbol.get(coin.symbol)!;
-    return {id:coin.symbol,symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,logoUrl:null,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,createdAt:null,updatedAt:null};
+    return {id:coin.symbol,symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,logoUrl:coin.logoUrl,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,createdAt:null,updatedAt:null};
   });
 }

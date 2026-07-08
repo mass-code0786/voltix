@@ -11,6 +11,7 @@ export type Coin = {
   spark: number[];
   logoPath: string;
   localLogoPath: string;
+  logoUrl?: string | null;
   isActive: boolean;
   displayOrder: number;
 };
@@ -35,8 +36,8 @@ export const coins: Coin[] = coinCatalog.map((coin, index) => {
     spark: Array.from({ length: 9 }, (_, step) => base + step * (change >= 0 ? 1 : -1) + (step % 3)),
     logoPath: localLogoPath,
     localLogoPath,
+    logoUrl: coin.logoUrl,
     isActive: coin.enabled !== false,
     displayOrder: index + 1,
   };
 });
-
