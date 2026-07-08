@@ -146,6 +146,8 @@ model User {
   language              String           @default("en")
   profileImageUrl       String?
   passwordHash          String
+  transactionPinHash    String?
+  transactionPinSetAt   DateTime?
   vipRank               String           @default("NONE")
   role                  Role             @default(USER)
   status                UserStatus       @default(ACTIVE)

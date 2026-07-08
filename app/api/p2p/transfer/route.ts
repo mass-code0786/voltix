@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { auditFailure, auditSuccess } from "@/lib/audit";
 import { createP2PTransfer } from "@/lib/domain/p2p-service";
 import { rateLimitByUser } from "@/lib/security";
+import { verifyTransactionPinForUser } from "@/lib/domain/transaction-pin-service";
 
 const p2pTransferSchema = z.object({
   receiver: z.string().trim().min(1, "Receiver UID or email is required").max(120),
@@ -12,6 +13,7 @@ const p2pTransferSchema = z.object({
   amount: z.coerce.number().positive("Amount must be greater than 0"),
   note: z.string().trim().max(160).optional(),
   idempotencyKey: z.string().trim().min(8, "Idempotency key is required").max(120),
+  transactionPin: z.string().trim().optional(),
 });
 
 export async function POST(request: Request) {
@@ -29,6 +31,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    const pinLimited = rateLimitByUser(user.id, "transaction-pin-p2p", 8, 15 * 60 * 1000);
+    if (pinLimited) return pinLimited;
+    await verifyTransactionPinForUser(user.id, parsed.data.transactionPin);
     const transfer = await createP2PTransfer({
       senderId: user.id,
       receiver: parsed.data.receiver,

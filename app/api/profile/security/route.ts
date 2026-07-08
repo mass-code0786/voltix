@@ -11,12 +11,20 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     select: { id: true, createdAt: true, expiresAt: true },
   });
+  const profile = await prisma.user.findUniqueOrThrow({
+    where: { id: user.id },
+    select: { transactionPinSetAt: true },
+  });
   return NextResponse.json({
     sessions: sessions.map(session => ({
       id: session.id,
       createdAt: session.createdAt.toISOString(),
       expiresAt: session.expiresAt.toISOString(),
     })),
+    transactionPin: {
+      isSet: Boolean(profile.transactionPinSetAt),
+      setAt: profile.transactionPinSetAt?.toISOString() ?? null,
+    },
   });
 }
 
