@@ -27,6 +27,7 @@ export async function POST(request: Request) {
         startedAt: trade.startedAt.toISOString(),
         completesAt: trade.completesAt.toISOString(),
         creditDueAt: trade.creditDueAt.toISOString(),
+        settlementDueAt: trade.creditDueAt.toISOString(),
       },
     }, { status: 201 });
   } catch (error) {

@@ -763,8 +763,9 @@ export default function AppShell() {
     await refreshCopyTradeStatus(currentUser);
     await refreshWallet(currentUser);
     await refreshAssets(currentUser);
-    notify(`${Number(data.trade.amount).toFixed(2)} USDT locked from AI.`);
-    return { ok: true, message: "" };
+    const message = "Trade placed. Profit will be credited after window closes.";
+    notify(message);
+    return { ok: true, message };
   }, [currentUser, notify, refreshAssets, refreshCopyTradeStatus, refreshWallet]);
 
   const purchaseAi = useCallback(async () => {
@@ -1175,7 +1176,7 @@ function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; s
     const result=await startTrade(row.id);
     setLoadingRow("");
     if(!result.ok){setError(result.message);return;}
-    notify("Copy trade started");
+    notify(result.message || "Trade placed. Profit will be credited after window closes.");
   };
   return <GlassCard className="home-depth-card overflow-hidden rounded-[20px] p-3">
     <div className="flex items-start justify-between gap-3 pb-1.5">
@@ -1631,13 +1632,14 @@ function TradeWorkspace({category,coins,loading,error}:{category:TradeCategory;c
   return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category} coins={coins} loading={loading} error={error}/></div>;
 }
 
-function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,tradeRows,copyTradeCounts,copyTradeHistory,startTrade,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];copyTradeCounts:CopyTradeCounts;copyTradeHistory:CopyTradeHistory[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
+function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,bitexBalance,tradeRows,copyTradeCounts,copyTradeHistory,startTrade,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];copyTradeCounts:CopyTradeCounts;copyTradeHistory:CopyTradeHistory[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
   const active=Boolean(subscription?.subscription?.active);
   const today=new Date().toDateString();
-  const todayIncome=copyTradeHistory.reduce((sum,row)=>{
+  const creditedHistory=useMemo(()=>copyTradeHistory.filter(isCreditedCopyTrade),[copyTradeHistory]);
+  const todayIncome=creditedHistory.reduce((sum,row)=>{
     const date=new Date(row.date);
     return Number.isNaN(date.getTime()) || date.toDateString()!==today ? sum : sum+Number(row.profit ?? 0);
-  }, activeTrade?.date && new Date(activeTrade.date).toDateString()===today ? Number(activeTrade.profit ?? 0) : 0);
+  }, 0);
   const allowedTrades=copyTradeCounts.dailyTradeLimit;
   const currentTrades=Math.min(copyTradeCounts.todaysTradeCount, allowedTrades);
   return <div className="ai-trade-page -mx-4 -mt-1 min-h-screen overflow-x-hidden px-4 pb-2">
@@ -1649,12 +1651,16 @@ function AiCopyTradePage({currentUser,subscription,activeTrade,bitexBalance,trad
       <AiTradeHeroVisual/>
     </section>
     <AiTopStats balance={bitexBalance} todayIncome={todayIncome} currentTrades={currentTrades} allowedTrades={allowedTrades} active={active}/>
-    <AiTradeOverviewCard history={copyTradeHistory} todayIncome={todayIncome}/>
+    <AiTradeOverviewCard history={creditedHistory} todayIncome={todayIncome}/>
     <TopCopyTraders/>
     <VipTradeRowsCard rows={tradeRows.slice(0,5)} startTrade={startTrade} notify={notify}/>
     <AiInfoStrip/>
     <AiSubscriptionPanel currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin} notify={notify}/>
   </div>;
+}
+
+function isCreditedCopyTrade(row: CopyTradeHistory) {
+  return row.status === "INCOME_CREDITED";
 }
 
 function AiTradeHeroVisual() {

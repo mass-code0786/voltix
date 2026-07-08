@@ -1,6 +1,6 @@
 import { Prisma, TradeStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { MIN_COPY_TRADE_STAKE_USD, VIP_TRADE_ROWS, dailyTradeLimit, getVipDailyIncomePercent, getVipTradeRow, getVipTradeRowForRank, normalizeVipRank, tradeTimeline } from "./trade-rules";
+import { MIN_COPY_TRADE_STAKE_USD, VIP_TRADE_ROWS, dailyTradeLimit, getVipDailyIncomePercent, getVipTradeRow, getVipTradeRowForRank, normalizeVipRank } from "./trade-rules";
 import { postBalancedJournal } from "./ledger";
 import { createNotification } from "./notification-service";
 import { aiWalletBusinessAmount, isAiWalletActive } from "./user-activation";
@@ -33,10 +33,10 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
       include: { code: true },
       orderBy: { startedAt: "desc" },
     }),
-    prisma.copyTrade.count({ where: { userId, status: { in: [TradeStatus.COMPLETED, TradeStatus.INCOME_CREDITED] }, startedAt: { gte: dayStart } } }),
+    prisma.copyTrade.count({ where: { userId, status: TradeStatus.INCOME_CREDITED, incomeCreditedAt: { gte: dayStart } } }),
     prisma.copyTrade.count({ where: { userId, startedAt: { gte: dayStart } } }),
     prisma.copyTrade.findMany({
-      where: { userId, status: { in: [TradeStatus.COMPLETED, TradeStatus.INCOME_CREDITED] } },
+      where: { userId, status: TradeStatus.INCOME_CREDITED },
       include: { code: true },
       orderBy: { startedAt: "desc" },
       take: 20,
@@ -181,7 +181,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
 
     const dailyPercent = new Prisma.Decimal(getVipDailyIncomePercent(normalizedVipRank));
     const perTradePercent = dailyPercent.div(limit);
-    const timeline = tradeTimeline(now, effectiveTradeSlotDuration(slot.durationMinutes), slot.creditDelayMins);
+    const timeline = { completesAt: slotEnd, creditDueAt: slotEnd };
     const trade = await tx.copyTrade.create({
       data: {
         userId: input.userId,
@@ -212,6 +212,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
           perTradePercent: perTradePercent.toString(),
           startTime: now.toISOString(),
           completionTime: timeline.completesAt.toISOString(),
+          settlementDueAt: timeline.creditDueAt.toISOString(),
           result: "STARTED",
           activePackageId: null,
           device: input.device ?? null,
@@ -255,6 +256,11 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
     const trade = await tx.copyTrade.findUniqueOrThrow({ where: { id: tradeId } });
     if (trade.status === "INCOME_CREDITED") return trade;
     if (trade.status !== "COMPLETED" || trade.creditDueAt > now) throw new Error("Trade income is not due");
+    const claimed = await tx.copyTrade.updateMany({
+      where: { id: trade.id, status: TradeStatus.COMPLETED, creditDueAt: { lte: now } },
+      data: { status: TradeStatus.INCOME_CREDITED, incomeCreditedAt: now },
+    });
+    if (claimed.count !== 1) return tx.copyTrade.findUniqueOrThrow({ where: { id: trade.id } });
     const incomeBase = trade.principalAmount.div(COPY_TRADE_STAKE_RATE);
     const profitAmount = incomeBase.mul(trade.returnPercent).div(100);
     const bitexCredit = trade.principalAmount.add(profitAmount);
@@ -290,7 +296,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
         metadata: { tradeId: trade.id, incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString(), ledgerJournalId: journal.id, creditedAt: now.toISOString() },
       },
     });
-    return tx.copyTrade.update({ where: { id: trade.id }, data: { status: "INCOME_CREDITED", incomeAmount: profitAmount, incomeCreditedAt: now } });
+    return tx.copyTrade.update({ where: { id: trade.id }, data: { incomeAmount: profitAmount, incomeCreditedAt: now } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
