@@ -218,6 +218,7 @@ const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA"
 const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, bitex: 0 }, locked: { spot: 0, futures: 0, bitex: 0 }, total: { spot: 0, futures: 0, bitex: 0 }, portfolio: 0, bitex: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
 const defaultCopyTradeCounts: CopyTradeCounts = { todaysTradeCount: 0, dailyTradeLimit: 3 };
 const activeAiSubscriptionMessage = "You already have an active AI Subscription. You can buy again after it expires.";
+const duplicateTradeWindowMessage = "You have already placed a trade in this window.";
 
 function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSetting>): AppCoin[] {
   const bySymbol = new Map(baseCoins.map(coin => [coin.symbol, coin]));
@@ -1202,12 +1203,18 @@ function IncomeChart({ data }: { data: number[] }) {
 function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
   const [loadingRow,setLoadingRow]=useState("");
   const [error,setError]=useState("");
+  const [duplicateToast,setDuplicateToast]=useState<{message:string;accent:string;id:number}|null>(null);
   const [nowTick,setNowTick]=useState(0);
   const countdownKey=tradeRowsCountdownKey(rows);
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(value => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (!duplicateToast) return;
+    const timer = window.setTimeout(() => setDuplicateToast(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [duplicateToast]);
   useEffect(() => setNowTick(0), [countdownKey]);
   const nextRow=rows.find(row=>row.tradeStatus==="LIVE") ?? rows.find(row=>row.tradeStatus==="UPCOMING") ?? rows[0];
   const nextTime=nextRow ? readableTradeTime(nextRow) : "";
@@ -1218,7 +1225,15 @@ function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; s
     setLoadingRow(row.id);
     const result=await startTrade(row.id);
     setLoadingRow("");
-    if(!result.ok){setError(result.message);return;}
+    if(!result.ok){
+      if(result.message===duplicateTradeWindowMessage){
+        setError("");
+        setDuplicateToast({message:result.message,accent:vipAccent(row),id:Date.now()});
+        return;
+      }
+      setError(result.message);
+      return;
+    }
     notify(result.message || "Trade placed. Profit will be credited after window closes.");
   };
   return <GlassCard className="home-depth-card overflow-hidden rounded-[20px] p-3">
@@ -1230,7 +1245,15 @@ function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; s
       {rows.length ? rows.map(row=><VipTradeRowItem key={row.id} row={row} loading={loadingRow===row.id} tick={nowTick} start={()=>start(row)} />) : <EmptyState title="No VIP trade rows available" icon={LineChart} />}
     </div>
     {error&&<p className="mt-3 border-t border-[#18ff8a]/10 pt-3 text-xs font-bold text-danger">{error}</p>}
+    {duplicateToast&&<VipTradeToast message={duplicateToast.message} accent={duplicateToast.accent}/>}
   </GlassCard>;
+}
+
+function VipTradeToast({message,accent}:{message:string;accent:string}) {
+  return <div className="fixed left-1/2 z-[70] w-[min(23rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border px-4 py-3 text-center text-xs font-black leading-5 text-white shadow-2xl backdrop-blur-md [bottom:calc(96px+18px+env(safe-area-inset-bottom))] lg:bottom-8" style={{borderColor:`${accent}66`,background:`linear-gradient(145deg, rgba(9,18,15,.96), ${accent}26)`,boxShadow:`0 18px 45px rgba(0,0,0,.42), 0 0 22px ${accent}42`}}>
+    <span className="mr-2 inline-block h-2 w-2 rounded-full align-middle" style={{backgroundColor:accent,boxShadow:`0 0 12px ${accent}`}} />
+    {message}
+  </div>;
 }
 
 function vipAccent(row: VipTradeRow) {
