@@ -163,6 +163,7 @@ model User {
   bitexTargetAmount     Decimal          @default(0) @db.Decimal(36, 18)
   bitexUnlocked         Boolean          @default(false)
   wallets               WalletAccount[]
+  externalWallets       ExternalWalletBinding[]
   walletTransfers       WalletTransfer[]
   p2pTransfersSent      P2PTransfer[]   @relation("P2PSender")
   p2pTransfersReceived  P2PTransfer[]   @relation("P2PReceiver")
@@ -199,6 +200,20 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model ExternalWalletBinding {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  network       String
+  walletAddress String
+  walletName    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, network])
+  @@index([userId, createdAt])
 }
 
 model WalletTransfer {

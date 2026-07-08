@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Copy,
-  CreditCard,
   Crown,
   Eye,
   EyeOff,
@@ -25,6 +24,7 @@ import {
   ShieldCheck,
   UserRound,
   Wallet,
+  WalletCards,
   Zap,
 } from "lucide-react";
 import { AppHeader, BottomNav } from "@/components/design-system";
@@ -340,16 +340,16 @@ export default function ProfilePage() {
 
             <section>
               <div className="profile-menu-card">
-                <ProfileRow icon={UserRound} tone="green" title="Account Information" subtitle="Name, email, country and profile details" onClick={() => setActivePanel(activePanel === "account" ? null : "account")} />
+                <ProfileRow icon={UserRound} tone="green" title="Account Information" subtitle="Name, email, country and profile details" onClick={() => router.push("/profile/account")} />
                 <ProfileRow icon={ShieldCheck} tone="green" title="KYC Verification" subtitle="Identity verification status" pill={kycLabel(displayProfile.kycStatus)} pillTone={displayProfile.kycStatus === "APPROVED" ? "green" : "muted"} onClick={() => router.push("/kyc")} />
-                <ProfileRow icon={LockKeyhole} tone="purple" title="Security" subtitle="Password and account access" onClick={() => setActivePanel(activePanel === "security" ? null : "security")} />
-                <ProfileRow icon={CreditCard} tone="blue" title="Bank & Payment Methods" subtitle="Deposit and withdrawal methods" onClick={() => router.push("/?view=wallet")} />
-                <ProfileRow icon={Network} tone="yellow" title="Referral & Team" subtitle="Referral link and network overview" onClick={() => router.push("/?view=team")} />
-                <ProfileRow icon={Crown} tone="purple" title="VIP & Benefits" subtitle={`Current level ${currentVip}`} onClick={() => router.push("/?view=bitex")} />
-                <ProfileRow icon={Bot} tone="green" title="AI Subscription" subtitle="AI trading membership" pill={ai?.subscription?.active ? "Active" : "Inactive"} pillTone={ai?.subscription?.active ? "green" : "muted"} onClick={() => router.push("/?view=bitex")} />
-                <ProfileRow icon={Bell} tone="yellow" title="Notifications" subtitle={`${unreadNotifications} unread`} onClick={() => router.push("/?view=home")} />
-                <ProfileRow icon={Settings} tone="gray" title="Settings" subtitle="Language and preferences" onClick={() => setActivePanel(activePanel === "settings" ? null : "settings")} />
-                <ProfileRow icon={Headphones} tone="blue" title="Support Center" subtitle="Help, tickets and account support" onClick={() => router.push("/?view=home")} />
+                <ProfileRow icon={LockKeyhole} tone="purple" title="Security" subtitle="Password and account access" onClick={() => router.push("/profile/security")} />
+                <ProfileRow icon={WalletCards} tone="blue" title="Bind Your Wallet" subtitle="Connect your external crypto wallet" onClick={() => router.push("/profile/bind-wallet")} />
+                <ProfileRow icon={Network} tone="yellow" title="Referral & Team" subtitle="Referral link and network overview" onClick={() => router.push("/profile/referral-team")} />
+                <ProfileRow icon={Crown} tone="purple" title="VIP & Benefits" subtitle={`Current level ${currentVip}`} onClick={() => router.push("/profile/vip-benefits")} />
+                <ProfileRow icon={Bot} tone="green" title="AI Subscription" subtitle="AI trading membership" pill={ai?.subscription?.active ? "Active" : "Inactive"} pillTone={ai?.subscription?.active ? "green" : "muted"} onClick={() => router.push("/profile/ai-subscription")} />
+                <ProfileRow icon={Bell} tone="yellow" title="Notifications" subtitle={`${unreadNotifications} unread`} onClick={() => router.push("/profile/notifications")} />
+                <ProfileRow icon={Settings} tone="gray" title="Settings" subtitle="Language and preferences" onClick={() => router.push("/profile/settings")} />
+                <ProfileRow icon={Headphones} tone="blue" title="Support Center" subtitle="Help, tickets and account support" onClick={() => router.push("/profile/support")} />
                 <ProfileRow icon={LogOut} tone="red" title="Logout" subtitle="End this session" onClick={logout} danger last />
               </div>
             </section>

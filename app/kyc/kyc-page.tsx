@@ -3,28 +3,27 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock3, FileCheck2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, ImagePlus, ShieldCheck, X } from "lucide-react";
 import { SearchableSelect } from "@/components/searchable-select";
 import { countryOptions } from "@/lib/profile-options";
-import { getKycDocumentTypes } from "@/lib/kyc-document-types";
+import { getKycDocumentTypes, kycDocumentRequiresBackPhoto } from "@/lib/kyc-document-types";
 
 type KycStatus = "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED";
 type KycSnapshot = {
   status: KycStatus;
   request: {
-    fullName?: string | null;
-    dateOfBirth?: string | null;
     country?: string | null;
-    address?: string | null;
     governmentIdType?: string | null;
     governmentIdNumber?: string | null;
-    frontIdImageUrl?: string | null;
-    backIdImageUrl?: string | null;
-    selfieImageUrl?: string | null;
     rejectionReason?: string | null;
   } | null;
 };
-type ProfileResponse = { profile?: { fullName?: string | null; country?: string | null } };
+type ProfileResponse = { profile?: { country?: string | null } };
+type UploadState = { file: File | null; preview: string };
+
+const emptyUpload: UploadState = { file: null, preview: "" };
+const acceptedImages = "image/jpeg,image/png,image/webp";
+const maxUploadBytes = 5 * 1024 * 1024;
 
 export default function KycPage() {
   const router=useRouter();
@@ -32,17 +31,17 @@ export default function KycPage() {
   const [loading,setLoading]=useState(true);
   const [submitting,setSubmitting]=useState(false);
   const [error,setError]=useState("");
-  const [fullName,setFullName]=useState("");
-  const [dateOfBirth,setDateOfBirth]=useState("");
   const [country,setCountry]=useState("United States");
-  const [address,setAddress]=useState("");
   const [governmentIdType,setGovernmentIdType]=useState("Passport");
   const [governmentIdNumber,setGovernmentIdNumber]=useState("");
-  const [frontIdImageUrl,setFrontIdImageUrl]=useState("");
-  const [backIdImageUrl,setBackIdImageUrl]=useState("");
-  const [selfieImageUrl,setSelfieImageUrl]=useState("");
+  const [frontUpload,setFrontUpload]=useState<UploadState>(emptyUpload);
+  const [backUpload,setBackUpload]=useState<UploadState>(emptyUpload);
+  const [selfieUpload,setSelfieUpload]=useState<UploadState>(emptyUpload);
   const documentTypes=useMemo(()=>getKycDocumentTypes(country),[country]);
+  const backRequired=kycDocumentRequiresBackPhoto(governmentIdType);
   const canSubmit=snapshot?.status==="NOT_SUBMITTED"||snapshot?.status==="REJECTED";
+
+  useEffect(()=>()=>{[frontUpload.preview,backUpload.preview,selfieUpload.preview].forEach(revokePreview);},[frontUpload.preview,backUpload.preview,selfieUpload.preview]);
 
   useEffect(()=>{
     let active=true;
@@ -53,15 +52,10 @@ export default function KycPage() {
       if(!active||!kyc)return;
       setSnapshot(kyc);
       const request=kyc.request;
-      setFullName(request?.fullName??profile?.profile?.fullName??"");
-      setDateOfBirth(request?.dateOfBirth?.slice(0,10)??"");
-      setCountry(request?.country??profile?.profile?.country??"United States");
-      setAddress(request?.address??"");
-      setGovernmentIdType(request?.governmentIdType??getKycDocumentTypes(request?.country??profile?.profile?.country??"United States")[0]??"Passport");
+      const nextCountry=request?.country??profile?.profile?.country??"United States";
+      setCountry(nextCountry);
+      setGovernmentIdType(request?.governmentIdType??getKycDocumentTypes(nextCountry)[0]??"Passport");
       setGovernmentIdNumber(request?.governmentIdNumber??"");
-      setFrontIdImageUrl(request?.frontIdImageUrl??"");
-      setBackIdImageUrl(request?.backIdImageUrl??"");
-      setSelfieImageUrl(request?.selfieImageUrl??"");
     }).catch(err=>{if(active)setError(err instanceof Error?err.message:"KYC request failed");}).finally(()=>{if(active)setLoading(false);});
     return()=>{active=false;};
   },[router]);
@@ -72,14 +66,31 @@ export default function KycPage() {
     event.preventDefault();
     setError("");
     if(!canSubmit)return;
-    if(!fullName.trim()||!dateOfBirth.trim()||!country.trim()||!address.trim()||!governmentIdNumber.trim()||!frontIdImageUrl.trim()||!backIdImageUrl.trim()||!selfieImageUrl.trim()){setError("Complete all verification fields");return;}
+    if(!country.trim()||!governmentIdNumber.trim()||!frontUpload.file||!selfieUpload.file||backRequired&&!backUpload.file){setError("Complete all required verification fields");return;}
     setSubmitting(true);
-    const response=await fetch("/api/kyc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,dateOfBirth,country,address,governmentIdType,governmentIdNumber,frontIdImageUrl,backIdImageUrl,selfieImageUrl})});
+    const form=new FormData();
+    form.set("country",country);
+    form.set("governmentIdType",governmentIdType);
+    form.set("governmentIdNumber",governmentIdNumber);
+    form.set("frontIdImage",frontUpload.file);
+    if(backUpload.file)form.set("backIdImage",backUpload.file);
+    form.set("selfieImage",selfieUpload.file);
+    const response=await fetch("/api/kyc",{method:"POST",body:form});
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){setError(data.error||"KYC submission failed");return;}
     setSnapshot({status:"PENDING",request:data.kyc??null});
   };
+
+  const chooseFile=(setter:(value:UploadState)=>void,current:UploadState,file?:File)=>{
+    setError("");
+    if(!file)return;
+    if(!acceptedImages.split(",").includes(file.type)){setError("Only JPG, JPEG, PNG, or WebP images are allowed");return;}
+    if(file.size>maxUploadBytes){setError("Each photo must be 5MB or smaller");return;}
+    revokePreview(current.preview);
+    setter({file,preview:URL.createObjectURL(file)});
+  };
+  const removeFile=(setter:(value:UploadState)=>void,current:UploadState)=>{revokePreview(current.preview);setter(emptyUpload);};
 
   return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-4 text-white sm:px-6">
     <div className="mx-auto max-w-2xl">
@@ -94,15 +105,12 @@ export default function KycPage() {
       {loading?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-slate-400">Loading verification...</section>:error&&!snapshot?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-[#ff4f6d]">{error}</section>:snapshot?.status==="PENDING"?<StatusCard icon={Clock3} title="Your KYC is under review" text="Manual admin approval is pending." tone="pending"/>:snapshot?.status==="APPROVED"?<StatusCard icon={CheckCircle2} title="Your KYC is verified" text="Your identity verification has been approved." tone="approved"/>:<form onSubmit={submit} className="profile-glass mt-4 rounded-[22px] p-4">
         {snapshot?.status==="REJECTED"&&<div className="mb-4 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs text-[#ff8aa0]">{snapshot.request?.rejectionReason||"Your KYC was rejected. Please submit updated details."}</div>}
         <div className="space-y-3">
-          <Field label="Full name" value={fullName} onChange={setFullName}/>
-          <Field label="Date of birth" type="date" value={dateOfBirth} onChange={setDateOfBirth}/>
           <SearchableSelect label="Country" options={countryOptions} value={country} onChange={setCountry} placeholder="Search country"/>
           <label className="block text-xs font-bold text-slate-400">Document type<select value={governmentIdType} onChange={event=>setGovernmentIdType(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50">{documentTypes.map(type=><option key={type} value={type}>{type}</option>)}</select></label>
           <Field label="Document number" value={governmentIdNumber} onChange={setGovernmentIdNumber}/>
-          <Field label="Address" value={address} onChange={setAddress}/>
-          <Field label="Document front upload/link" value={frontIdImageUrl} onChange={setFrontIdImageUrl} placeholder="https://..."/>
-          <Field label="Document back upload/link" value={backIdImageUrl} onChange={setBackIdImageUrl} placeholder="https://..."/>
-          <Field label="Selfie upload/link" value={selfieImageUrl} onChange={setSelfieImageUrl} placeholder="https://..."/>
+          <KycUploadBox label="Document Front Photo" upload={frontUpload} required onChange={file=>chooseFile(setFrontUpload,frontUpload,file)} onRemove={()=>removeFile(setFrontUpload,frontUpload)}/>
+          <KycUploadBox label="Document Back Photo" upload={backUpload} required={backRequired} onChange={file=>chooseFile(setBackUpload,backUpload,file)} onRemove={()=>removeFile(setBackUpload,backUpload)}/>
+          <KycUploadBox label="Selfie Holding Document" upload={selfieUpload} required onChange={file=>chooseFile(setSelfieUpload,selfieUpload,file)} onRemove={()=>removeFile(setSelfieUpload,selfieUpload)}/>
         </div>
         {error&&<p className="mt-3 text-xs text-[#ff4f6d]">{error}</p>}
         <button disabled={submitting} className="mt-4 w-full rounded-2xl bg-[#18ff8a] py-3.5 text-sm font-black text-[#050608] disabled:opacity-60">{submitting?"Submitting...":"Submit KYC"}</button>
@@ -120,6 +128,27 @@ function StatusCard({icon:Icon,title,text,tone}:{icon:typeof Clock3;title:string
   </section>;
 }
 
-function Field({label,value,onChange,type="text",placeholder}:{label:string;value:string;onChange:(value:string)=>void;type?:string;placeholder?:string}) {
-  return <label className="block text-xs font-bold text-slate-400">{label}<input type={type} value={value} onChange={event=>onChange(event.target.value)} placeholder={placeholder} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"/></label>;
+function Field({label,value,onChange}:{label:string;value:string;onChange:(value:string)=>void}) {
+  return <label className="block text-xs font-bold text-slate-400">{label}<input value={value} onChange={event=>onChange(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"/></label>;
+}
+
+function KycUploadBox({label,upload,required,onChange,onRemove}:{label:string;upload:UploadState;required?:boolean;onChange:(file?:File)=>void;onRemove:()=>void}) {
+  return <div className="rounded-2xl border border-white/[.08] bg-black/20 p-3">
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-xs font-bold text-slate-400">{label}{required&&<span className="text-[#18ff8a]"> *</span>}</p>
+      {upload.file&&<button type="button" onClick={onRemove} className="grid h-8 w-8 place-items-center rounded-xl border border-white/[.08] text-slate-400 hover:text-[#ff4f6d]" aria-label={`Remove ${label}`}><X size={15}/></button>}
+    </div>
+    <label className="mt-2 flex min-h-[124px] cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-[#18ff8a]/25 bg-[#18ff8a]/[.04] p-3 transition hover:bg-[#18ff8a]/[.07]">
+      <input type="file" accept={acceptedImages} className="hidden" onChange={event=>onChange(event.target.files?.[0])}/>
+      {upload.preview?<img src={upload.preview} alt="" className="h-24 w-24 shrink-0 rounded-xl object-cover"/>:<span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#18ff8a]/10 text-[#18ff8a]"><ImagePlus size={22}/></span>}
+      <span className="min-w-0">
+        <span className="block text-sm font-black text-white">{upload.file?"Replace photo":"Choose photo"}</span>
+        <span className="mt-1 block break-all text-xs text-slate-500">{upload.file?.name??"JPG, JPEG, PNG, or WebP up to 5MB"}</span>
+      </span>
+    </label>
+  </div>;
+}
+
+function revokePreview(preview:string) {
+  if(preview)URL.revokeObjectURL(preview);
 }

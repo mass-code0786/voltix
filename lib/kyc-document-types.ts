@@ -25,3 +25,7 @@ export function getKycDocumentTypes(country: string | null | undefined) {
   const key = (country ?? "").trim().toLowerCase();
   return documentTypesByCountry[key] ?? fallbackDocumentTypes;
 }
+
+export function kycDocumentRequiresBackPhoto(documentType: string | null | undefined) {
+  return !/passport/i.test((documentType ?? "").trim());
+}

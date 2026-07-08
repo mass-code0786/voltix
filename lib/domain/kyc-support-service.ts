@@ -5,13 +5,13 @@ import { createNotification } from "./notification-service";
 type KycInput = {
   userId: string;
   fullName: string;
-  dateOfBirth: Date;
+  dateOfBirth?: Date | null;
   country: string;
-  address: string;
+  address?: string | null;
   governmentIdType: string;
   governmentIdNumber: string;
   frontIdImageUrl: string;
-  backIdImageUrl: string;
+  backIdImageUrl?: string | null;
   selfieImageUrl: string;
 };
 
@@ -42,13 +42,13 @@ export async function submitUserKyc(input: KycInput) {
     data: {
       userId: input.userId,
       fullName: input.fullName,
-      dateOfBirth: input.dateOfBirth,
+      dateOfBirth: input.dateOfBirth ?? null,
       country: input.country,
-      address: input.address,
+      address: input.address ?? null,
       governmentIdType: input.governmentIdType,
       governmentIdNumber: input.governmentIdNumber,
       frontIdImageUrl: input.frontIdImageUrl,
-      backIdImageUrl: input.backIdImageUrl,
+      backIdImageUrl: input.backIdImageUrl ?? null,
       selfieImageUrl: input.selfieImageUrl,
       status: "PENDING",
     },
@@ -76,7 +76,6 @@ export async function getAdminKycRows() {
       request.id,
       request.country ?? "",
       request.dateOfBirth?.toISOString().slice(0, 10) ?? "",
-      request.address ?? "",
       request.frontIdImageUrl ?? "",
       request.backIdImageUrl ?? "",
       request.selfieImageUrl ?? "",
