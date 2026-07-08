@@ -1,5 +1,6 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { AI_ACTIVE_PRINCIPAL_THRESHOLD } from "@/lib/domain/user-activation";
 
 const VIP_ZERO_RANK = "VIP 0";
 
@@ -8,12 +9,12 @@ type VipRankClient = Pick<PrismaClient, "user" | "deposit"> | Prisma.Transaction
 export async function refreshUserVipRank(userId: string, client: VipRankClient = prisma) {
   const user = await client.user.findUnique({
     where: { id: userId },
-    select: { id: true, vipRank: true },
+    select: { id: true, vipRank: true, bitexPrincipal: true },
   });
   if (!user) return null;
 
   const hasCreditedDeposit = await userHasCreditedDeposit(client, userId);
-  const nextRank = resolveVipRank(user.vipRank, hasCreditedDeposit);
+  const nextRank = resolveVipRank(user.vipRank, hasCreditedDeposit || user.bitexPrincipal.gte(AI_ACTIVE_PRINCIPAL_THRESHOLD));
   if (nextRank === user.vipRank) return user;
 
   return client.user.update({
@@ -29,11 +30,16 @@ export async function backfillVipZeroForDepositedUsers(client: VipRankClient = p
     distinct: ["userId"],
     select: { userId: true },
   });
-  if (!depositedUsers.length) return { scanned: 0, updated: 0 };
+  const activeAiUsers = await client.user.findMany({
+    where: { bitexPrincipal: { gte: AI_ACTIVE_PRINCIPAL_THRESHOLD } },
+    select: { id: true },
+  });
+  const qualifiedUserIds = Array.from(new Set([...depositedUsers.map(deposit => deposit.userId), ...activeAiUsers.map(user => user.id)]));
+  if (!qualifiedUserIds.length) return { scanned: 0, updated: 0 };
 
   const result = await client.user.updateMany({
     where: {
-      id: { in: depositedUsers.map(deposit => deposit.userId) },
+      id: { in: qualifiedUserIds },
       OR: [
         { vipRank: "NONE" },
         { vipRank: "" },
@@ -43,7 +49,12 @@ export async function backfillVipZeroForDepositedUsers(client: VipRankClient = p
     data: { vipRank: VIP_ZERO_RANK },
   });
 
-  return { scanned: depositedUsers.length, updated: result.count };
+  return { scanned: qualifiedUserIds.length, updated: result.count };
+}
+
+export function displayVipRank(input: { vipRank?: string | null; bitexPrincipal?: Prisma.Decimal | number | string }, hasCreditedDeposit = false) {
+  const principal = decimalFrom(input.bitexPrincipal ?? 0);
+  return resolveVipRank(input.vipRank, hasCreditedDeposit || principal.gte(AI_ACTIVE_PRINCIPAL_THRESHOLD));
 }
 
 export function creditedDepositWhere(): Prisma.DepositWhereInput {
@@ -68,4 +79,8 @@ function resolveVipRank(currentRank: string | null | undefined, hasCreditedDepos
   if (!hasCreditedDeposit) return rank || "NONE";
   if (!rank || rank.toUpperCase() === "NONE" || rank.toUpperCase().replace(/\s+/g, "") === "VIP0") return VIP_ZERO_RANK;
   return rank;
+}
+
+function decimalFrom(value: Prisma.Decimal | number | string) {
+  return value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value);
 }

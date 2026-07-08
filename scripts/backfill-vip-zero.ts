@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "fs";
 import { PrismaClient } from "@prisma/client";
 
+const aiActivePrincipalThreshold = 100;
+
 loadEnvLocal();
 const prisma = new PrismaClient();
 
@@ -29,17 +31,22 @@ async function main() {
     distinct: ["userId"],
     select: { userId: true },
   });
-  const result = depositedUsers.length
+  const activeAiUsers = await prisma.user.findMany({
+    where: { bitexPrincipal: { gte: aiActivePrincipalThreshold } },
+    select: { id: true },
+  });
+  const qualifiedUserIds = Array.from(new Set([...depositedUsers.map(deposit => deposit.userId), ...activeAiUsers.map(user => user.id)]));
+  const result = qualifiedUserIds.length
     ? await prisma.user.updateMany({
         where: {
-          id: { in: depositedUsers.map(deposit => deposit.userId) },
+          id: { in: qualifiedUserIds },
           OR: [{ vipRank: "NONE" }, { vipRank: "" }, { vipRank: "VIP0" }],
         },
         data: { vipRank: "VIP 0" },
       })
     : { count: 0 };
 
-  console.log(`VIP rank backfill complete. Scanned deposited users: ${depositedUsers.length}. Updated: ${result.count}.`);
+  console.log(`VIP rank backfill complete. Scanned qualified users: ${qualifiedUserIds.length}. Updated: ${result.count}.`);
 }
 
 main()

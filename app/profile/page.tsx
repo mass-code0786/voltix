@@ -341,7 +341,7 @@ export default function ProfilePage() {
             <section>
               <div className="profile-menu-card">
                 <ProfileRow icon={UserRound} tone="green" title="Account Information" subtitle="Name, email, country and profile details" onClick={() => setActivePanel(activePanel === "account" ? null : "account")} />
-                <ProfileRow icon={ShieldCheck} tone="green" title="KYC Verification" subtitle="Identity verification status" pill={kycLabel(displayProfile.kycStatus)} pillTone={displayProfile.kycStatus === "APPROVED" ? "green" : "muted"} onClick={() => router.push("/?view=home")} />
+                <ProfileRow icon={ShieldCheck} tone="green" title="KYC Verification" subtitle="Identity verification status" pill={kycLabel(displayProfile.kycStatus)} pillTone={displayProfile.kycStatus === "APPROVED" ? "green" : "muted"} onClick={() => router.push("/kyc")} />
                 <ProfileRow icon={LockKeyhole} tone="purple" title="Security" subtitle="Password and account access" onClick={() => setActivePanel(activePanel === "security" ? null : "security")} />
                 <ProfileRow icon={CreditCard} tone="blue" title="Bank & Payment Methods" subtitle="Deposit and withdrawal methods" onClick={() => router.push("/?view=wallet")} />
                 <ProfileRow icon={Network} tone="yellow" title="Referral & Team" subtitle="Referral link and network overview" onClick={() => router.push("/?view=team")} />

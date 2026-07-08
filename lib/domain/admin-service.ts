@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AI_ACTIVE_PRINCIPAL_THRESHOLD, isAiWalletActive } from "@/lib/domain/user-activation";
 import { displayWalletName } from "@/lib/wallet-labels";
+import { displayVipRank } from "@/lib/domain/vip-rank-service";
 
 const successfulDepositWhere = { status: { in: ["CONFIRMED", "CREDITED"] } } satisfies Prisma.DepositWhereInput;
 
@@ -63,11 +64,12 @@ export async function getAdminOverview() {
 
 export async function getAdminUsers() {
   const users = await prisma.user.findMany({ orderBy: { joinedAt: "desc" }, take: 100 });
+  const depositedUserIds = await creditedDepositUserIds(users.map(user => user.id));
   return {
     rows: users.map(user => [
       `${user.name} / ${user.email}`,
       user.uid,
-      user.vipRank,
+      displayVipRank(user, depositedUserIds.has(user.id)),
       money(user.spotBalance),
       money(user.futuresBalance),
       money(user.bitexBalance),
@@ -90,9 +92,11 @@ export async function getAdminWallets() {
       },
     }),
   ]);
+  const depositedUserIds = await creditedDepositUserIds(users.map(user => user.id));
   return {
     rows: users.map(user => [
       `${user.name} / ${user.uid}`,
+      displayVipRank(user, depositedUserIds.has(user.id)),
       money(user.spotBalance),
       money(user.futuresBalance),
       money(user.bitexBalance),
@@ -105,6 +109,7 @@ export async function getAdminWallets() {
       name: user.name,
       uid: user.uid,
       email: user.email,
+      vipRank: displayVipRank(user, depositedUserIds.has(user.id)),
       spot: decimalToNumber(user.spotBalance),
       futures: decimalToNumber(user.futuresBalance),
       bitex: decimalToNumber(user.bitexBalance),
@@ -385,6 +390,21 @@ function journalTypeLabel(referenceType: string) {
 
 function decimalToNumber(value: Prisma.Decimal | number) {
   return Number(value.toString());
+}
+
+async function creditedDepositUserIds(userIds: string[]) {
+  if (!userIds.length) return new Set<string>();
+  const deposits = await prisma.deposit.groupBy({
+    by: ["userId"],
+    where: {
+      userId: { in: userIds },
+      OR: [
+        { status: "CREDITED" },
+        { status: "APPROVED", creditedAt: { not: null } },
+      ],
+    },
+  });
+  return new Set(deposits.map(deposit => deposit.userId));
 }
 
 function money(value: Prisma.Decimal | number) {

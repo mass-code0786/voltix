@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { buildReferralLink } from "@/lib/app-url";
 import { aiWalletBusinessAmount, isAiWalletActive } from "@/lib/domain/user-activation";
+import { displayVipRank } from "@/lib/domain/vip-rank-service";
 
 type TeamSnapshotClient = Pick<PrismaClient, "user"> | Prisma.TransactionClient;
 type TopUpTeamClient = Pick<PrismaClient, "user" | "deposit"> | Prisma.TransactionClient;
@@ -110,7 +111,7 @@ export async function getTopUpTeamMembers(client: TopUpTeamClient, userId: strin
           level: member.level,
           depositedAmount: depositedByUser.get(member.id) ?? 0,
           aiWalletActiveAmount,
-          vipRank: member.vipRank,
+          vipRank: displayVipRank(member, (depositedByUser.get(member.id) ?? 0) > 0),
           status: isAiWalletActive(member) ? "Active" : "Inactive",
           joinedAt: member.joinedAt.toISOString(),
         };
@@ -177,7 +178,7 @@ export async function getTeamTreeMembers(
       email: member.email,
       uid: member.uid,
       level: parentLevel + 1,
-      vipRank: member.vipRank,
+      vipRank: displayVipRank(member, (depositedByUser.get(member.id) ?? 0) > 0),
       depositedAmount: depositedByUser.get(member.id) ?? 0,
       aiWalletActiveAmount: decimalToNumber(aiWalletBusinessAmount(member)),
       status: isAiWalletActive(member) ? "Active" : "Inactive",

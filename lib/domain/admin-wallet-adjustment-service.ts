@@ -66,7 +66,7 @@ export async function adjustAdminWallet(input: {
 
     if (input.action === "CREDIT") {
       await creditWalletBalance(tx, user.id, input.walletType, input.amount);
-      if (input.walletType === "SPOT" && depositId) await refreshUserVipRank(user.id, tx);
+      if ((input.walletType === "SPOT" && depositId) || input.walletType === "BITEX") await refreshUserVipRank(user.id, tx);
     } else {
       await debitWalletBalance(tx, user.id, input.walletType, input.amount);
     }

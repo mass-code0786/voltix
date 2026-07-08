@@ -74,7 +74,9 @@ export async function transferWallet(input: {
       ],
     });
 
-    return tx.walletTransfer.update({ where: { id: transfer.id }, data: { status: "COMPLETED", ledgerJournalId: journal.id, completedAt: new Date() } });
+    const completed = await tx.walletTransfer.update({ where: { id: transfer.id }, data: { status: "COMPLETED", ledgerJournalId: journal.id, completedAt: new Date() } });
+    if (input.toWallet === "BITEX") await refreshUserVipRank(input.userId, tx);
+    return completed;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
