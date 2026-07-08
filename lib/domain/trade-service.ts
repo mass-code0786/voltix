@@ -27,7 +27,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   });
   const dayStart = new Date(now);
   dayStart.setUTCHours(0, 0, 0, 0);
-  const [activeTrade, completedToday, totalToday, history, activePackage] = await Promise.all([
+  const [activeTrade, completedToday, totalToday, history] = await Promise.all([
     prisma.copyTrade.findFirst({
       where: { userId, status: TradeStatus.ACTIVE },
       include: { code: true },
@@ -40,10 +40,6 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
       include: { code: true },
       orderBy: { startedAt: "desc" },
       take: 20,
-    }),
-    prisma.userPackage.findFirst({
-      where: { userId, status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-      select: { id: true },
     }),
   ]);
   const limit = dailyTradeLimit();
@@ -62,7 +58,6 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
       remaining,
       limit,
       aiActive,
-      hasActivePackage: Boolean(activePackage),
       userVipRank: normalizedVipRank,
       aiWalletActiveAmount,
       tradesUsedToday: totalToday,
@@ -161,11 +156,6 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
 
     const slot = await findOpenTradeSlot(now, tx);
     if (!slot) throw new Error(TRADE_UNAVAILABLE_MESSAGE);
-    const activePackage = await tx.userPackage.findFirst({
-      where: { userId: input.userId, status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-      select: { id: true },
-    });
-    if (!activePackage) throw new Error("Package required.");
     if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
     const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
     if (tradeAmount.lt(MIN_COPY_TRADE_STAKE)) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.`);
@@ -223,7 +213,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
           startTime: now.toISOString(),
           completionTime: timeline.completesAt.toISOString(),
           result: "STARTED",
-          activePackageId: activePackage.id,
+          activePackageId: null,
           device: input.device ?? null,
         },
       },
@@ -428,7 +418,7 @@ function serializeDebugSlot(slot: TradeWindowSlot) {
   };
 }
 
-function tradeEligibilityAudit(input: { rowEligible: boolean; windowStatus: "LIVE" | "UPCOMING" | "CLOSED"; remaining: number; limit: number; aiActive: boolean; hasActivePackage: boolean; userVipRank: string; aiWalletActiveAmount: number; tradesUsedToday: number }) {
+function tradeEligibilityAudit(input: { rowEligible: boolean; windowStatus: "LIVE" | "UPCOMING" | "CLOSED"; remaining: number; limit: number; aiActive: boolean; userVipRank: string; aiWalletActiveAmount: number; tradesUsedToday: number }) {
   return {
     aiWallet: {
       pass: input.aiActive,
@@ -453,8 +443,8 @@ function tradeEligibilityAudit(input: { rowEligible: boolean; windowStatus: "LIV
       reason: input.remaining > 0 ? null : "Daily limit reached",
     },
     package: {
-      pass: input.hasActivePackage,
-      reason: input.hasActivePackage ? null : "Package requirement failed",
+      pass: true,
+      reason: null,
     },
   };
 }

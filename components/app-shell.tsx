@@ -1205,6 +1205,7 @@ function VipTradeRowItem({ row, loading, tick, start }: { row: VipTradeRow; load
   const longLabel=label.length>20;
   const countdown=tradeCountdownLabel(row,tick);
   const tradeEnabled=isTradeButtonEnabled(row,tick);
+  const actionLabel=tradeButtonLabel(row,status,tradeEnabled);
   return <div className="vip-row flex h-[48px] items-center gap-1.5 rounded-[13px] px-2 py-1" style={{"--vip-accent":accent} as CSSProperties}>
     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[8px] font-black text-[#050807]" style={{background:`linear-gradient(145deg, ${accent}, ${accent}99)`,boxShadow:`0 0 18px ${accent}33`}}>VIP</div>
     <div className="min-w-0 flex-1">
@@ -1212,9 +1213,9 @@ function VipTradeRowItem({ row, loading, tick, start }: { row: VipTradeRow; load
         <p className={`shrink-0 whitespace-nowrap font-black leading-none text-white ${longLabel ? "text-[10px] min-[390px]:text-[11px]" : "text-[13px]"}`}>{label}</p>
         <span className="flex h-[18px] shrink-0 items-center rounded-full border px-1.5 text-[8px] font-black" style={{borderColor:`${accent}33`,backgroundColor:`${accent}14`,color:accent}}>{status}</span>
       </div>
-      <p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{countdown || `${(row.dailyReturnMin??row.dailyPercentMin).toFixed(1)}% - ${(row.dailyReturnMax??row.dailyPercentMax).toFixed(1)}% Daily Return`}</p>
+      <p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{countdown || (!tradeEnabled&&status==="LIVE"?actionLabel:`${(row.dailyReturnMin??row.dailyPercentMin).toFixed(1)}% - ${(row.dailyReturnMax??row.dailyPercentMax).toFixed(1)}% Daily Return`)}</p>
     </div>
-    <button onClick={start} disabled={loading||!tradeEnabled} className="h-8 w-[76px] shrink-0 rounded-[10px] text-[11px] font-black text-[#050807] disabled:opacity-50" style={{background:accent,boxShadow:`0 0 18px ${accent}2e`}}>{loading?"Wait":tradeEnabled?"Trade":status==="UPCOMING"?"Soon":"Closed"}</button>
+    <button onClick={start} disabled={loading||!tradeEnabled} className="h-8 w-[96px] shrink-0 rounded-[10px] px-1 text-[9px] font-black leading-tight text-[#050807] disabled:opacity-50" style={{background:accent,boxShadow:`0 0 18px ${accent}2e`}}>{loading?"Wait":actionLabel}</button>
   </div>;
 }
 
@@ -1759,6 +1760,22 @@ function isTradeButtonEnabled(row: VipTradeRow, tick: number) {
   return localTradeStatus(row,tick) === "LIVE" && Boolean(row.canTrade || row.canTradeWhenLive);
 }
 
+function tradeButtonLabel(row: VipTradeRow, status: "UPCOMING" | "LIVE" | "CLOSED", enabled: boolean) {
+  if (enabled) return "Trade";
+  if (status === "UPCOMING") return "Soon";
+  if (status === "CLOSED") return "Closed";
+  return tradeDisabledReason(row);
+}
+
+function tradeDisabledReason(row: VipTradeRow) {
+  const reason=(row.reason || row.message || "").toLowerCase();
+  if (reason.includes("ai wallet")) return "Activate AI Wallet";
+  if (reason.includes("vip")) return "VIP Not Eligible";
+  if (reason.includes("daily") || reason.includes("limit")) return "Limit Reached";
+  if (reason.includes("package")) return "Package Required";
+  return "Not Eligible";
+}
+
 function readableTradeTime(row: VipTradeRow) {
   const open = row.openTime || row.currentTradeTime || "";
   const close = row.closeTime || "";
@@ -1915,7 +1932,7 @@ function CopyTradeScreen({activeTrade,bitexBalance,tradeRows,startTrade,complete
     if(!result.ok){setError(result.message);return;}
     setError("");
   };
-  return <div className="space-y-5"><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="font-bold">Copy Trade Income</h3><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="p-4 sm:p-5"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="divide-y divide-line/70">{rows.map(row=>{const status=localTradeStatus(row,nowTick);const countdown=tradeCountdownLabel(row,nowTick);const tradeEnabled=isTradeButtonEnabled(row,nowTick);return <div key={row.id} className="flex items-center gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black">{displayVipLabel(row.vipRange??row.label)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${status==="LIVE"?"bg-lime/10 text-lime":status==="UPCOMING"?"bg-[#f6c85f]/10 text-[#f6c85f]":"bg-white/5 text-slate-500"}`}>{status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade time: {readableTradeTime(row)}{countdown?` | ${countdown}`:""}</p><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${Number(row.tradeAmount ?? bitexBalance*.01).toFixed(2)} | Daily {row.dailyReturnMin??row.dailyPercentMin}% - {row.dailyReturnMax??row.dailyPercentMax}%</p>{!tradeEnabled&&row.reason&&<p className="mt-1 text-[10px] text-danger">{row.reason}</p>}</div><button onClick={()=>start(row)} disabled={loadingRow===row.id||!tradeEnabled} className="shrink-0 rounded-lg bg-lime px-4 py-2 text-xs font-black text-ink disabled:opacity-50">{loadingRow===row.id?"Wait":tradeEnabled?"Trade":status==="UPCOMING"?"Upcoming":"Closed"}</button></div>})}</div>}{error&&<p className="border-t border-line px-5 py-3 text-xs text-danger">{error}</p>}</section></div>;
+  return <div className="space-y-5"><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="font-bold">Copy Trade Income</h3><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="p-4 sm:p-5"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="divide-y divide-line/70">{rows.map(row=>{const status=localTradeStatus(row,nowTick);const countdown=tradeCountdownLabel(row,nowTick);const tradeEnabled=isTradeButtonEnabled(row,nowTick);const actionLabel=tradeButtonLabel(row,status,tradeEnabled);return <div key={row.id} className="flex items-center gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black">{displayVipLabel(row.vipRange??row.label)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${status==="LIVE"?"bg-lime/10 text-lime":status==="UPCOMING"?"bg-[#f6c85f]/10 text-[#f6c85f]":"bg-white/5 text-slate-500"}`}>{status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade time: {readableTradeTime(row)}{countdown?` | ${countdown}`:""}</p><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${Number(row.tradeAmount ?? bitexBalance*.01).toFixed(2)} | Daily {row.dailyReturnMin??row.dailyPercentMin}% - {row.dailyReturnMax??row.dailyPercentMax}%</p>{!tradeEnabled&&status==="LIVE"&&<p className="mt-1 text-[10px] text-danger">{actionLabel}</p>}</div><button onClick={()=>start(row)} disabled={loadingRow===row.id||!tradeEnabled} className="w-[112px] shrink-0 rounded-lg bg-lime px-3 py-2 text-[10px] font-black leading-tight text-ink disabled:opacity-50">{loadingRow===row.id?"Wait":actionLabel}</button></div>})}</div>}{error&&<p className="border-t border-line px-5 py-3 text-xs text-danger">{error}</p>}</section></div>;
 }
 function WalletScreen({notify,assets,spotBalance,futuresBalance,bitexBalance,bitexIncomeEarned,bitexTarget,activity,section,action,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];spotBalance:number;futuresBalance:number;bitexBalance:number;bitexIncomeEarned:number;bitexTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
  const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+bitexBalance;
