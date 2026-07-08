@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   ArrowDownLeft, ArrowDownToLine, ArrowLeftRight, ArrowUpRight, BarChart3, Bell,
@@ -217,6 +217,7 @@ const card = "premium-card";
 const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA","TRX","AVAX","DOT","LINK","TON","SHIB","LTC","BCH","ATOM","APT","ARB","OP","PEPE","NEAR","INJ","SEI","FIL"];
 const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, bitex: 0 }, locked: { spot: 0, futures: 0, bitex: 0 }, total: { spot: 0, futures: 0, bitex: 0 }, portfolio: 0, bitex: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
 const defaultCopyTradeCounts: CopyTradeCounts = { todaysTradeCount: 0, dailyTradeLimit: 3 };
+const activeAiSubscriptionMessage = "You already have an active AI Subscription. You can buy again after it expires.";
 
 function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSetting>): AppCoin[] {
   const bySymbol = new Map(baseCoins.map(coin => [coin.symbol, coin]));
@@ -333,6 +334,8 @@ export default function AppShell() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [aiSubscription, setAiSubscription] = useState<AiSubscriptionStatus | null>(null);
+  const [aiPurchaseConfirmOpen, setAiPurchaseConfirmOpen] = useState(false);
+  const aiPurchaseConfirmationRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [walletActivity, setWalletActivity] = useState<WalletActivity[]>([]);
   const [userCountry, setUserCountry] = useState("United States");
   const [userLanguage, setUserLanguage] = useState("en");
@@ -344,6 +347,17 @@ export default function AppShell() {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
   };
+
+  const requestAiPurchaseConfirmation = useCallback(() => new Promise<boolean>((resolve) => {
+    aiPurchaseConfirmationRef.current = resolve;
+    setAiPurchaseConfirmOpen(true);
+  }), []);
+
+  const resolveAiPurchaseConfirmation = useCallback((confirmed: boolean) => {
+    aiPurchaseConfirmationRef.current?.(confirmed);
+    aiPurchaseConfirmationRef.current = null;
+    setAiPurchaseConfirmOpen(false);
+  }, []);
 
   const applyAuthenticatedUser = useCallback((user: CurrentUser | null) => {
     setCurrentUser(user);
@@ -780,8 +794,18 @@ export default function AppShell() {
       return { ok: false, message: "Login required" };
     }
     try {
-      await refreshAiSubscription(currentUser);
-      const response = await fetch("/api/ai/subscription/purchase", { method: "POST" });
+      const latestStatus = await refreshAiSubscription(currentUser);
+      if (latestStatus?.subscription?.active) {
+        return { ok: false, message: activeAiSubscriptionMessage };
+      }
+      const confirmed = await requestAiPurchaseConfirmation();
+      if (!confirmed) return { ok: true, message: "" };
+      const idempotencyKey = crypto.randomUUID();
+      const response = await fetch("/api/ai/subscription/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ idempotencyKey }),
+      });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 401) openAuthPage("login");
@@ -798,7 +822,7 @@ export default function AppShell() {
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "AI purchase failed" };
     }
-  }, [currentUser, notify, openAuthPage, refreshAiSubscription, refreshCopyTradeStatus, refreshDashboard, refreshWallet]);
+  }, [currentUser, notify, openAuthPage, refreshAiSubscription, refreshCopyTradeStatus, refreshDashboard, refreshWallet, requestAiPurchaseConfirmation]);
 
   const completeActiveCopyTrade = useCallback(() => {
     refreshCopyTradeStatus(currentUser).catch(() => {});
@@ -878,6 +902,7 @@ export default function AppShell() {
       {p2pOpen&&<P2PTransferModal assets={p2pAssets} close={()=>setP2POpen(false)} sendTransfer={sendP2PTransfer}/>}
       {verificationOpen&&<VerificationRequestModal close={()=>setVerificationOpen(false)} notify={notify} user={currentUser}/>} 
       {helpOpen&&<HelpCenterModal close={()=>setHelpOpen(false)} notify={notify}/>} 
+      {aiPurchaseConfirmOpen&&<AiSubscriptionConfirmDialog confirm={()=>resolveAiPurchaseConfirmation(true)} cancel={()=>resolveAiPurchaseConfirmation(false)} />}
       {toast && <div className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 whitespace-nowrap rounded-full border border-lime/20 bg-[#17231e] px-5 py-3 text-xs font-bold shadow-2xl lg:bottom-8"><span className="mr-2 text-lime">?</span>{toast}</div>}
     </div>
   );
@@ -885,6 +910,18 @@ export default function AppShell() {
 
 function Brand({ compact = false }: { compact?: boolean }) {
   return <img src="/logo.png" alt="VOLTIX" className={`${compact ? "h-[28px]" : "h-[34px]"} block w-auto object-contain opacity-100 mix-blend-normal filter-none transform-none`} />;
+}
+
+function AiSubscriptionConfirmDialog({ confirm, cancel }: { confirm: () => void; cancel: () => void }) {
+  return <><button aria-label="Cancel AI subscription purchase" onClick={cancel} className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" /><div className="fixed left-1/2 top-1/2 z-[80] w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#18ff8a]/20 bg-[#09120f] p-4 shadow-2xl">
+    <div className="grid h-11 w-11 place-items-center rounded-xl border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]"><Bot size={19}/></div>
+    <h2 className="mt-4 text-lg font-black text-white">AI Subscription</h2>
+    <p className="mt-2 text-sm font-semibold leading-6 text-slate-300">Do you want to buy AI Subscription for $15 for 30 days?</p>
+    <div className="mt-5 grid grid-cols-2 gap-2">
+      <button onClick={cancel} className="rounded-xl border border-white/[.08] bg-black/25 py-3 text-xs font-black text-slate-300">Cancel</button>
+      <button onClick={confirm} className="rounded-xl bg-[#18ff8a] py-3 text-xs font-black text-[#050608]">Confirm</button>
+    </div>
+  </div></>;
 }
 
 function initials(name?: string | null) {
@@ -1232,6 +1269,7 @@ function HomeAiSubscriptionCard({ currentUser, status, purchaseAi, onOpenAuth, n
   const expiry=status?.subscription?.expiresAt ? new Date(status.subscription.expiresAt) : null;
   const action=async()=>{
     if(!currentUser){onOpenAuth();return;}
+    if(active){notify(activeAiSubscriptionMessage);return;}
     setLoading(true);
     const result=await purchaseAi();
     setLoading(false);
@@ -1830,7 +1868,7 @@ function AiSubscriptionPanel({currentUser,status,purchaseAi,openLogin,notify}:{c
   const expiry=status?.subscription?.expiresAt ? new Date(status.subscription.expiresAt) : null;
   const action=async()=>{
     if(!currentUser){openLogin();return;}
-    if(active){notify("AI subscription active");return;}
+    if(active){notify(activeAiSubscriptionMessage);return;}
     setLoading(true);
     const result=await purchaseAi();
     setLoading(false);
@@ -1871,6 +1909,10 @@ function AiPurchaseCard({currentUser,status,purchaseAi,openLogin}:{currentUser:C
       openLogin();
       return;
     }
+    if(active){
+      setError(activeAiSubscriptionMessage);
+      return;
+    }
     setLoading(true);
     const result=await purchaseAi();
     setLoading(false);
@@ -1890,7 +1932,7 @@ function AiPurchaseCard({currentUser,status,purchaseAi,openLogin}:{currentUser:C
       <AiDetail label="Expiry date" value={active&&expiry?formatDate(expiry):"--"} />
     </div>
     {error&&<p className="mt-3 text-xs text-danger">{error}</p>}
-    <button onClick={purchase} disabled={loading} className="mt-5 w-full rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60 sm:w-auto sm:px-7">{loading?"Please wait...":"Purchase AI"}</button>
+    <button onClick={purchase} disabled={loading} className="mt-5 w-full rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60 sm:w-auto sm:px-7">{loading?"Please wait...":active?"Manage":"Purchase AI"}</button>
   </section>;
 }
 

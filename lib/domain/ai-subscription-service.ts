@@ -7,6 +7,16 @@ import { createNotification } from "./notification-service";
 
 const AI_PRICE = new Prisma.Decimal(15);
 const AI_VALIDITY_DAYS = 30;
+export const ACTIVE_SUBSCRIPTION_EXISTS = "ACTIVE_SUBSCRIPTION_EXISTS";
+export const ACTIVE_SUBSCRIPTION_MESSAGE = "You already have an active AI Subscription. You can buy again after it expires.";
+
+export class ActiveSubscriptionExistsError extends Error {
+  code = ACTIVE_SUBSCRIPTION_EXISTS;
+
+  constructor() {
+    super(ACTIVE_SUBSCRIPTION_MESSAGE);
+  }
+}
 
 export async function getAiSubscriptionStatus(userId: string, now = new Date()) {
   await expireOldSubscriptions(now);
@@ -21,8 +31,26 @@ export async function getAiSubscriptionStatus(userId: string, now = new Date()) 
   };
 }
 
-export async function purchaseAiSubscription(userId: string, now = new Date()) {
+export async function purchaseAiSubscription(userId: string, idempotencyKey: string, now = new Date()) {
+  const purchaseKey = idempotencyKey.trim();
+  if (!purchaseKey) throw new Error("Idempotency key is required");
   const subscription = await prisma.$transaction(async (tx) => {
+    await tx.aiSubscription.updateMany({ where: { userId, active: true, expiresAt: { lte: now } }, data: { active: false } });
+    const existingJournal = await tx.ledgerJournal.findUnique({
+      where: { idempotencyKey: `ai-subscription:${userId}:${purchaseKey}` },
+      select: { id: true },
+    });
+    if (existingJournal) {
+      const existingSubscription = await tx.aiSubscription.findUnique({ where: { ledgerJournalId: existingJournal.id } });
+      if (existingSubscription) return existingSubscription;
+    }
+    const activeSubscription = await tx.aiSubscription.findFirst({
+      where: { userId, active: true, expiresAt: { gt: now } },
+      orderBy: { expiresAt: "desc" },
+      select: { id: true },
+    });
+    if (activeSubscription) throw new ActiveSubscriptionExistsError();
+
     const asset = await tx.asset.findUniqueOrThrow({ where: { symbol: "USDT" } });
     const debit = await tx.user.updateMany({
       where: { id: userId, spotBalance: { gte: AI_PRICE } },
@@ -36,15 +64,14 @@ export async function purchaseAiSubscription(userId: string, now = new Date()) {
     ]);
     const journal = await postBalancedJournal(tx, {
       referenceType: "AI_SUBSCRIPTION_PURCHASE",
-      referenceId: `${userId}:${now.toISOString()}`,
-      idempotencyKey: `ai-subscription:${userId}:${now.getTime()}`,
+      referenceId: `${userId}:${purchaseKey}`,
+      idempotencyKey: `ai-subscription:${userId}:${purchaseKey}`,
       memo: "AI subscription purchase",
       lines: [
         { accountId: spotAccount.id, direction: "DEBIT", amount: AI_PRICE },
         { accountId: revenueAccount.id, direction: "CREDIT", amount: AI_PRICE },
       ],
     });
-    await tx.aiSubscription.updateMany({ where: { userId, active: true, expiresAt: { gt: now } }, data: { active: false } });
     const created = await tx.aiSubscription.create({
       data: {
         userId,
