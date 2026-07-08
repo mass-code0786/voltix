@@ -2,6 +2,7 @@ import { Prisma, WalletType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { postBalancedJournal } from "./ledger";
 import { ensureUserWalletAccounts } from "./user-wallets";
+import { refreshUserVipRank } from "./vip-rank-service";
 import { displayWalletName } from "@/lib/wallet-labels";
 
 const WITHDRAWAL_FIXED_FEE = new Prisma.Decimal(2);
@@ -88,7 +89,9 @@ export async function creditConfirmedDepositToSpot(depositId: string) {
     ]);
     await postBalancedJournal(tx, { referenceType: "DEPOSIT", referenceId: deposit.id, idempotencyKey: `deposit:${deposit.id}`, memo: "Deposit credited to Spot wallet", lines: [{ accountId: treasury.id, direction: "DEBIT", amount: deposit.amount }, { accountId: spot.id, direction: "CREDIT", amount: deposit.amount }] });
     await tx.user.update({ where: { id: deposit.userId }, data: { spotBalance: { increment: deposit.amount } } });
-    return tx.deposit.update({ where: { id: deposit.id }, data: { status: "CREDITED", creditedAt: new Date() } });
+    const credited = await tx.deposit.update({ where: { id: deposit.id }, data: { status: "CREDITED", creditedAt: new Date() } });
+    await refreshUserVipRank(deposit.userId, tx);
+    return credited;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

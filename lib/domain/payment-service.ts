@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { ensureUserWalletAccounts } from "./user-wallets";
 import { postBalancedJournal } from "./ledger";
 import { createNotification } from "./notification-service";
+import { refreshUserVipRank } from "./vip-rank-service";
 import { displayWalletName } from "@/lib/wallet-labels";
 
 const WITHDRAWAL_FIXED_FEE = new Prisma.Decimal(2);
@@ -156,6 +157,7 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
       data: { status: "CREDITED", creditedAt: now },
       include: { asset: true, network: true },
     });
+    await refreshUserVipRank(updated.userId, tx);
     await createNotification(tx, {
       userId: updated.userId,
       type: "DEPOSIT_STATUS",
@@ -267,6 +269,7 @@ export async function approveDepositRequest(input: { depositId: string; adminUse
     });
     await tx.user.update({ where: { id: deposit.userId }, data: { spotBalance: { increment: deposit.amount } } });
     const updated = await tx.deposit.update({ where: { id: deposit.id }, data: { status: "APPROVED", creditedAt: new Date() }, include: { asset: true, network: true } });
+    await refreshUserVipRank(deposit.userId, tx);
     await createNotification(tx, {
       userId: deposit.userId,
       type: "DEPOSIT_STATUS",

@@ -10,8 +10,9 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts"
-    ,"coins:sync-logos": "tsx scripts/sync-coin-logos.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "coins:sync-logos": "tsx scripts/sync-coin-logos.ts",
+    "vip:backfill": "tsx scripts/backfill-vip-zero.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.8.2",

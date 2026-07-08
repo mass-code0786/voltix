@@ -67,6 +67,7 @@ export async function getAdminUsers() {
     rows: users.map(user => [
       `${user.name} / ${user.email}`,
       user.uid,
+      user.vipRank,
       money(user.spotBalance),
       money(user.futuresBalance),
       money(user.bitexBalance),
