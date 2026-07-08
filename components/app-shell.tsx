@@ -903,7 +903,7 @@ export default function AppShell() {
       {verificationOpen&&<VerificationRequestModal close={()=>setVerificationOpen(false)} notify={notify} user={currentUser}/>} 
       {helpOpen&&<HelpCenterModal close={()=>setHelpOpen(false)} notify={notify}/>} 
       {aiPurchaseConfirmOpen&&<AiSubscriptionConfirmDialog confirm={()=>resolveAiPurchaseConfirmation(true)} cancel={()=>resolveAiPurchaseConfirmation(false)} />}
-      {toast && <div className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 whitespace-nowrap rounded-full border border-lime/20 bg-[#17231e] px-5 py-3 text-xs font-bold shadow-2xl lg:bottom-8"><span className="mr-2 text-lime">?</span>{toast}</div>}
+      {toast && <div className="fixed left-1/2 z-[60] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl border border-lime/20 bg-[#17231e] px-4 py-3 text-center text-xs font-bold leading-5 text-white shadow-2xl [bottom:calc(96px+16px+env(safe-area-inset-bottom))] sm:max-w-[24rem] lg:bottom-8"><span className="mr-2 text-lime">?</span>{toast}</div>}
     </div>
   );
 }
