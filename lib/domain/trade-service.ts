@@ -12,9 +12,14 @@ const TRADE_UNAVAILABLE_MESSAGE = "Trade not available.";
 const TRADE_TIMEZONE = "IST";
 const TRADE_DISPLAY_TIMEZONE = "Asia/Kolkata";
 const MIN_TRADE_WINDOW_MINUTES = 30;
+const REQUIRED_TRADE_SLOTS = [
+  { label: "Window 1", utcTime: "08:30" },
+  { label: "Window 2", utcTime: "12:30" },
+  { label: "Window 3", utcTime: "17:10" },
+] as const;
 
 export async function getCopyTradeStatus(userId: string, now = new Date()) {
-  await ensureTradeSlotDurations();
+  await ensureRequiredTradeSlots();
   await settleDueCopyTrades(userId, now);
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
@@ -106,6 +111,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
     secondsUntilClose: tradeWindow.secondsUntilClose,
     canTrade: Boolean(currentRow?.canTrade),
     reason: currentRow?.reason ?? null,
+    debug: tradeWindow.debug,
     userVipRank: normalizedVipRank,
     aiWalletActiveAmount,
     tradesUsedToday: totalToday,
@@ -299,26 +305,24 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
 }
 
 async function findOpenTradeSlot(now: Date, client: Prisma.TransactionClient | typeof prisma = prisma) {
-  if (client === prisma) await ensureTradeSlotDurations(client);
+  await ensureRequiredTradeSlots(client);
   const slots = await client.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
   return slots.find(slot => isSlotOpen(slot.utcTime, slot.durationMinutes, now)) ?? null;
 }
 
 async function getCurrentTradeWindow(now: Date) {
-  await ensureTradeSlotDurations();
+  await ensureRequiredTradeSlots();
   const slots = await prisma.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
-  const windows = slots.flatMap(slot => [-1, 0, 1].map(dayOffset => {
+  const windows = slots.flatMap(slot => [0, 1].map(dayOffset => {
     const start = tradeSlotStart(slot.utcTime, now, dayOffset);
     const durationMinutes = effectiveTradeSlotDuration(slot.durationMinutes);
     const end = new Date(start.getTime() + durationMinutes * 60_000);
     return { slot, start, end, durationMinutes };
   })).sort((a, b) => a.start.getTime() - b.start.getTime());
   const live = windows.find(window => now >= window.start && now < window.end);
-  if (live) return tradeWindowPayload("LIVE", live.start, live.end, now, live.slot);
   const upcoming = windows.find(window => window.start > now);
-  if (upcoming) return tradeWindowPayload("UPCOMING", upcoming.start, upcoming.end, now, upcoming.slot);
-  const last = windows.filter(window => window.end <= now).at(-1);
-  if (last) return tradeWindowPayload("CLOSED", last.start, last.end, now, last.slot);
+  if (live) return tradeWindowPayload("LIVE", live.start, live.end, now, live.slot, upcoming?.slot ?? null, upcoming?.start ?? null);
+  if (upcoming) return tradeWindowPayload("UPCOMING", upcoming.start, upcoming.end, now, null, upcoming.slot, upcoming.start);
   return {
     status: "CLOSED" as const,
     nextOpenTime: null,
@@ -328,6 +332,7 @@ async function getCurrentTradeWindow(now: Date) {
     secondsUntilOpen: 0,
     secondsUntilClose: 0,
     slot: null,
+    debug: buildTradeWindowDebug(now, null, null, "CLOSED", 0, 0),
   };
 }
 
@@ -345,23 +350,29 @@ function tradeSlotStart(utcTime: string, now: Date, dayOffset = 0) {
   return start;
 }
 
-function tradeWindowPayload(status: "LIVE" | "UPCOMING" | "CLOSED", start: Date, end: Date, now: Date, slot: { id: string; label: string; utcTime: string; durationMinutes: number } | null) {
+function tradeWindowPayload(status: "LIVE" | "UPCOMING" | "CLOSED", start: Date, end: Date, now: Date, currentSlot: TradeWindowSlot | null, nextSlot: TradeWindowSlot | null, nextStart: Date | null) {
+  const displaySlot = currentSlot ?? nextSlot;
+  const secondsUntilOpen = status === "UPCOMING" ? Math.max(0, Math.ceil((start.getTime() - now.getTime()) / 1000)) : 0;
+  const secondsUntilClose = status === "LIVE" || status === "UPCOMING" ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 1000)) : 0;
   return {
     status,
-    nextOpenTime: status === "UPCOMING" ? start.toISOString() : null,
+    nextOpenTime: nextStart?.toISOString() ?? (status === "UPCOMING" ? start.toISOString() : null),
     openTime: formatTradeDisplayTime(start),
     closeTime: formatTradeDisplayTime(end),
     timezone: TRADE_TIMEZONE,
-    secondsUntilOpen: status === "UPCOMING" ? Math.max(0, Math.ceil((start.getTime() - now.getTime()) / 1000)) : 0,
-    secondsUntilClose: status === "LIVE" || status === "UPCOMING" ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 1000)) : 0,
-    slot: slot ? {
-      id: slot.id,
-      label: slot.label,
-      utcTime: slot.utcTime,
-      durationMinutes: effectiveTradeSlotDuration(slot.durationMinutes),
+    secondsUntilOpen,
+    secondsUntilClose,
+    slot: displaySlot ? {
+      id: displaySlot.id,
+      label: displaySlot.label,
+      utcTime: displaySlot.utcTime,
+      durationMinutes: effectiveTradeSlotDuration(displaySlot.durationMinutes),
     } : null,
+    debug: buildTradeWindowDebug(now, currentSlot, nextSlot, status, secondsUntilOpen, secondsUntilClose),
   };
 }
+
+type TradeWindowSlot = { id: string; label: string; utcTime: string; durationMinutes: number };
 
 function formatTradeDisplayTime(value: Date) {
   return new Intl.DateTimeFormat("en-IN", {
@@ -376,11 +387,45 @@ function effectiveTradeSlotDuration(durationMinutes: number) {
   return Math.max(MIN_TRADE_WINDOW_MINUTES, Number.isFinite(durationMinutes) ? durationMinutes : 0);
 }
 
-async function ensureTradeSlotDurations(client: Pick<typeof prisma, "tradeSlot"> = prisma) {
+async function ensureRequiredTradeSlots(client: Pick<typeof prisma, "tradeSlot"> = prisma) {
+  for (const required of REQUIRED_TRADE_SLOTS) {
+    const slot = await client.tradeSlot.findFirst({ where: { label: required.label } });
+    if (slot) {
+      if (slot.utcTime !== required.utcTime || slot.durationMinutes < MIN_TRADE_WINDOW_MINUTES || !slot.enabled) {
+        await client.tradeSlot.update({
+          where: { id: slot.id },
+          data: { utcTime: required.utcTime, durationMinutes: MIN_TRADE_WINDOW_MINUTES, enabled: true },
+        });
+      }
+    } else {
+      await client.tradeSlot.create({
+        data: { label: required.label, utcTime: required.utcTime, durationMinutes: MIN_TRADE_WINDOW_MINUTES, enabled: true },
+      });
+    }
+  }
   await client.tradeSlot.updateMany({
     where: { durationMinutes: { lt: MIN_TRADE_WINDOW_MINUTES } },
     data: { durationMinutes: MIN_TRADE_WINDOW_MINUTES },
   });
+}
+
+function buildTradeWindowDebug(now: Date, currentSlot: TradeWindowSlot | null, nextSlot: TradeWindowSlot | null, tradeStatus: "LIVE" | "UPCOMING" | "CLOSED", secondsUntilOpen: number, secondsUntilClose: number) {
+  return {
+    serverNowUTC: now.toISOString(),
+    currentSlot: currentSlot ? serializeDebugSlot(currentSlot) : null,
+    nextSlot: nextSlot ? serializeDebugSlot(nextSlot) : null,
+    tradeStatus,
+    secondsUntilOpen,
+    secondsUntilClose,
+  };
+}
+
+function serializeDebugSlot(slot: TradeWindowSlot) {
+  return {
+    label: slot.label,
+    utcTime: slot.utcTime,
+    durationMinutes: effectiveTradeSlotDuration(slot.durationMinutes),
+  };
 }
 
 function tradeEligibilityAudit(input: { rowEligible: boolean; windowStatus: "LIVE" | "UPCOMING" | "CLOSED"; remaining: number; limit: number; aiActive: boolean; hasActivePackage: boolean; userVipRank: string; aiWalletActiveAmount: number; tradesUsedToday: number }) {

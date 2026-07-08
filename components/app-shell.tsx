@@ -1159,11 +1159,12 @@ function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; s
   const [loadingRow,setLoadingRow]=useState("");
   const [error,setError]=useState("");
   const [nowTick,setNowTick]=useState(0);
+  const countdownKey=tradeRowsCountdownKey(rows);
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(value => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => setNowTick(0), [rows]);
+  useEffect(() => setNowTick(0), [countdownKey]);
   const nextRow=rows.find(row=>row.tradeStatus==="LIVE") ?? rows.find(row=>row.tradeStatus==="UPCOMING") ?? rows[0];
   const nextTime=nextRow ? readableTradeTime(nextRow) : "";
   const start=async(row:VipTradeRow)=>{
@@ -1766,6 +1767,10 @@ function readableTradeTime(row: VipTradeRow) {
   return `${open} - ${close}${timezone ? ` ${timezone}` : ""}`;
 }
 
+function tradeRowsCountdownKey(rows: VipTradeRow[]) {
+  return rows.map(row => [row.id,row.tradeStatus,row.openTime,row.closeTime,row.secondsUntilOpen,row.secondsUntilClose,row.canTrade,row.canTradeWhenLive].join(":")).join("|");
+}
+
 function tradeCountdownLabel(row: VipTradeRow, tick: number) {
   const untilOpen = Math.max(0, Number(row.secondsUntilOpen ?? 0) - tick);
   const untilClose = Math.max(0, Number(row.secondsUntilClose ?? 0) - tick);
@@ -1893,11 +1898,12 @@ function CopyTradeScreen({activeTrade,bitexBalance,tradeRows,startTrade,complete
   const [error,setError]=useState("");
   const [loadingRow,setLoadingRow]=useState("");
   const [nowTick,setNowTick]=useState(0);
+  const countdownKey=tradeRowsCountdownKey(tradeRows);
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(value => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => setNowTick(0), [tradeRows]);
+  useEffect(() => setNowTick(0), [countdownKey]);
   const rows=tradeRows.length?tradeRows:[];
   const start=async(row:VipTradeRow)=>{
     setError("");
