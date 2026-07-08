@@ -10,6 +10,8 @@ const COPY_TRADE_STAKE_RATE = new Prisma.Decimal("0.01");
 const MIN_COPY_TRADE_STAKE = new Prisma.Decimal(MIN_COPY_TRADE_STAKE_USD);
 const INELIGIBLE_TRADE_MESSAGE = "You are not eligible for this trade.";
 const TRADE_UNAVAILABLE_MESSAGE = "Trade not available.";
+export const ALREADY_TRADED_IN_WINDOW = "ALREADY_TRADED_IN_WINDOW";
+export const ALREADY_TRADED_IN_WINDOW_MESSAGE = "You have already placed a trade in this window.";
 const TRADE_TIMEZONE = "IST";
 const TRADE_DISPLAY_TIMEZONE = "Asia/Kolkata";
 const MIN_TRADE_WINDOW_MINUTES = 30;
@@ -19,6 +21,14 @@ const REQUIRED_TRADE_SLOTS = [
   { label: "Window 2", utcTime: "12:30" },
   { label: "Window 3", utcTime: "18:10" },
 ] as const;
+
+export class AlreadyTradedInWindowError extends Error {
+  code = ALREADY_TRADED_IN_WINDOW;
+
+  constructor() {
+    super(ALREADY_TRADED_IN_WINDOW_MESSAGE);
+  }
+}
 
 export async function getCopyTradeStatus(userId: string, now = new Date()) {
   await ensureRequiredTradeSlots();
@@ -158,22 +168,22 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
 
     const slot = await findOpenTradeSlot(now, tx);
     if (!slot) throw new Error(TRADE_UNAVAILABLE_MESSAGE);
-    if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
-    const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
-    if (tradeAmount.lt(MIN_COPY_TRADE_STAKE)) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.`);
-
-    const dayStart = new Date(now);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const tradesToday = await tx.copyTrade.count({ where: { userId: input.userId, startedAt: { gte: dayStart } } });
-    const limit = dailyTradeLimit();
-    if (tradesToday >= limit) throw new Error("Daily trade limit reached");
     const slotStart = tradeSlotStart(slot.utcTime, now);
     const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
     const existingSlotTrade = await tx.copyTrade.findFirst({
       where: { userId: input.userId, slotId: slot.id, startedAt: { gte: slotStart, lt: slotEnd } },
       select: { id: true },
     });
-    if (existingSlotTrade) throw new Error("Trade already executed for this slot.");
+    if (existingSlotTrade) throw new AlreadyTradedInWindowError();
+
+    const dayStart = new Date(now);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const tradesToday = await tx.copyTrade.count({ where: { userId: input.userId, startedAt: { gte: dayStart } } });
+    const limit = dailyTradeLimit();
+    if (tradesToday >= limit) throw new Error("Daily trade limit reached");
+    if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
+    const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
+    if (tradeAmount.lt(MIN_COPY_TRADE_STAKE)) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.`);
 
     const locked = await tx.user.updateMany({
       where: { id: input.userId, bitexBalance: { gte: tradeAmount } },

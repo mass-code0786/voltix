@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { startVipCopyTrade } from "@/lib/domain/trade-service";
+import { ALREADY_TRADED_IN_WINDOW, AlreadyTradedInWindowError, startVipCopyTrade } from "@/lib/domain/trade-service";
 import { rateLimitByUser } from "@/lib/security";
 import { auditFailure, auditSuccess } from "@/lib/audit";
 
@@ -32,6 +32,9 @@ export async function POST(request: Request) {
     }, { status: 201 });
   } catch (error) {
     await auditFailure({ request, userId: user.id, role: "USER", action: "COPY_TRADE_EXECUTE", module: "COPY_TRADE", description: "Copy trade execution failed", metadata: { rowId }, errorMessage: error instanceof Error ? error.message : "Copy trade failed" }).catch(() => null);
+    if (error instanceof AlreadyTradedInWindowError) {
+      return NextResponse.json({ code: ALREADY_TRADED_IN_WINDOW, error: error.message }, { status: 409 });
+    }
     return NextResponse.json({ error: error instanceof Error ? error.message : "Copy trade failed" }, { status: 400 });
   }
 }
