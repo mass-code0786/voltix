@@ -8,6 +8,7 @@ type RateLimitOptions = {
 };
 
 const buckets = new Map<string, { count: number; resetAt: number }>();
+const authRateLimitDisabledPaths = new Set(["/api/auth/login", "/api/auth/register"]);
 
 export function clientIp(request: Request) {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -33,6 +34,7 @@ export function rateLimit(options: RateLimitOptions) {
 }
 
 export function rateLimitByIp(request: Request, scope: string, limit: number, windowMs: number) {
+  if (scope === "auth-register" && shouldSkipAuthRateLimit(request)) return null;
   return rateLimit({ key: `${scope}:ip:${clientIp(request)}`, limit, windowMs });
 }
 
@@ -45,11 +47,17 @@ export function rateLimitByAdmin(adminUserId: string) {
 }
 
 export function rateLimitLogin(request: Request, email: string) {
+  if (shouldSkipAuthRateLimit(request)) return null;
   return rateLimit({
     key: `auth-login:${clientIp(request)}:${email.toLowerCase()}`,
     limit: 5,
     windowMs: 10 * 60 * 1000,
   });
+}
+
+function shouldSkipAuthRateLimit(request: Request) {
+  if (process.env.DISABLE_AUTH_RATE_LIMIT !== "true" || request.method !== "POST") return false;
+  return authRateLimitDisabledPaths.has(new URL(request.url).pathname);
 }
 
 export async function auditAdminAction(input: {
