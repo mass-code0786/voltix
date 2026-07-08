@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, LockKeyhole, ShieldCheck } from "lucide-react";
+import { TransactionPinInput } from "@/components/transaction-pin-input";
 
 type SessionInfo = { id: string; createdAt: string; expiresAt: string };
 type TransactionPinStatus = { isSet: boolean; setAt: string | null };
@@ -108,7 +109,7 @@ function TransactionPinSection({ status, refreshed }: { status: TransactionPinSt
     setError("");
     setMessage("");
     if (!/^\d{6}$/.test(pin) || !/^\d{6}$/.test(confirmPin) || (mode === "change" && !/^\d{6}$/.test(currentPin))) {
-      setError("Transaction PIN must be exactly 6 digits.");
+      setError(pin || confirmPin || currentPin ? "Enter a valid 6-digit Transaction PIN." : "Transaction PIN required.");
       return;
     }
     if (pin !== confirmPin) {
@@ -123,6 +124,7 @@ function TransactionPinSection({ status, refreshed }: { status: TransactionPinSt
     setLoading(false);
     if (!response.ok) {
       setError(data.error || "Transaction PIN update failed");
+      reset();
       return;
     }
     reset();
@@ -138,11 +140,11 @@ function TransactionPinSection({ status, refreshed }: { status: TransactionPinSt
       <button type="button" onClick={() => { setMode("forgot"); setError(""); setMessage(""); }} className={`rounded-xl border py-2.5 text-[11px] font-black ${mode === "forgot" ? "border-[#18ff8a]/40 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-white/[.08] bg-black/25 text-slate-400"}`}>Forgot</button>
     </div>
     {mode === "forgot" ? <div className="mt-4 rounded-2xl border border-white/[.08] bg-black/25 p-4 text-sm font-bold leading-6 text-slate-300">Please contact support to reset your Transaction PIN.</div> : <form onSubmit={submit} className="mt-4 space-y-3">
-      {mode === "change" && <PinField label="Current PIN" value={currentPin} onChange={setCurrentPin} />}
-      <PinField label={mode === "create" ? "6 digit PIN" : "New 6 digit PIN"} value={pin} onChange={setPin} />
-      <PinField label={mode === "create" ? "Confirm 6 digit PIN" : "Confirm New PIN"} value={confirmPin} onChange={setConfirmPin} />
+      {mode === "change" && <TransactionPinInput label="Current PIN" value={currentPin} onChange={setCurrentPin} autoFocus />}
+      <TransactionPinInput label={mode === "create" ? "6 digit PIN" : "New 6 digit PIN"} value={pin} onChange={setPin} autoFocus={mode === "create"} />
+      <TransactionPinInput label={mode === "create" ? "Confirm 6 digit PIN" : "Confirm New PIN"} value={confirmPin} onChange={setConfirmPin} />
       {(error || message) && <p className={`text-xs font-bold ${error ? "text-[#ff4f6d]" : "text-[#18ff8a]"}`}>{error || message}</p>}
-      <button disabled={loading} className="w-full rounded-2xl bg-[#18ff8a] py-3.5 text-sm font-black text-[#050608] disabled:opacity-60">{loading ? "Working..." : mode === "create" ? "Create Transaction PIN" : "Change Transaction PIN"}</button>
+      <button disabled={loading || pin.length !== 6 || confirmPin.length !== 6 || (mode === "change" && currentPin.length !== 6)} className="w-full rounded-2xl bg-[#18ff8a] py-3.5 text-sm font-black text-[#050608] disabled:opacity-60">{loading ? "Working..." : mode === "create" ? "Create Transaction PIN" : "Change Transaction PIN"}</button>
     </form>}
   </section>;
 }
@@ -153,8 +155,4 @@ function Frame({ title, icon: Icon, children }: { title: string; icon: typeof Lo
 
 function Password({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return <label className="block text-xs font-bold text-slate-400">{label}<input type="password" value={value} onChange={event => onChange(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50" /></label>;
-}
-
-function PinField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="block text-xs font-bold text-slate-400">{label}<input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={value} onChange={event => onChange(event.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50" /></label>;
 }
