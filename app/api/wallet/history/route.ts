@@ -109,18 +109,34 @@ export async function GET() {
       direction: "DEBIT",
       amount: Number(row.principalAmount.toString()),
       signedAmount: -Number(row.principalAmount.toString()),
-      title: "Copy trade",
+      title: "AI Trade Principal Locked",
       referenceType: "COPY_TRADE",
       referenceId: row.id,
       status: cleanStatus(row.status),
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
+    ...trades.filter(row => row.incomeCreditedAt).map(row => ({
+      id: `${row.id}:principal-return`,
+      type: "COPY_TRADE_PRINCIPAL_RETURN",
+      walletType: displayWalletName("BITEX"),
+      asset: "USDT",
+      direction: "CREDIT" as const,
+      amount: Number(row.principalAmount.toString()),
+      signedAmount: Number(row.principalAmount.toString()),
+      title: "AI Trade Principal Return",
+      referenceType: "COPY_TRADE_PRINCIPAL_RETURN",
+      referenceId: row.id,
+      status: "Completed",
+      createdAt: row.incomeCreditedAt!.toISOString(),
+      sortAt: row.incomeCreditedAt!.toISOString(),
+    })),
   ];
 
   for (const row of historyRows) primaryReferences.add(referenceKey(row.referenceType, row.referenceId));
 
   const fallbackLedger = ledger
+    .filter(row => row.referenceType !== "COPY_TRADE_INCOME")
     .filter(row => !primaryReferences.has(referenceKey(row.referenceType, row.referenceId)))
     .map(row => ({
       ...row,
