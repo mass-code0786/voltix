@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Send, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { TransactionPinInput } from "@/components/transaction-pin-input";
 import { displayWalletName } from "@/lib/wallet-labels";
 
@@ -83,18 +83,14 @@ export default function WalletWithdrawPage() {
     setSuccess("Withdrawal request submitted. Status: pending admin approval.");
   };
 
-  return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-4 text-white sm:px-6">
+  return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-3 text-white sm:px-6">
     <div className="mx-auto max-w-2xl pb-[calc(7rem+env(safe-area-inset-bottom))]">
-      <header className="profile-glass rounded-[22px] p-4">
-        <div className="flex items-center justify-between">
-          <Link href="/?view=wallet" className="grid h-10 w-10 place-items-center rounded-xl border border-white/[.08] bg-black/25 text-[#18ff8a]" aria-label="Back to wallet"><ArrowLeft size={18}/></Link>
-          <div className="grid h-10 w-10 place-items-center rounded-xl border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]"><Send size={18}/></div>
-        </div>
-        <h1 className="mt-5 text-2xl font-black">{confirming?"Confirm Withdrawal":"Withdraw"}</h1>
-        <p className="mt-1 text-sm text-slate-500">Withdrawals are manual after balance validation.</p>
+      <header className="flex h-12 items-center gap-3">
+        <Link href="/?view=wallet" className="grid h-10 w-10 place-items-center text-white" aria-label="Back to wallet"><ArrowLeft size={22}/></Link>
+        <h1 className="text-xl font-black">{confirming?"Confirm Withdrawal":"Withdraw"}</h1>
       </header>
 
-      {loading?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-slate-400">Loading wallet...</section>:confirming?<section className="profile-glass mt-4 rounded-[22px] p-4">
+      {loading?<section className="profile-glass mt-2 rounded-[22px] p-5 text-sm text-slate-400">Loading wallet...</section>:confirming?<section className="profile-glass mt-2 rounded-[22px] p-4">
         <div className="rounded-2xl border border-[#18ff8a]/20 bg-[#18ff8a]/[.06] p-4">
           <h2 className="text-lg font-black">Confirm Withdrawal</h2>
           <p className="mt-1 text-xs text-slate-500">Enter your 6 digit Transaction PIN to submit this request.</p>
@@ -114,7 +110,7 @@ export default function WalletWithdrawPage() {
           <button onClick={()=>{setConfirming(false);setTransactionPin("");setError("");}} disabled={submitting} className="rounded-2xl border border-white/[.08] bg-black/25 py-3.5 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button>
           <button onClick={confirmWithdrawal} disabled={submitting||transactionPin.length!==6} className="rounded-2xl bg-[#18ff8a] py-3.5 text-xs font-black text-[#050608] disabled:opacity-60">{submitting?"Submitting...":"Confirm Withdrawal"}</button>
         </div>
-      </section>:<section className="profile-glass mt-4 rounded-[22px] p-4">
+      </section>:<section className="profile-glass mt-2 rounded-[22px] p-4">
         {success&&<div className="mb-4 flex items-center gap-3 rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 p-3 text-sm font-bold text-[#18ff8a]"><CheckCircle2 size={18}/>{success}</div>}
         <label className="block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={event=>{setWalletType(event.target.value as WalletType);resetError();}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="SPOT">Spot Wallet</option><option value="BITEX">AI Wallet</option></select></label>
         {locked&&<div className="mt-3 rounded-2xl border border-[#624e1a] bg-[#2a2412] p-3 text-xs leading-5 text-[#c9b98d]">AI withdrawal will unlock after completing 2x copy trade income.</div>}
