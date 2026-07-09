@@ -4,8 +4,6 @@ import { AI_ACTIVE_PRINCIPAL_THRESHOLD, isAiWalletActive } from "@/lib/domain/us
 import { displayWalletName } from "@/lib/wallet-labels";
 import { displayVipRank } from "@/lib/domain/vip-rank-service";
 
-const successfulDepositWhere = { status: { in: ["CONFIRMED", "CREDITED"] } } satisfies Prisma.DepositWhereInput;
-
 export async function getAdminOverview() {
   const [
     totalUsers,
@@ -24,9 +22,9 @@ export async function getAdminOverview() {
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { bitexPrincipal: { gte: AI_ACTIVE_PRINCIPAL_THRESHOLD } } }),
-    prisma.deposit.count({ where: successfulDepositWhere }),
+    prisma.deposit.count(),
     prisma.withdrawal.count(),
-    prisma.deposit.aggregate({ where: successfulDepositWhere, _sum: { amount: true } }),
+    prisma.deposit.aggregate({ _sum: { amount: true } }),
     prisma.withdrawal.aggregate({ _sum: { amount: true } }),
     prisma.income.aggregate({ _sum: { amount: true } }),
     prisma.withdrawal.count({ where: { status: "PENDING" } }),
