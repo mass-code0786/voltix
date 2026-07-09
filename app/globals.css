@@ -92,11 +92,10 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .voltix-landing-hero {
   display: grid;
-  min-height: clamp(30rem, 66svh, 45rem);
-  place-items: center;
+  place-items: start center;
   margin: 0 auto;
   max-width: 72rem;
-  padding: clamp(2.5rem, 6vw, 5rem) 0 40px;
+  padding: clamp(1.5rem, 4vw, 3rem) 0 20px;
   text-align: center;
 }
 
@@ -126,7 +125,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .voltix-phone-stage {
   display: grid;
   width: min(40rem, 96vw);
-  margin: clamp(1.875rem, 4vw, 2.5rem) auto 0;
+  margin: 24px auto 20px;
   place-items: center;
 }
 
@@ -135,13 +134,12 @@ button { -webkit-tap-highlight-color: transparent; }
   width: min(100%, 420px);
   height: auto;
   object-fit: contain;
-  animation: voltix-float 5.5s ease-in-out infinite;
   filter: drop-shadow(0 2rem 4rem rgba(0, 0, 0, .52)) drop-shadow(0 0 2.2rem rgba(24, 255, 138, .18));
 }
 
 @keyframes voltix-float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  50% { transform: translateY(-4px); }
 }
 
 .voltix-install-grid {
@@ -214,9 +212,8 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 
   .voltix-landing-hero {
-    min-height: auto;
-    padding: 3rem 0 40px;
-    align-content: center;
+    padding: 1.5rem 0 0;
+    align-content: start;
   }
 
   .voltix-landing-copy p {
@@ -233,7 +230,7 @@ button { -webkit-tap-highlight-color: transparent; }
 
   .voltix-phone-stage {
     width: 100%;
-    margin-top: 36px;
+    margin: 24px auto 20px;
   }
 
   .voltix-hero-mobile-image {
