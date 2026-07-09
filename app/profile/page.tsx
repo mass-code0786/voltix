@@ -93,7 +93,7 @@ const mobileTabs: { id: MobileNavTab; label: string; icon: IconType; section?: s
   { id: "profile", label: "Profile", icon: Settings },
 ];
 const maxProfilePhotoBytes = 5 * 1024 * 1024;
-const allowedProfilePhotoTypes = ["image/png", "image/jpeg", "image/webp"];
+const allowedProfilePhotoTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
 
 function initials(name: string) {
   return name
@@ -271,7 +271,7 @@ export default function ProfilePage() {
         return;
       } catch (err) {
         if (err instanceof Error && /cancel/i.test(err.message)) return;
-        setError(err instanceof Error ? err.message : "Photo selection failed");
+        fileInputRef.current?.click();
         return;
       }
     }
@@ -422,7 +422,7 @@ export default function ProfilePage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
               className="hidden"
               onChange={event => chooseBrowserProfilePhoto(event.target.files?.[0]).catch(err => setError(err instanceof Error ? err.message : "Profile photo upload failed"))}
             />

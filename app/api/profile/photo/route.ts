@@ -9,6 +9,7 @@ const maxPhotoBytes = 5 * 1024 * 1024;
 const allowedPhotoTypes = new Map([
   ["image/png", "png"],
   ["image/jpeg", "jpg"],
+  ["image/jpg", "jpg"],
   ["image/webp", "webp"],
 ]);
 
