@@ -105,20 +105,20 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .voltix-landing-copy p {
-  margin: 0 0 .8rem;
+  margin: 0 0 18px;
   color: #18ff8a;
-  font-size: clamp(.82rem, 2vw, 1rem);
+  font-size: clamp(1.4rem, 3vw, 1.7rem);
   font-weight: 900;
-  letter-spacing: .16em;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 
 .voltix-landing-copy h1 {
   max-width: 50rem;
   margin: 0;
-  font-size: clamp(2.55rem, 8vw, 6.4rem);
+  font-size: clamp(1.8rem, 5.6vw, 4.5rem);
   font-weight: 950;
-  line-height: .95;
+  line-height: 1.07;
   text-shadow: 0 0 38px rgba(24, 255, 138, .24);
 }
 
@@ -217,15 +217,15 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 
   .voltix-landing-copy p {
-    margin-bottom: .75rem;
-    font-size: 18px;
-    letter-spacing: .12em;
+    margin-bottom: 18px;
+    font-size: 31px;
+    letter-spacing: .06em;
   }
 
   .voltix-landing-copy h1 {
     max-width: 22rem;
-    font-size: min(42px, 12vw);
-    line-height: 1.03;
+    font-size: min(30px, 8.6vw);
+    line-height: 1.08;
   }
 
   .voltix-phone-stage {
