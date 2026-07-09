@@ -13,5 +13,10 @@ export async function GET() {
         select: { id: true, uid: true, name: true, email: true, country: true, language: true, vipRank: true, role: true },
       })
     : user;
-  return NextResponse.json({ authenticated: true, user: currentUser });
+  const latestKyc = await prisma.kycRequest.findFirst({
+    where: { userId: user.id },
+    orderBy: { submittedAt: "desc" },
+    select: { status: true },
+  });
+  return NextResponse.json({ authenticated: true, user: currentUser ? { ...currentUser, kycStatus: latestKyc?.status ?? "NOT_SUBMITTED" } : null });
 }

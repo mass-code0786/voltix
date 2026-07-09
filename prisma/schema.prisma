@@ -118,6 +118,7 @@ enum NotificationType {
   COPY_TRADE_INCOME
   REFERRAL_INCOME
   AI_SUBSCRIPTION_PURCHASE
+  AI_AUTO_TRADE
   P2P_TRANSFER
   KYC_STATUS
   ADMIN_TRADE_CODE
@@ -503,6 +504,10 @@ model SupportTicket {
   user         User                @relation(fields: [userId], references: [id])
   subject      String
   message      String
+  attachmentUrl String?
+  attachmentName String?
+  attachmentType String?
+  attachmentSize Int?
   status       SupportTicketStatus @default(OPEN)
   adminReply   String?
   repliedById  String?
@@ -570,6 +575,8 @@ model CopyTrade {
   code             TradeCode?  @relation(fields: [codeId], references: [id])
   slotId           String
   slot             TradeSlot   @relation(fields: [slotId], references: [id])
+  source           String      @default("MANUAL")
+  idempotencyKey   String?     @unique
   principalAmount  Decimal     @db.Decimal(36, 18)
   returnPercent    Decimal     @db.Decimal(10, 6)
   incomeAmount     Decimal?    @db.Decimal(36, 18)
@@ -588,6 +595,7 @@ model CopyTrade {
   @@index([status, creditDueAt])
   @@index([userId, startedAt])
   @@index([codeId])
+  @@index([source, startedAt])
 }
 
 model Income {

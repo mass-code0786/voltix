@@ -31,6 +31,7 @@ export default function KycPage() {
   const [loading,setLoading]=useState(true);
   const [submitting,setSubmitting]=useState(false);
   const [error,setError]=useState("");
+  const [success,setSuccess]=useState("");
   const [country,setCountry]=useState("United States");
   const [governmentIdType,setGovernmentIdType]=useState("Passport");
   const [governmentIdNumber,setGovernmentIdNumber]=useState("");
@@ -65,6 +66,7 @@ export default function KycPage() {
   const submit=async(event:FormEvent)=>{
     event.preventDefault();
     setError("");
+    setSuccess("");
     if(!canSubmit)return;
     if(!country.trim()||!governmentIdNumber.trim()||!frontUpload.file||!selfieUpload.file||backRequired&&!backUpload.file){setError("Complete all required verification fields");return;}
     setSubmitting(true);
@@ -80,6 +82,7 @@ export default function KycPage() {
     setSubmitting(false);
     if(!response.ok){setError(data.error||"KYC submission failed");return;}
     setSnapshot({status:"PENDING",request:data.kyc??null});
+    setSuccess(data.message||"Your KYC has been submitted successfully. It is now under review.");
   };
 
   const chooseFile=(setter:(value:UploadState)=>void,current:UploadState,file?:File)=>{
@@ -101,6 +104,7 @@ export default function KycPage() {
         </div>
         <h1 className="mt-5 text-2xl font-black">KYC Verification</h1>
       </header>
+      {success&&<div className="mt-4 rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 p-4 text-sm font-bold text-[#18ff8a]">{success}</div>}
 
       {loading?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-slate-400">Loading verification...</section>:error&&!snapshot?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-[#ff4f6d]">{error}</section>:snapshot?.status==="PENDING"?<StatusCard icon={Clock3} title="Your KYC is under review" text="Manual admin approval is pending." tone="pending"/>:snapshot?.status==="APPROVED"?<StatusCard icon={CheckCircle2} title="Your KYC is verified" text="Your identity verification has been approved." tone="approved"/>:<form onSubmit={submit} className="profile-glass mt-4 rounded-[22px] p-4">
         {snapshot?.status==="REJECTED"&&<div className="mb-4 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs text-[#ff8aa0]">{snapshot.request?.rejectionReason||"Your KYC was rejected. Please submit updated details."}</div>}

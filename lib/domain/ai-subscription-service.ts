@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { postBalancedJournal } from "./ledger";
 import { postBotSubscriptionCommission } from "./income-service";
-import { autoExecuteVipCopyTrade } from "./trade-service";
+import { autoExecuteVipCopyTrade, runAiAutoTradeScheduler } from "./trade-service";
 import { createNotification } from "./notification-service";
 
 const AI_PRICE = new Prisma.Decimal(15);
@@ -101,17 +101,8 @@ export async function purchaseAiSubscription(userId: string, idempotencyKey: str
 
 export async function runAiAutoCopyTradeJob(now = new Date()) {
   await expireOldSubscriptions(now);
-  const subscriptions = await prisma.aiSubscription.findMany({
-    where: { active: true, expiresAt: { gt: now } },
-    select: { userId: true },
-    take: 100,
-  });
-  let executed = 0;
-  for (const subscription of subscriptions) {
-    const result = await autoExecuteAiCopyTrade(subscription.userId, now).catch(() => ({ executed: false }));
-    if (result.executed) executed += 1;
-  }
-  return { checked: subscriptions.length, executed };
+  const result = await runAiAutoTradeScheduler(now);
+  return { checked: result.usersScanned, executed: result.tradesPlaced, ...result };
 }
 
 async function autoExecuteAiCopyTrade(userId: string, now = new Date()) {

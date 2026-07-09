@@ -12,6 +12,7 @@ const INELIGIBLE_TRADE_MESSAGE = "You are not eligible for this trade.";
 const TRADE_UNAVAILABLE_MESSAGE = "Trade not available.";
 export const ALREADY_TRADED_IN_WINDOW = "ALREADY_TRADED_IN_WINDOW";
 export const ALREADY_TRADED_IN_WINDOW_MESSAGE = "You have already placed a trade in this window.";
+export const AI_AUTO_TRADE_NOTIFICATION_MESSAGE = "AI Subscription auto trade placed successfully.";
 const TRADE_TIMEZONE = "IST";
 const TRADE_DISPLAY_TIMEZONE = "Asia/Kolkata";
 const MIN_TRADE_WINDOW_MINUTES = 30;
@@ -143,20 +144,71 @@ export async function startVipCopyTrade(input: { userId: string; rowId: string; 
   return executeVipCopyTrade({ ...input, actorType: "USER" });
 }
 
-export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Date }) {
+export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Date; idempotencyKey?: string }) {
   const now = input.now ?? new Date();
   const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { vipRank: true } });
   const row = getVipTradeRowForRank(user.vipRank);
   if (!row) return { executed: false, reason: INELIGIBLE_TRADE_MESSAGE };
   try {
-    const trade = await executeVipCopyTrade({ userId: input.userId, rowId: row.id, now, actorType: "SYSTEM" });
+    const trade = await executeVipCopyTrade({ userId: input.userId, rowId: row.id, now, actorType: "SYSTEM", source: "AI_SUBSCRIPTION", idempotencyKey: input.idempotencyKey });
     return { executed: true, tradeId: trade.id, rowId: row.id };
   } catch (error) {
     return { executed: false, reason: error instanceof Error ? error.message : "Auto copy trade failed" };
   }
 }
 
-async function executeVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string; actorType: "USER" | "SYSTEM" }) {
+export async function runAiAutoTradeScheduler(now = new Date()) {
+  await ensureRequiredTradeSlots();
+  await prisma.aiSubscription.updateMany({ where: { active: true, expiresAt: { lte: now } }, data: { active: false } });
+  const slot = await findOpenTradeSlot(now);
+  if (!slot) {
+    return {
+      lastRunAt: now.toISOString(),
+      liveWindow: null,
+      usersScanned: 0,
+      tradesPlaced: 0,
+      skipped: [] as { userId: string; reason: string }[],
+      errors: [] as { userId: string; error: string }[],
+    };
+  }
+  const slotStart = tradeSlotStart(slot.utcTime, now);
+  const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
+  const subscriptions = await prisma.aiSubscription.findMany({
+    where: { active: true, expiresAt: { gt: now } },
+    select: { userId: true },
+    distinct: ["userId"],
+    take: 500,
+  });
+  let tradesPlaced = 0;
+  const skipped: { userId: string; reason: string }[] = [];
+  const errors: { userId: string; error: string }[] = [];
+  for (const subscription of subscriptions) {
+    const idempotencyKey = `auto-trade:${subscription.userId}:${slotStart.toISOString()}`;
+    try {
+      const result = await autoExecuteVipCopyTrade({ userId: subscription.userId, now, idempotencyKey });
+      if (result.executed) tradesPlaced += 1;
+      else skipped.push({ userId: subscription.userId, reason: result.reason ?? "Skipped" });
+    } catch (error) {
+      errors.push({ userId: subscription.userId, error: error instanceof Error ? error.message : "Auto trade failed" });
+    }
+  }
+  return {
+    lastRunAt: now.toISOString(),
+    liveWindow: {
+      slotId: slot.id,
+      label: slot.label,
+      openTime: slotStart.toISOString(),
+      closeTime: slotEnd.toISOString(),
+      idempotencyScope: slotStart.toISOString(),
+    },
+    usersScanned: subscriptions.length,
+    tradesPlaced,
+    skipped,
+    errors,
+  };
+}
+
+async function executeVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string; actorType: "USER" | "SYSTEM"; source?: "MANUAL" | "AI_SUBSCRIPTION"; idempotencyKey?: string }) {
   const now = input.now ?? new Date();
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.findUniqueOrThrow({ where: { id: input.userId } });
@@ -199,6 +251,8 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
         userId: input.userId,
         codeId: null,
         slotId: slot.id,
+        source: input.source ?? "MANUAL",
+        idempotencyKey: input.idempotencyKey ?? null,
         principalAmount: tradeAmount,
         returnPercent: perTradePercent,
         status: TradeStatus.PENDING,
@@ -220,6 +274,8 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
           tradeRowId: row.id,
           tradeRowLabel: row.label,
           tradeAmount: tradeAmount.toString(),
+          source: input.source ?? "MANUAL",
+          idempotencyKey: input.idempotencyKey ?? null,
           dailyPercent: dailyPercent.toString(),
           perTradePercent: perTradePercent.toString(),
           startTime: now.toISOString(),
@@ -231,6 +287,15 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
         },
       },
     });
+    if (input.source === "AI_SUBSCRIPTION") {
+      await createNotification(tx, {
+        userId: input.userId,
+        type: "AI_AUTO_TRADE",
+        title: "AI auto trade placed",
+        message: AI_AUTO_TRADE_NOTIFICATION_MESSAGE,
+        metadata: { tradeId: trade.id, slotId: slot.id, slotOpenTime: slotStart.toISOString(), idempotencyKey: input.idempotencyKey ?? null },
+      });
+    }
     return trade;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

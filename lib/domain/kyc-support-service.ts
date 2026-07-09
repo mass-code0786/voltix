@@ -19,6 +19,10 @@ type TicketInput = {
   userId: string;
   subject: string;
   message: string;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentType?: string | null;
+  attachmentSize?: number | null;
 };
 
 export async function getUserKyc(userId: string) {
@@ -117,10 +121,19 @@ export async function getUserSupportTickets(userId: string) {
 
 export async function createSupportTicket(input: TicketInput) {
   const ticket = await prisma.supportTicket.create({
-    data: { userId: input.userId, subject: input.subject, message: input.message, status: "OPEN" },
+    data: {
+      userId: input.userId,
+      subject: input.subject,
+      message: input.message,
+      attachmentUrl: input.attachmentUrl ?? null,
+      attachmentName: input.attachmentName ?? null,
+      attachmentType: input.attachmentType ?? null,
+      attachmentSize: input.attachmentSize ?? null,
+      status: "OPEN",
+    },
   });
   await prisma.auditLog.create({
-    data: { actorId: input.userId, actorType: "USER", action: "SUPPORT_TICKET_CREATED", entityType: "SupportTicket", entityId: ticket.id, metadata: { status: ticket.status } },
+    data: { actorId: input.userId, actorType: "USER", action: "SUPPORT_TICKET_CREATED", entityType: "SupportTicket", entityId: ticket.id, metadata: { status: ticket.status, attachmentUrl: ticket.attachmentUrl } },
   });
   return serializeTicket(ticket);
 }
@@ -140,6 +153,8 @@ export async function getAdminSupportRows() {
       ticket.status,
       formatDate(ticket.createdAt),
       ticket.id,
+      ticket.attachmentUrl ?? "",
+      ticket.attachmentName ?? "",
     ]),
   };
 }
@@ -186,11 +201,15 @@ function serializeKyc(request: { id: string; fullName: string; dateOfBirth: Date
   };
 }
 
-function serializeTicket(ticket: { id: string; subject: string; message: string; status: SupportTicketStatus; adminReply: string | null; createdAt: Date; updatedAt: Date; repliedAt: Date | null }) {
+function serializeTicket(ticket: { id: string; subject: string; message: string; attachmentUrl: string | null; attachmentName: string | null; attachmentType: string | null; attachmentSize: number | null; status: SupportTicketStatus; adminReply: string | null; createdAt: Date; updatedAt: Date; repliedAt: Date | null }) {
   return {
     id: ticket.id,
     subject: ticket.subject,
     message: ticket.message,
+    attachmentUrl: ticket.attachmentUrl,
+    attachmentName: ticket.attachmentName,
+    attachmentType: ticket.attachmentType,
+    attachmentSize: ticket.attachmentSize,
     status: ticket.status,
     adminReply: ticket.adminReply,
     createdAt: ticket.createdAt.toISOString(),
