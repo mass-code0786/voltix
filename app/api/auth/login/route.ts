@@ -33,8 +33,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
-  await createSession(user.id);
+  const sessionToken = await createSession(user.id);
   await auditSuccess({ request, userId: user.role === "USER" ? user.id : undefined, adminId: user.role !== "USER" ? user.id : undefined, role: user.role === "USER" ? "USER" : "ADMIN", action: user.role === "USER" ? "LOGIN" : "ADMIN_LOGIN", module: "AUTH", description: `${user.role === "USER" ? "User" : "Admin"} login successful`, metadata: { email: user.email, uid: user.uid } }).catch(() => null);
   const { passwordHash: _passwordHash, status: _status, ...safeUser } = user;
-  return NextResponse.json({ authenticated: true, user: safeUser });
+  const isCapacitorLogin = request.headers.get("x-voltix-capacitor") === "1";
+  return NextResponse.json({
+    authenticated: true,
+    user: safeUser,
+    ...(isCapacitorLogin ? { mobileSessionToken: sessionToken } : {}),
+  });
 }

@@ -31,6 +31,9 @@ const config: CapacitorConfig = {
       style: KeyboardStyle.Dark,
       resizeOnFullScreen: true,
     },
+    PushNotifications: {
+      presentationOptions: ["badge", "sound", "alert"],
+    },
   },
   android: {
     allowMixedContent: false,

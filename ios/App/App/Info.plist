@@ -26,6 +26,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Voltix uses the camera to capture KYC and support documents when you choose to upload them.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Voltix uses Face ID to unlock your saved mobile session and confirm secure actions when you enable biometric login.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Voltix uses photo library access to let you select KYC and support documents.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

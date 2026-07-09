@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail, ShieldCheck, User } from "lucide-react";
 import { SearchableSelect } from "@/components/searchable-select";
+import { mobileFetchHeaders, offerBiometricEnrollment } from "@/lib/mobile-native";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 
 export type AuthMode = "login" | "register";
@@ -70,13 +71,14 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
       const response = await fetch(endpoint, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await mobileFetchHeaders()) },
         body: JSON.stringify(body),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Authentication failed");
       const user = await refreshAuthenticatedData();
       if (!user) throw new Error("Login session could not be verified. Please try again.");
+      if (mode === "login") await offerBiometricEnrollment(data.mobileSessionToken).catch(() => null);
       router.replace(returnTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");

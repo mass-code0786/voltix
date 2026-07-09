@@ -30,6 +30,7 @@ import {
 import { AppHeader, BottomNav } from "@/components/design-system";
 import { SearchableSelect } from "@/components/searchable-select";
 import { buildReferralLink, getClientAppOrigin } from "@/lib/app-url";
+import { clearMobileNativeSession, nativeShareReferral } from "@/lib/mobile-native";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 import { usd } from "@/lib/format";
 
@@ -280,6 +281,7 @@ export default function ProfilePage() {
       const response = await fetch("/api/auth/logout", { method: "POST", credentials: "include", cache: "no-store" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Logout failed");
+      await clearMobileNativeSession().catch(() => null);
       setProfile(null);
       setDashboard(null);
       setTeam(null);
@@ -300,6 +302,11 @@ export default function ProfilePage() {
 
   const copyReferral = async () => {
     if (!displayProfile?.referralLink) return;
+    const shared = await nativeShareReferral(displayProfile.referralLink).catch(() => false);
+    if (shared) {
+      notify("Referral link shared");
+      return;
+    }
     await navigator.clipboard?.writeText(displayProfile.referralLink);
     notify("Referral link copied");
   };

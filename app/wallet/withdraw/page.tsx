@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { TransactionPinInput } from "@/components/transaction-pin-input";
+import { hapticNotification, requestMobileTransactionToken } from "@/lib/mobile-native";
 import { displayWalletName } from "@/lib/wallet-labels";
 
 type WalletType = "SPOT" | "BITEX";
@@ -26,6 +27,7 @@ export default function WalletWithdrawPage() {
   const [network,setNetwork]=useState("BSC");
   const [confirming,setConfirming]=useState(false);
   const [transactionPin,setTransactionPin]=useState("");
+  const [mobileVerificationToken,setMobileVerificationToken]=useState("");
   const [submitting,setSubmitting]=useState(false);
   const [error,setError]=useState("");
   const [success,setSuccess]=useState("");
@@ -62,25 +64,36 @@ export default function WalletWithdrawPage() {
     if(!address.trim()){setError("Enter an external wallet or exchange address");return;}
     if(received<=0){setError("Withdrawal amount must exceed the total fee");return;}
     setTransactionPin("");
+    setMobileVerificationToken("");
     setConfirming(true);
     window.scrollTo({top:0,behavior:"smooth"});
   };
 
   const confirmWithdrawal=async()=>{
     resetError();
-    if(transactionPin.length!==6){setError("Invalid Transaction PIN.");return;}
+    if(!mobileVerificationToken&&transactionPin.length!==6){setError("Invalid Transaction PIN.");return;}
     setSubmitting(true);
-    const response=await fetch("/api/withdrawals",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({walletType,amount:value,address,network,transactionPin})});
+    const response=await fetch("/api/withdrawals",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({walletType,amount:value,address,network,transactionPin,mobileVerificationToken})});
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){
       setTransactionPin("");
+      setMobileVerificationToken("");
+      hapticNotification("error").catch(()=>null);
       setError(data.error||"Withdrawal request failed");
       return;
     }
     setConfirming(false);
     setTransactionPin("");
+    setMobileVerificationToken("");
+    hapticNotification("success").catch(()=>null);
     setSuccess("Withdrawal request submitted. Status: pending admin approval.");
+  };
+  const useBiometric=async()=>{
+    resetError();
+    const token=await requestMobileTransactionToken("withdrawal").catch(()=>null);
+    if(!token){setError("Biometric unavailable. Use Transaction PIN.");return;}
+    setMobileVerificationToken(token);
   };
 
   return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-3 text-white sm:px-6">
@@ -105,10 +118,11 @@ export default function WalletWithdrawPage() {
           <LineItem label="Receivable amount" value={`${received.toFixed(2)} USDT`}/>
         </div>
         <div className="mt-4"><TransactionPinInput label="Transaction PIN" value={transactionPin} onChange={setTransactionPin} autoFocus disabled={submitting}/></div>
+        <button type="button" onClick={useBiometric} disabled={submitting} className="mt-3 w-full rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 py-3 text-xs font-black text-[#18ff8a] disabled:opacity-60">{mobileVerificationToken?"Biometric ready":"Use biometric instead"}</button>
         {error&&<p className="mt-3 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs font-bold text-[#ff8aa0]">{error}</p>}
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <button onClick={()=>{setConfirming(false);setTransactionPin("");setError("");}} disabled={submitting} className="rounded-2xl border border-white/[.08] bg-black/25 py-3.5 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button>
-          <button onClick={confirmWithdrawal} disabled={submitting||transactionPin.length!==6} className="rounded-2xl bg-[#18ff8a] py-3.5 text-xs font-black text-[#050608] disabled:opacity-60">{submitting?"Submitting...":"Confirm Withdrawal"}</button>
+          <button onClick={()=>{setConfirming(false);setTransactionPin("");setMobileVerificationToken("");setError("");}} disabled={submitting} className="rounded-2xl border border-white/[.08] bg-black/25 py-3.5 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button>
+          <button onClick={confirmWithdrawal} disabled={submitting||(!mobileVerificationToken&&transactionPin.length!==6)} className="rounded-2xl bg-[#18ff8a] py-3.5 text-xs font-black text-[#050608] disabled:opacity-60">{submitting?"Submitting...":"Confirm Withdrawal"}</button>
         </div>
       </section>:<section className="profile-glass mt-2 rounded-[22px] p-4">
         {success&&<div className="mb-4 flex items-center gap-3 rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 p-3 text-sm font-bold text-[#18ff8a]"><CheckCircle2 size={18}/>{success}</div>}

@@ -4,9 +4,9 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 const scrypt = promisify(scryptCallback);
-const sessionCookieName = "voltix_session";
-const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
-const sessionCookieOptions = {
+export const sessionCookieName = "voltix_session";
+export const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
+export const sessionCookieOptions = {
   httpOnly: true,
   sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
   secure: process.env.NODE_ENV === "production",
@@ -31,15 +31,34 @@ export function hashSessionToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+export async function setSessionCookie(token: string, maxAge = sessionMaxAgeSeconds) {
+  const cookieStore = await cookies();
+  cookieStore.set(sessionCookieName, token, {
+    ...sessionCookieOptions,
+    maxAge,
+  });
+}
+
 export async function createSession(userId: string) {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + sessionMaxAgeSeconds * 1000);
   await prisma.session.create({ data: { userId, tokenHash: hashSessionToken(token), expiresAt } });
-  const cookieStore = await cookies();
-  cookieStore.set(sessionCookieName, token, {
-    ...sessionCookieOptions,
-    maxAge: sessionMaxAgeSeconds,
+  await setSessionCookie(token);
+  return token;
+}
+
+export async function restoreSessionFromToken(token: string, client = prisma) {
+  const session = await client.session.findUnique({
+    where: { tokenHash: hashSessionToken(token) },
+    include: { user: { select: { id: true, uid: true, name: true, email: true, country: true, language: true, vipRank: true, role: true, status: true } } },
   });
+  if (!session || session.expiresAt <= new Date() || session.user.status !== "ACTIVE") {
+    if (session) await client.session.deleteMany({ where: { id: session.id } });
+    return null;
+  }
+  await setSessionCookie(token, Math.max(1, Math.floor((session.expiresAt.getTime() - Date.now()) / 1000)));
+  const { status: _status, ...user } = session.user;
+  return user;
 }
 
 export async function clearSession() {

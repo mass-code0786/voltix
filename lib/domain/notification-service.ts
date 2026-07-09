@@ -1,5 +1,6 @@
 import { NotificationType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/firebase-push";
 
 type NotificationClient = Pick<Prisma.TransactionClient, "notification" | "user"> | typeof prisma;
 
@@ -34,7 +35,7 @@ export async function createNotification(client: NotificationClient, input: {
   message: string;
   metadata?: Prisma.InputJsonValue;
 }) {
-  return client.notification.create({
+  const notification = await client.notification.create({
     data: {
       userId: input.userId,
       type: input.type,
@@ -43,6 +44,13 @@ export async function createNotification(client: NotificationClient, input: {
       metadata: input.metadata ?? undefined,
     },
   });
+  void sendPushToUser({
+    userId: input.userId,
+    title: input.title,
+    body: input.message,
+    data: { type: input.type, notificationId: notification.id },
+  }).catch(error => console.error("[push] send failed", error));
+  return notification;
 }
 
 export async function broadcastNotification(input: {

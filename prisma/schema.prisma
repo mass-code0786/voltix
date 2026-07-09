@@ -184,6 +184,7 @@ model User {
   reviewedKycRequests   KycRequest[]     @relation("KycReviewer")
   supportTickets        SupportTicket[]
   notifications         Notification[]
+  pushDevices           PushDevice[]
   auditLogs             AuditLog[]       @relation("AuditActor")
   userAuditLogs         AuditLog[]       @relation("AuditUser")
   adminAuditLogs        AuditLog[]       @relation("AuditAdmin")
@@ -553,6 +554,23 @@ model Notification {
 
   @@index([userId, readAt, createdAt])
   @@index([type, createdAt])
+}
+
+model PushDevice {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  platform   String
+  appVersion String?
+  deviceId   String?
+  enabled    Boolean  @default(true)
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, enabled])
+  @@index([platform, enabled])
 }
 
 model TradeSlot {

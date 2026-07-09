@@ -6,6 +6,7 @@ import { createWithdrawalRequest, getUserWithdrawals } from "@/lib/domain/paymen
 import { rateLimitByUser } from "@/lib/security";
 import { auditFailure, auditSuccess } from "@/lib/audit";
 import { verifyTransactionPinForUser } from "@/lib/domain/transaction-pin-service";
+import { verifyMobileTransactionToken } from "@/lib/mobile-transaction-token";
 
 const withdrawalSchema = z.object({
   walletType: z.enum(["SPOT", "BITEX"]),
@@ -13,6 +14,7 @@ const withdrawalSchema = z.object({
   address: z.string().trim().min(1),
   network: z.string().trim().min(1).default("BSC"),
   transactionPin: z.string().trim().optional(),
+  mobileVerificationToken: z.string().trim().optional(),
 });
 
 export async function GET() {
@@ -33,7 +35,8 @@ export async function POST(request: Request) {
   try {
     const pinLimited = rateLimitByUser(user.id, "transaction-pin-withdrawal", 8, 15 * 60 * 1000);
     if (pinLimited) return pinLimited;
-    await verifyTransactionPinForUser(user.id, parsed.data.transactionPin);
+    const mobileVerified = verifyMobileTransactionToken(parsed.data.mobileVerificationToken, user.id, "withdrawal");
+    if (!mobileVerified) await verifyTransactionPinForUser(user.id, parsed.data.transactionPin);
     const withdrawal = await createWithdrawalRequest({
       userId: user.id,
       walletType: parsed.data.walletType,

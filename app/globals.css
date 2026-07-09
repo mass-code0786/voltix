@@ -19,6 +19,60 @@ button { -webkit-tap-highlight-color: transparent; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 .glass { background: linear-gradient(145deg, rgba(19,31,26,.96), rgba(12,22,18,.94)); }
+.voltix-native-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  background: radial-gradient(circle at 50% 42%, rgba(24, 255, 138, .16), transparent 34%), #050807;
+  color: #fff;
+}
+.voltix-native-loader {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-items: center;
+  border-radius: 30px;
+  border: 1px solid rgba(24, 255, 138, .28);
+  background: linear-gradient(145deg, rgba(24, 255, 138, .14), rgba(255, 255, 255, .04));
+  box-shadow: 0 0 52px rgba(24, 255, 138, .22), inset 0 0 22px rgba(24, 255, 138, .09);
+  animation: voltix-loader-pulse 1.45s ease-in-out infinite;
+}
+.voltix-native-loader.small { width: 70px; height: 70px; border-radius: 22px; }
+.voltix-native-loader span {
+  font-size: 48px;
+  font-weight: 1000;
+  line-height: 1;
+  color: #18ff8a;
+  text-shadow: 0 0 24px rgba(24, 255, 138, .9);
+}
+.voltix-native-loader.small span { font-size: 34px; }
+.voltix-offline-card {
+  width: min(100%, 360px);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  border: 1px solid rgba(24, 255, 138, .18);
+  border-radius: 28px;
+  background: rgba(12, 20, 16, .92);
+  padding: 28px 22px;
+  text-align: center;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .42);
+}
+.voltix-offline-card h2 { margin: 4px 0 0; font-size: 22px; font-weight: 1000; }
+.voltix-offline-card p { margin: 0; max-width: 260px; color: #8ba296; font-size: 13px; line-height: 1.5; }
+.voltix-offline-card button {
+  width: 100%;
+  border: 0;
+  border-radius: 16px;
+  background: #18ff8a;
+  padding: 13px 18px;
+  color: #050807;
+  font-size: 13px;
+  font-weight: 1000;
+}
 .grid-fade {
   background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
   background-size: 28px 28px;
@@ -26,6 +80,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .ticker { animation: ticker 24s linear infinite; }
 @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @keyframes pulse-ring { 0%,100% { box-shadow: 0 0 0 0 rgba(24,255,138,.25); } 50% { box-shadow: 0 0 0 10px rgba(24,255,138,0); } }
+@keyframes voltix-loader-pulse { 0%,100% { transform: scale(.96); opacity: .78; } 50% { transform: scale(1.03); opacity: 1; } }
 .pulse-ring { animation: pulse-ring 2s infinite; }
 
 .voltix-landing {
