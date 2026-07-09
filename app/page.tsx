@@ -26,9 +26,8 @@ export default async function HomePage() {
           <p>Welcome to VOLTIX</p>
           <h1>Trade Smarter. Earn Faster.</h1>
         </div>
-        <div className="voltix-phone-stage" aria-hidden="true">
-          <PhoneMockup variant="dashboard" />
-          <PhoneMockup variant="markets" />
+        <div className="voltix-phone-stage">
+          <img src="/mobile.png" alt="Voltix mobile app screens" className="voltix-hero-mobile-image" />
         </div>
       </section>
 
@@ -48,42 +47,5 @@ function InstallCard({ title, button, href }: { title: string; button: string; h
       <h2>{title}</h2>
       <a href={href} className="voltix-install-button">{button}</a>
     </article>
-  );
-}
-
-function PhoneMockup({ variant }: { variant: "dashboard" | "markets" }) {
-  const coins = variant === "dashboard"
-    ? [["USDT", "$12,840"], ["AI", "+18.4%"], ["VIP", "Active"]]
-    : [["BTC", "+2.8%"], ["ETH", "+3.6%"], ["SOL", "+6.2%"]];
-
-  return (
-    <div className={`voltix-phone voltix-phone-${variant}`}>
-      <div className="voltix-phone-speaker" />
-      <div className="voltix-phone-screen">
-        <div className="voltix-phone-top">
-          <span>Voltix</span>
-          <i />
-        </div>
-        <div className="voltix-phone-balance">
-          <small>{variant === "dashboard" ? "Assets" : "Markets"}</small>
-          <strong>{variant === "dashboard" ? "$24,918.50" : "Live Prices"}</strong>
-        </div>
-        <div className="voltix-phone-chart">
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="voltix-phone-list">
-          {coins.map(([label, value]) => (
-            <div key={label}>
-              <b>{label}</b>
-              <em>{value}</em>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
   );
 }

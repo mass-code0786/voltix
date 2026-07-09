@@ -125,139 +125,18 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .voltix-phone-stage {
-  position: relative;
-  width: min(38rem, 96vw);
-  height: clamp(22rem, 50vw, 34rem);
-  margin-top: clamp(1.5rem, 4vw, 2.5rem);
-}
-
-.voltix-phone {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: clamp(11.5rem, 26vw, 16rem);
-  aspect-ratio: 9 / 18.6;
-  border: .55rem solid #101916;
-  border-radius: 2.2rem;
-  background: #050807;
-  box-shadow:
-    0 2rem 5rem rgba(0, 0, 0, .6),
-    0 0 0 1px rgba(24, 255, 138, .18),
-    0 0 3rem rgba(24, 255, 138, .18);
-}
-
-.voltix-phone-dashboard {
-  transform: translate(-76%, -42%) rotate(-13deg);
-  z-index: 2;
-}
-
-.voltix-phone-markets {
-  transform: translate(-22%, -38%) rotate(13deg);
-  z-index: 1;
-}
-
-.voltix-phone-speaker {
-  position: absolute;
-  left: 50%;
-  top: .55rem;
-  z-index: 3;
-  width: 3rem;
-  height: .34rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .16);
-  transform: translateX(-50%);
-}
-
-.voltix-phone-screen {
-  height: 100%;
-  overflow: hidden;
-  border-radius: 1.65rem;
-  padding: 2.2rem .85rem .9rem;
-  background:
-    radial-gradient(circle at 72% 12%, rgba(24, 255, 138, .2), transparent 6rem),
-    linear-gradient(180deg, #0d1b14 0%, #07100d 100%);
-}
-
-.voltix-phone-top,
-.voltix-phone-list div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.voltix-phone-top span {
-  color: #f3f7f5;
-  font-size: .78rem;
-  font-weight: 950;
-}
-
-.voltix-phone-top i {
-  width: .65rem;
-  height: .65rem;
-  border-radius: 999px;
-  background: #18ff8a;
-  box-shadow: 0 0 1.1rem rgba(24, 255, 138, .8);
-}
-
-.voltix-phone-balance {
-  margin-top: 1.2rem;
-  border: 1px solid rgba(24, 255, 138, .18);
-  border-radius: 1rem;
-  padding: .85rem;
-  background: rgba(255, 255, 255, .045);
-}
-
-.voltix-phone-balance small,
-.voltix-phone-list em {
-  color: #8ea29a;
-  font-size: .62rem;
-  font-style: normal;
-  font-weight: 800;
-}
-
-.voltix-phone-balance strong {
-  display: block;
-  margin-top: .25rem;
-  color: #18ff8a;
-  font-size: 1.18rem;
-  font-weight: 950;
-}
-
-.voltix-phone-chart {
-  display: flex;
-  height: 5.5rem;
-  align-items: end;
-  gap: .38rem;
-  margin: 1rem 0;
-}
-
-.voltix-phone-chart span {
-  flex: 1;
-  border-radius: 999px 999px .35rem .35rem;
-  background: linear-gradient(180deg, #18ff8a, rgba(24, 255, 138, .18));
-}
-
-.voltix-phone-chart span:nth-child(1) { height: 44%; }
-.voltix-phone-chart span:nth-child(2) { height: 70%; }
-.voltix-phone-chart span:nth-child(3) { height: 56%; }
-.voltix-phone-chart span:nth-child(4) { height: 86%; }
-.voltix-phone-chart span:nth-child(5) { height: 64%; }
-
-.voltix-phone-list {
   display: grid;
-  gap: .45rem;
+  width: min(40rem, 96vw);
+  margin-top: clamp(1.5rem, 4vw, 2.5rem);
+  place-items: center;
 }
 
-.voltix-phone-list div {
-  border: 1px solid rgba(255, 255, 255, .075);
-  border-radius: .8rem;
-  padding: .55rem .65rem;
-  background: rgba(0, 0, 0, .22);
-}
-
-.voltix-phone-list b {
-  color: #f3f7f5;
-  font-size: .68rem;
+.voltix-hero-mobile-image {
+  display: block;
+  width: min(100%, 34rem);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 2rem 4rem rgba(0, 0, 0, .55)) drop-shadow(0 0 2rem rgba(24, 255, 138, .16));
 }
 
 .voltix-install-grid {
@@ -321,15 +200,8 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 
   .voltix-phone-stage {
-    height: 24rem;
-  }
-
-  .voltix-phone-dashboard {
-    transform: translate(-72%, -38%) rotate(-12deg);
-  }
-
-  .voltix-phone-markets {
-    transform: translate(-28%, -36%) rotate(12deg);
+    width: 100%;
+    margin-top: 1.25rem;
   }
 
   .voltix-install-grid {
