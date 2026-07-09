@@ -19,6 +19,44 @@ button { -webkit-tap-highlight-color: transparent; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 .glass { background: linear-gradient(145deg, rgba(19,31,26,.96), rgba(12,22,18,.94)); }
+html.voltix-capacitor,
+body.voltix-capacitor {
+  background: #050b08;
+}
+html.voltix-capacitor {
+  --voltix-safe-top: max(env(safe-area-inset-top), 12px);
+  --voltix-safe-bottom: max(env(safe-area-inset-bottom), 18px);
+}
+html.voltix-capacitor .voltix-app-header {
+  top: 0;
+  height: calc(64px + var(--voltix-safe-top));
+  padding-top: var(--voltix-safe-top);
+  background: rgba(5, 11, 8, .94);
+}
+html.voltix-capacitor .voltix-app-header > div {
+  height: 64px;
+}
+html.voltix-capacitor .voltix-bottom-nav {
+  bottom: calc(var(--voltix-safe-bottom) + 12px);
+}
+html.voltix-capacitor .dark-gradient-bg {
+  padding-bottom: calc(126px + var(--voltix-safe-bottom));
+}
+html.voltix-capacitor .profile-page {
+  padding-top: max(.75rem, var(--voltix-safe-top));
+  padding-bottom: calc(120px + var(--voltix-safe-bottom));
+}
+html.voltix-capacitor .auth-premium-page > div {
+  padding-top: calc(var(--voltix-safe-top) + .75rem);
+  padding-bottom: calc(2rem + var(--voltix-safe-bottom));
+}
+html.voltix-capacitor .voltix-landing {
+  padding-top: calc(var(--voltix-safe-top) + 1rem);
+  padding-bottom: calc(1.25rem + var(--voltix-safe-bottom));
+}
+html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
+  bottom: calc(96px + var(--voltix-safe-bottom));
+}
 .voltix-native-overlay {
   position: fixed;
   inset: 0;
@@ -2442,6 +2480,10 @@ textarea:focus {
   color: #18ff8a;
   font-size: 26px;
   font-weight: 900;
+  overflow: visible;
+  padding: 0;
+  appearance: none;
+  cursor: pointer;
   box-shadow:
     0 0 34px rgba(24,255,138,.22),
     inset 0 1px 0 rgba(255,255,255,.18),
@@ -2705,6 +2747,24 @@ textarea:focus {
   overflow: hidden;
   border-radius: 22px;
   padding: 11px 0 11px 15px;
+}
+.profile-avatar:disabled {
+  cursor: wait;
+  opacity: .72;
+}
+.profile-avatar > img {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+.profile-avatar > span:first-child {
+  display: grid;
+  height: 100%;
+  width: 100%;
+  place-items: center;
+  border-radius: inherit;
 }
 
 .ai-trade-hero::before {

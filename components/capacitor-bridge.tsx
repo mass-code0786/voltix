@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getMobileSessionTokenWithBiometric, getNativePlatform, hapticImpact, isVoltixNativeApp, mobileFetchHeaders, savePushToken } from "@/lib/mobile-native";
 
-const VOLTIX_STATUS_BAR_COLOR = "#050807";
+const VOLTIX_STATUS_BAR_COLOR = "#050b08";
 const refreshRoutes = ["/dashboard", "/profile"];
 
 export function CapacitorBridge() {
@@ -25,6 +25,8 @@ export function CapacitorBridge() {
 
       if (!Capacitor.isNativePlatform()) return;
       setBooting(true);
+      document.documentElement.classList.add("voltix-capacitor");
+      document.body.classList.add("voltix-capacitor");
 
       await Promise.allSettled([
         StatusBar.setStyle({ style: Style.Dark }),
@@ -65,6 +67,8 @@ export function CapacitorBridge() {
         networkListener.remove();
         document.removeEventListener("click", clickHandler);
         refreshCleanup();
+        document.documentElement.classList.remove("voltix-capacitor");
+        document.body.classList.remove("voltix-capacitor");
       };
     }
 

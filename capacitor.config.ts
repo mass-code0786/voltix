@@ -10,12 +10,12 @@ const config: CapacitorConfig = {
     cleartext: false,
     allowNavigation: ["voltix.zenithsoftech.com"],
   },
-  backgroundColor: "#050807",
+  backgroundColor: "#050b08",
   plugins: {
     SplashScreen: {
       launchShowDuration: 1200,
       launchAutoHide: true,
-      backgroundColor: "#050807",
+      backgroundColor: "#050b08",
       androidScaleType: "CENTER_CROP",
       showSpinner: false,
       splashFullScreen: true,
@@ -23,7 +23,7 @@ const config: CapacitorConfig = {
     },
     StatusBar: {
       style: "DARK",
-      backgroundColor: "#050807",
+      backgroundColor: "#050b08",
       overlaysWebView: false,
     },
     Keyboard: {

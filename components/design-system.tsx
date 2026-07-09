@@ -34,7 +34,7 @@ type HeaderProps = {
 export function AppHeader({ title, subtitle, compactBrand = true, initials, unreadNotifications = 0, variant = "default", onBack, onMenuButton, onNotifications, onMenu }: HeaderProps) {
   if (variant === "ai") {
     return (
-      <header className="sticky top-0 z-30 h-[62px] bg-[#050807]/82 px-4 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
+      <header className="voltix-app-header sticky top-0 z-30 h-[62px] bg-[#050807]/82 px-4 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
         <div className="mx-auto flex h-[72px] max-w-[420px] items-center justify-between gap-3 lg:max-w-6xl">
           <div className="flex min-w-0 items-center gap-2.5">
             <button onClick={onBack} className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full border border-white/[.1] bg-white/[.045] text-white shadow-[0_0_24px_rgba(24,255,138,.12),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Back">
@@ -58,7 +58,7 @@ export function AppHeader({ title, subtitle, compactBrand = true, initials, unre
   }
 
   return (
-    <header className="sticky top-0 z-30 h-[62px] bg-[#060a08]/72 px-5 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
+    <header className="voltix-app-header sticky top-0 z-30 h-[62px] bg-[#060a08]/72 px-5 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
       <div className="mx-auto flex h-[72px] max-w-[420px] items-center justify-between gap-3 lg:max-w-6xl">
         <div className="flex h-[48px] w-fit shrink-0 items-center justify-start">
           <img src="/logo.png" alt="VOLTIX" className="block h-[21px] w-auto max-w-none object-contain opacity-100 mix-blend-normal filter-none transform-none" />
@@ -88,7 +88,7 @@ type BottomNavProps<T extends string> = {
 
 export function BottomNav<T extends string>({ items, activeId, activeSection, labelFor, onSelect }: BottomNavProps<T>) {
   return (
-    <nav className="fixed bottom-3 left-4 right-4 z-50 mx-auto max-w-[430px] lg:hidden">
+    <nav className="voltix-bottom-nav fixed bottom-3 left-4 right-4 z-50 mx-auto max-w-[430px] lg:hidden">
       <div className="relative mx-auto flex h-[66px] w-full max-w-full items-center justify-around rounded-full border border-white/[.12] bg-[rgba(5,8,7,0.88)] px-2 shadow-[0_-14px_42px_rgba(0,0,0,.48),0_0_26px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl">
         <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 z-0 h-14 w-14 -translate-x-1/2 -translate-y-7 rounded-full bg-[rgba(5,8,7,0.88)] shadow-[0_0_14px_rgba(24,255,138,0.18),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-2xl" />
         {items.map(({ id, label, icon: Icon, section }) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, type ComponentType } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideProps } from "lucide-react";
 import {
@@ -30,7 +30,7 @@ import {
 import { AppHeader, BottomNav } from "@/components/design-system";
 import { SearchableSelect } from "@/components/searchable-select";
 import { buildReferralLink, getClientAppOrigin } from "@/lib/app-url";
-import { clearMobileNativeSession, nativeShareReferral } from "@/lib/mobile-native";
+import { clearMobileNativeSession, isVoltixNativeApp, nativeShareReferral } from "@/lib/mobile-native";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 import { usd } from "@/lib/format";
 
@@ -92,6 +92,8 @@ const mobileTabs: { id: MobileNavTab; label: string; icon: IconType; section?: s
   { id: "wallet", label: "Wallet", icon: Wallet, section: "overview" },
   { id: "profile", label: "Profile", icon: Settings },
 ];
+const maxProfilePhotoBytes = 5 * 1024 * 1024;
+const allowedProfilePhotoTypes = ["image/png", "image/jpeg", "image/webp"];
 
 function initials(name: string) {
   return name
@@ -135,8 +137,10 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const kycTone = useMemo(() => {
     if (profile?.kycStatus === "APPROVED") return "border-[#18ff8a]/30 bg-[#18ff8a]/10 text-[#18ff8a]";
@@ -243,6 +247,75 @@ export default function ProfilePage() {
     notify("Profile updated");
   };
 
+  const chooseProfilePhoto = async () => {
+    setError("");
+    setMessage("");
+    if (uploadingPhoto) return;
+    if (await isVoltixNativeApp()) {
+      try {
+        const { Camera, CameraResultType, CameraSource } = await import("@capacitor/camera");
+        const photo = await Camera.getPhoto({
+          quality: 88,
+          allowEditing: false,
+          resultType: CameraResultType.Uri,
+          source: CameraSource.Prompt,
+          promptLabelHeader: "Profile Photo",
+          promptLabelPhoto: "Choose from Gallery",
+          promptLabelPicture: "Take Photo",
+        });
+        if (!photo.webPath) throw new Error("Photo selection failed");
+        const photoResponse = await fetch(photo.webPath);
+        const blob = await photoResponse.blob();
+        const type = blob.type || mimeFromFormat(photo.format);
+        await uploadProfilePhoto(new File([blob], `profile-photo.${extensionFromMime(type)}`, { type }));
+        return;
+      } catch (err) {
+        if (err instanceof Error && /cancel/i.test(err.message)) return;
+        setError(err instanceof Error ? err.message : "Photo selection failed");
+        return;
+      }
+    }
+    fileInputRef.current?.click();
+  };
+
+  const chooseBrowserProfilePhoto = async (file?: File) => {
+    if (!file) return;
+    await uploadProfilePhoto(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const uploadProfilePhoto = async (file: File) => {
+    setError("");
+    setMessage("");
+    if (!allowedProfilePhotoTypes.includes(file.type)) {
+      setError("Only PNG, JPG, JPEG, or WEBP images are allowed");
+      return;
+    }
+    if (file.size > maxProfilePhotoBytes) {
+      setError("Profile photo must be 5MB or smaller");
+      return;
+    }
+    const form = new FormData();
+    form.set("photo", file);
+    setUploadingPhoto(true);
+    try {
+      const response = await fetch("/api/profile/photo", { method: "POST", credentials: "include", body: form });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.profileImageUrl) {
+        setError(data.error || "Profile photo upload failed");
+        return;
+      }
+      const nextUrl = String(data.profileImageUrl);
+      setProfile(current => current ? { ...current, avatar: nextUrl, profileImageUrl: nextUrl } : current);
+      setProfileImageUrl(nextUrl);
+      notify("Profile photo updated");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Profile photo upload failed");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   const changePassword = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
@@ -343,6 +416,15 @@ export default function ProfilePage() {
               referralIncome={referralIncome}
               teamSize={teamSize}
               copyUid={copyUid}
+              uploadPhoto={chooseProfilePhoto}
+              uploadingPhoto={uploadingPhoto}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={event => chooseBrowserProfilePhoto(event.target.files?.[0]).catch(err => setError(err instanceof Error ? err.message : "Profile photo upload failed"))}
             />
 
             <VipProgressCard currentVip={currentVip} nextVip={nextVip} progress={vipProgress} />
@@ -404,14 +486,15 @@ export default function ProfilePage() {
   );
 }
 
-function ProfileHero({profile,initialsText,kycTone,totalBalance,totalIncome,referralIncome,teamSize,copyUid}:{profile:Profile;initialsText:string;kycTone:string;totalBalance:number;totalIncome:number;referralIncome:number;teamSize:number;copyUid:()=>void}) {
+function ProfileHero({profile,initialsText,kycTone,totalBalance,totalIncome,referralIncome,teamSize,copyUid,uploadPhoto,uploadingPhoto}:{profile:Profile;initialsText:string;kycTone:string;totalBalance:number;totalIncome:number;referralIncome:number;teamSize:number;copyUid:()=>void;uploadPhoto:()=>void;uploadingPhoto:boolean}) {
+  const photoUrl = profile.profileImageUrl || profile.avatar;
   return (
     <section className="profile-hero-card">
       <div className="profile-hero-main">
-        <div className="profile-avatar">
-          <span>{initialsText}</span>
+        <button type="button" onClick={uploadPhoto} disabled={uploadingPhoto} className="profile-avatar" aria-label="Upload profile photo">
+          {photoUrl ? <img src={photoUrl} alt={profile.fullName || "Profile"} /> : <span>{initialsText}</span>}
           <span className="profile-camera"><Camera size={13}/></span>
-        </div>
+        </button>
         <div className="profile-identity">
           <div className="flex min-w-0 items-center gap-1.5">
             <h1 className="profile-name">{profile.fullName || "—"}</h1>
@@ -437,6 +520,19 @@ function ProfileHero({profile,initialsText,kycTone,totalBalance,totalIncome,refe
       </div>
     </section>
   );
+}
+
+function mimeFromFormat(format?: string) {
+  const normalized = format?.toLowerCase();
+  if (normalized === "png") return "image/png";
+  if (normalized === "webp") return "image/webp";
+  return "image/jpeg";
+}
+
+function extensionFromMime(type: string) {
+  if (type === "image/png") return "png";
+  if (type === "image/webp") return "webp";
+  return "jpg";
 }
 
 function VoltixVMark() {
