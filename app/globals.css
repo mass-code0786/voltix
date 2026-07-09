@@ -125,13 +125,14 @@ button { -webkit-tap-highlight-color: transparent; }
 .voltix-phone-stage {
   display: grid;
   width: min(40rem, 96vw);
-  margin: 14px auto 12px;
+  margin: 16px auto;
   place-items: center;
 }
 
 .voltix-hero-mobile-image {
   display: block;
-  width: min(100%, 420px);
+  width: 90%;
+  max-width: 430px;
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 2rem 4rem rgba(0, 0, 0, .52)) drop-shadow(0 0 2.2rem rgba(24, 255, 138, .18));
@@ -230,12 +231,12 @@ button { -webkit-tap-highlight-color: transparent; }
 
   .voltix-phone-stage {
     width: 100%;
-    margin: 12px auto 12px;
+    margin: 16px auto;
   }
 
   .voltix-hero-mobile-image {
-    width: 85%;
-    max-width: 420px;
+    width: 90%;
+    max-width: 430px;
   }
 
   .voltix-install-grid {
