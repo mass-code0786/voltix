@@ -26,7 +26,7 @@ type TicketInput = {
 };
 
 export async function getUserKyc(userId: string) {
-  const request = await prisma.kycRequest.findFirst({ where: { userId }, orderBy: { submittedAt: "desc" } });
+  const request = await prisma.kycRequest.findFirst({ where: { userId }, orderBy: { submittedAt: "desc" }, include: { reviewedBy: { select: { name: true, uid: true } } } });
   return {
     status: request?.status ?? "NOT_SUBMITTED",
     request: request ? serializeKyc(request) : null,
@@ -35,11 +35,11 @@ export async function getUserKyc(userId: string) {
 
 export async function submitUserKyc(input: KycInput) {
   const activeRequest = await prisma.kycRequest.findFirst({
-    where: { userId: input.userId, status: { in: ["PENDING", "APPROVED"] } },
+    where: { userId: input.userId, status: { in: ["PENDING", "UNDER_REVIEW", "APPROVED"] } },
     orderBy: { submittedAt: "desc" },
     select: { status: true },
   });
-  if (activeRequest?.status === "PENDING") throw new Error("KYC request is already pending");
+  if (activeRequest?.status === "PENDING" || activeRequest?.status === "UNDER_REVIEW") throw new Error("KYC request is already under review");
   if (activeRequest?.status === "APPROVED") throw new Error("KYC is already approved");
 
   const request = await prisma.kycRequest.create({
@@ -54,7 +54,7 @@ export async function submitUserKyc(input: KycInput) {
       frontIdImageUrl: input.frontIdImageUrl,
       backIdImageUrl: input.backIdImageUrl ?? null,
       selfieImageUrl: input.selfieImageUrl,
-      status: "PENDING",
+      status: "UNDER_REVIEW",
     },
   });
   await prisma.auditLog.create({
@@ -90,6 +90,9 @@ export async function getAdminKycRows() {
 
 export async function reviewKyc(input: { id: string; adminUserId: string; status: Extract<KycStatus, "APPROVED" | "REJECTED">; reason?: string }) {
   const request = await prisma.$transaction(async tx => {
+    const current = await tx.kycRequest.findUnique({ where: { id: input.id }, select: { status: true } });
+    if (!current) throw new Error("KYC request not found");
+    if (current.status !== "PENDING" && current.status !== "UNDER_REVIEW") throw new Error("KYC request has already been reviewed");
     const reviewed = await tx.kycRequest.update({
       where: { id: input.id },
       data: {
@@ -98,6 +101,7 @@ export async function reviewKyc(input: { id: string; adminUserId: string; status
         reviewedAt: new Date(),
         rejectionReason: input.status === "REJECTED" ? input.reason ?? "Rejected by admin" : null,
       },
+      include: { reviewedBy: { select: { name: true, uid: true } } },
     });
     await tx.auditLog.create({
       data: { actorId: input.adminUserId, actorType: "ADMIN", action: `KYC_${input.status}`, entityType: "KycRequest", entityId: reviewed.id, metadata: { userId: reviewed.userId, reason: reviewed.rejectionReason } },
@@ -105,9 +109,9 @@ export async function reviewKyc(input: { id: string; adminUserId: string; status
     await createNotification(tx, {
       userId: reviewed.userId,
       type: "KYC_STATUS",
-      title: input.status === "APPROVED" ? "KYC approved" : "KYC rejected",
-      message: input.status === "APPROVED" ? "Your identity verification has been approved." : `Your identity verification was rejected. ${reviewed.rejectionReason ?? ""}`.trim(),
-      metadata: { kycRequestId: reviewed.id, status: reviewed.status },
+      title: input.status === "APPROVED" ? "KYC Approved" : "KYC Rejected",
+      message: input.status === "APPROVED" ? "Congratulations! Your KYC has been approved. Your account is now verified." : `Your KYC has been rejected.${reviewed.rejectionReason ? ` Reason: ${reviewed.rejectionReason}` : ""}`,
+      metadata: { kycRequestId: reviewed.id, status: reviewed.status, href: "/kyc", rejectionReason: reviewed.rejectionReason },
     });
     return reviewed;
   });
@@ -175,7 +179,7 @@ export async function updateSupportTicket(input: { id: string; adminUserId: stri
   return serializeTicket(ticket);
 }
 
-function serializeKyc(request: { id: string; fullName: string; dateOfBirth: Date | null; country: string | null; address: string | null; governmentIdType: string; governmentIdNumber: string; frontIdImageUrl: string | null; backIdImageUrl: string | null; selfieImageUrl: string | null; status: KycStatus; rejectionReason: string | null; submittedAt: Date; updatedAt: Date; reviewedAt: Date | null; reviewedById: string | null }) {
+function serializeKyc(request: { id: string; fullName: string; dateOfBirth: Date | null; country: string | null; address: string | null; governmentIdType: string; governmentIdNumber: string; frontIdImageUrl: string | null; backIdImageUrl: string | null; selfieImageUrl: string | null; status: KycStatus; rejectionReason: string | null; submittedAt: Date; updatedAt: Date; reviewedAt: Date | null; reviewedById: string | null; reviewedBy?: { name: string; uid: string } | null }) {
   return {
     id: request.id,
     fullName: request.fullName,
@@ -197,7 +201,10 @@ function serializeKyc(request: { id: string; fullName: string; dateOfBirth: Date
     createdAt: request.submittedAt.toISOString(),
     updatedAt: request.updatedAt.toISOString(),
     reviewedAt: request.reviewedAt?.toISOString() ?? null,
-    reviewedBy: request.reviewedById,
+    approvedAt: request.status === "APPROVED" ? request.reviewedAt?.toISOString() ?? null : null,
+    approvedBy: request.status === "APPROVED" ? request.reviewedBy?.name ?? request.reviewedById : null,
+    reviewedBy: request.reviewedBy?.name ?? request.reviewedById,
+    reviewedByUid: request.reviewedBy?.uid ?? null,
   };
 }
 

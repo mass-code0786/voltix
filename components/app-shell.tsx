@@ -53,7 +53,7 @@ type VipTradeRow = { id: string; label: string; vipRange?: string; vipRanks: str
 type AppCoin = Coin;
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath"|"logoUrl">> & { localLogoPath?: string | null; logoUrl?: string | null };
-type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; language?: string | null; vipRank?: string | null; role?: string | null; kycStatus?: "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED" | null };
+type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; language?: string | null; vipRank?: string | null; role?: string | null; kycStatus?: "NOT_SUBMITTED" | "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | null };
 type WalletSnapshot = {
   balances?: {
     spot?: number;
@@ -164,7 +164,7 @@ type AiSubscriptionStatus = {
   subscription: AiSubscription | null;
 };
 type KycSnapshot = {
-  status: "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED";
+  status: "NOT_SUBMITTED" | "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
   request: {
     id: string;
     fullName: string;
@@ -195,6 +195,7 @@ type NotificationItem = {
   type: string;
   title: string;
   message: string;
+  metadata?: unknown;
   readAt: string | null;
   createdAt: string;
   unread: boolean;
@@ -947,7 +948,13 @@ function normalizeTrade(raw: ActiveCopyTrade & { startedAt?: string; remainingTi
 }
 
 function NotificationMenu({ close, notifications, unreadCount, markRead, deleteNotification }: { close: () => void; notifications: NotificationItem[]; unreadCount: number; markRead: () => void; deleteNotification: (id: string) => void }) {
-  return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => <div key={notification.id} className={`rounded-xl p-3 ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p><p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div><button onClick={() => deleteNotification(notification.id)} aria-label="Delete notification" className="rounded-lg p-1 text-slate-600 hover:bg-white/5 hover:text-danger"><X size={14}/></button></div></div>) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
+  return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => { const target=notificationTarget(notification); return <div key={notification.id} onClick={()=>{if(target){close();window.location.href=target;}}} className={`rounded-xl p-3 ${target?"cursor-pointer":""} ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p><p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div><button onClick={event => { event.stopPropagation(); deleteNotification(notification.id); }} aria-label="Delete notification" className="rounded-lg p-1 text-slate-600 hover:bg-white/5 hover:text-danger"><X size={14}/></button></div></div>}) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
+}
+
+function notificationTarget(notification: NotificationItem) {
+  const metadata = notification.metadata;
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata) && "href" in metadata && typeof metadata.href === "string") return metadata.href;
+  return notification.type === "KYC_STATUS" ? "/kyc" : null;
 }
 
 function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerification,openHelp }: { close: () => void;notify:(message:string)=>void;user:CurrentUser|null;openLogin:()=>void;openRegister:()=>void;logout:()=>Promise<void>;openVerification:()=>void;openHelp:()=>void }) {
@@ -2020,7 +2027,7 @@ function WalletScreen({notify,assets,spotBalance,futuresBalance,bitexBalance,bit
 return <div className="wallet-page -mt-1 min-h-screen">
   <WalletHero/>
   <WalletTotalCard total={total} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
-  <WalletTypeCards spot={spotBalance} ai={bitexBalance} futures={futuresBalance} aiProfit={bitexIncomeEarned}/>
+  <WalletTypeCards spot={spotBalance} ai={bitexBalance} futures={futuresBalance}/>
   <WalletQuickActions onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal} onOpenTransfer={onOpenTransfer} onHistory={()=>onSectionChange("ledger")} onAddressBook={()=>notify("Address book unavailable")}/>
   <WalletBalancesCard assets={activeAssets} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
   {section==="ledger"&&<section className="wallet-glass wallet-ledger-card"><div className="flex justify-between gap-3"><div><h3>Wallet ledger</h3><p>All balance movements and AI income credits</p></div><button onClick={()=>notify("Ledger export prepared")}>Export</button></div><ActivityRows rows={activity}/></section>}
@@ -2043,13 +2050,13 @@ function WalletTotalCard({total,onOpenDeposit,onOpenWithdrawal}:{total:number;on
   return <section className="wallet-glass wallet-total-card"><div className="min-w-0"><div className="flex items-center gap-2"><p>Total Wallet Balance</p><Eye size={15} className="text-[#18ff8a]"/></div><h2>{usd(total)}</h2><div className="mt-2 flex items-center gap-2"><span>USD</span><em>{total>0?"+0.00% today":"0.00% today"}</em></div></div><div className="wallet-total-actions"><button onClick={onOpenDeposit}><Plus size={16}/>Add Funds</button><button onClick={onOpenWithdrawal}><Send size={16}/>Withdraw</button></div></section>;
 }
 
-function WalletTypeCards({spot,ai,futures,aiProfit}:{spot:number;ai:number;futures:number;aiProfit:number}) {
+function WalletTypeCards({spot,ai,futures}:{spot:number;ai:number;futures:number}) {
   const items=[
-    ["Spot Wallet",spot,Wallet,"green","Available"],
-    ["AI Wallet",ai,Bot,"purple",`Profit ${usd(aiProfit)}`],
-    ["Futures Wallet",futures,LineChart,"blue","Trading"],
+    ["Spot Wallet",spot,Wallet,"green"],
+    ["AI Wallet",ai,Bot,"purple"],
+    ["Futures Wallet",futures,LineChart,"blue"],
   ] as const;
-  return <section className="wallet-type-grid">{items.map(([label,value,Icon,tone,meta])=><div key={label} className="wallet-glass wallet-type-card"><div className="wallet-type-head"><span className={`wallet-type-icon wallet-type-${tone}`}><Icon size={16}/></span><p>{label}</p></div><div className="wallet-type-body"><strong>{value.toFixed(2)}</strong><em>{meta}</em></div></div>)}</section>;
+  return <section className="wallet-type-grid">{items.map(([label,value,Icon,tone])=><div key={label} className="wallet-glass wallet-type-card"><div className="wallet-type-head"><span className={`wallet-type-icon wallet-type-${tone}`}><Icon size={16}/></span><p>{label}</p></div><div className="wallet-type-body"><strong>{value.toFixed(2)}</strong></div></div>)}</section>;
 }
 
 function WalletQuickActions({onOpenDeposit,onOpenWithdrawal,onOpenTransfer,onHistory,onAddressBook}:{onOpenDeposit:()=>void;onOpenWithdrawal:()=>void;onOpenTransfer:()=>void;onHistory:()=>void;onAddressBook:()=>void}) {
@@ -2201,7 +2208,7 @@ function VerificationRequestModal({close,notify,user}:{close:()=>void;notify:(me
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
   useEffect(()=>{let active=true;if(!user){setKyc(null);return;}fetch("/api/kyc").then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(!active)return;const snapshot=data as KycSnapshot;setKyc(snapshot);const request=snapshot.request;if(request){setFullName(request.fullName??"");setDateOfBirth(request.dateOfBirth??"");setCountry(request.country??user.country??"");setAddress(request.address??"");setGovernmentIdType(request.governmentIdType??"Aadhaar Card");setGovernmentIdNumber(request.governmentIdNumber??"");setFrontIdImageUrl(request.frontIdImageUrl??"");setBackIdImageUrl(request.backIdImageUrl??"");setSelfieImageUrl(request.selfieImageUrl??"");}}).catch(()=>{if(active)setKyc(null);});return()=>{active=false};},[user]);
-  const locked=kyc?.status==="APPROVED"||kyc?.status==="PENDING";
+  const locked=kyc?.status==="APPROVED"||kyc?.status==="PENDING"||kyc?.status==="UNDER_REVIEW";
   const documentTypes=useMemo(()=>getKycDocumentTypes(country),[country]);
   const backRequired=kycDocumentRequiresBackPhoto(governmentIdType);
   useEffect(()=>{if(!documentTypes.includes(governmentIdType))setGovernmentIdType(documentTypes[0]);},[documentTypes,governmentIdType]);

@@ -8,7 +8,7 @@ import { SearchableSelect } from "@/components/searchable-select";
 import { countryOptions } from "@/lib/profile-options";
 import { getKycDocumentTypes, kycDocumentRequiresBackPhoto } from "@/lib/kyc-document-types";
 
-type KycStatus = "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED";
+type KycStatus = "NOT_SUBMITTED" | "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
 type KycSnapshot = {
   status: KycStatus;
   request: {
@@ -16,6 +16,9 @@ type KycSnapshot = {
     governmentIdType?: string | null;
     governmentIdNumber?: string | null;
     rejectionReason?: string | null;
+    reviewedAt?: string | null;
+    approvedAt?: string | null;
+    approvedBy?: string | null;
   } | null;
 };
 type ProfileResponse = { profile?: { country?: string | null } };
@@ -81,7 +84,7 @@ export default function KycPage() {
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){setError(data.error||"KYC submission failed");return;}
-    setSnapshot({status:"PENDING",request:data.kyc??null});
+    setSnapshot({status:"UNDER_REVIEW",request:data.kyc??null});
     setSuccess(data.message||"Your KYC has been submitted successfully. It is now under review.");
   };
 
@@ -106,8 +109,8 @@ export default function KycPage() {
       </header>
       {success&&<div className="mt-4 rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 p-4 text-sm font-bold text-[#18ff8a]">{success}</div>}
 
-      {loading?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-slate-400">Loading verification...</section>:error&&!snapshot?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-[#ff4f6d]">{error}</section>:snapshot?.status==="PENDING"?<StatusCard icon={Clock3} title="Your KYC is under review" text="Manual admin approval is pending." tone="pending"/>:snapshot?.status==="APPROVED"?<StatusCard icon={CheckCircle2} title="Your KYC is verified" text="Your identity verification has been approved." tone="approved"/>:<form onSubmit={submit} className="profile-glass mt-4 rounded-[22px] p-4">
-        {snapshot?.status==="REJECTED"&&<div className="mb-4 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs text-[#ff8aa0]">{snapshot.request?.rejectionReason||"Your KYC was rejected. Please submit updated details."}</div>}
+      {loading?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-slate-400">Loading verification...</section>:error&&!snapshot?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-[#ff4f6d]">{error}</section>:isUnderReview(snapshot?.status)?<StatusCard icon={Clock3} title="Your KYC is under review" text="Manual admin approval is pending." tone="pending"/>:snapshot?.status==="APPROVED"?<StatusCard icon={CheckCircle2} title="Status: Verified" text={`Approval Date: ${formatReviewDate(snapshot.request?.approvedAt??snapshot.request?.reviewedAt)}${snapshot.request?.approvedBy?` | Approved By: ${snapshot.request.approvedBy}`:""}`} tone="approved"/>:<form onSubmit={submit} className="profile-glass mt-4 rounded-[22px] p-4">
+        {snapshot?.status==="REJECTED"&&<div className="mb-4 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs text-[#ff8aa0]"><p className="font-black">Status: Rejected</p><p className="mt-2 font-bold">Reason:</p><p className="mt-1">{snapshot.request?.rejectionReason||"Your KYC was rejected. Please submit updated details."}</p></div>}
         <div className="space-y-3">
           <SearchableSelect label="Country" options={countryOptions} value={country} onChange={setCountry} placeholder="Search country"/>
           <label className="block text-xs font-bold text-slate-400">Document type<select value={governmentIdType} onChange={event=>setGovernmentIdType(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50">{documentTypes.map(type=><option key={type} value={type}>{type}</option>)}</select></label>
@@ -117,7 +120,7 @@ export default function KycPage() {
           <KycUploadBox label="Selfie Holding Document" upload={selfieUpload} required onChange={file=>chooseFile(setSelfieUpload,selfieUpload,file)} onRemove={()=>removeFile(setSelfieUpload,selfieUpload)}/>
         </div>
         {error&&<p className="mt-3 text-xs text-[#ff4f6d]">{error}</p>}
-        <button disabled={submitting} className="mt-4 w-full rounded-2xl bg-[#18ff8a] py-3.5 text-sm font-black text-[#050608] disabled:opacity-60">{submitting?"Submitting...":"Submit KYC"}</button>
+        <button disabled={submitting} className="mt-4 w-full rounded-2xl bg-[#18ff8a] py-3.5 text-sm font-black text-[#050608] disabled:opacity-60">{submitting?"Submitting...":snapshot?.status==="REJECTED"?"Submit Again":"Submit KYC"}</button>
       </form>}
     </div>
   </main>;
@@ -155,4 +158,14 @@ function KycUploadBox({label,upload,required,onChange,onRemove}:{label:string;up
 
 function revokePreview(preview:string) {
   if(preview)URL.revokeObjectURL(preview);
+}
+
+function isUnderReview(status?: KycStatus) {
+  return status === "UNDER_REVIEW" || status === "PENDING";
+}
+
+function formatReviewDate(value?: string | null) {
+  if (!value) return "Unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unavailable" : date.toLocaleString();
 }

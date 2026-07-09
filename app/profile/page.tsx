@@ -46,7 +46,7 @@ type Profile = {
   referralUid: string | null;
   referralLink: string | null;
   memberSince: string;
-  kycStatus: "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED";
+  kycStatus: "NOT_SUBMITTED" | "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
 };
 
 type DashboardSnapshot = {
@@ -109,7 +109,7 @@ function formatDate(value: string) {
 
 function kycLabel(status?: Profile["kycStatus"]) {
   if (status === "APPROVED") return "Verified";
-  if (status === "PENDING") return "Pending";
+  if (status === "PENDING" || status === "UNDER_REVIEW") return "Under Review";
   if (status === "REJECTED") return "Rejected";
   return "Not submitted";
 }
@@ -140,7 +140,7 @@ export default function ProfilePage() {
   const kycTone = useMemo(() => {
     if (profile?.kycStatus === "APPROVED") return "border-[#18ff8a]/30 bg-[#18ff8a]/10 text-[#18ff8a]";
     if (profile?.kycStatus === "REJECTED") return "border-[#ff4f6d]/30 bg-[#ff4f6d]/10 text-[#ff4f6d]";
-    if (profile?.kycStatus === "PENDING") return "border-[#f6c85f]/30 bg-[#f6c85f]/10 text-[#f6c85f]";
+    if (profile?.kycStatus === "PENDING" || profile?.kycStatus === "UNDER_REVIEW") return "border-[#f6c85f]/30 bg-[#f6c85f]/10 text-[#f6c85f]";
     return "border-white/10 bg-white/[.05] text-slate-300";
   }, [profile?.kycStatus]);
 
