@@ -49,12 +49,12 @@ async function ensureCatalogCoins(){
   const missing=coinCatalog.filter(coin=>!seen.has(coin.symbol));
   await Promise.all(coinCatalog.filter(coin=>seen.has(coin.symbol)).map(coin=>{
     const catalog=catalogBySymbol.get(coin.symbol)!;
-    return prisma.coinMetadata.update({where:{symbol:coin.symbol},data:{name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,logoUrl:coin.logoUrl,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`}});
+    return prisma.coinMetadata.update({where:{symbol:coin.symbol},data:{name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,logoUrl:coin.logoUrl,localLogoPath:coin.localLogoPath??`/coin-logos/${coin.symbol.toLowerCase()}.png`}});
   }));
   if(missing.length)await prisma.coinMetadata.createMany({
     data:missing.map(coin=>{
       const catalog=catalogBySymbol.get(coin.symbol)!;
-      return {symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,logoUrl:coin.logoUrl,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`};
+      return {symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,logoUrl:coin.logoUrl,localLogoPath:coin.localLogoPath??`/coin-logos/${coin.symbol.toLowerCase()}.png`};
     }),
     skipDuplicates:true,
   });
@@ -63,6 +63,6 @@ async function ensureCatalogCoins(){
 function catalogFallbackCoins(){
   return coinCatalog.map(coin=>{
     const catalog=catalogBySymbol.get(coin.symbol)!;
-    return {id:coin.symbol,symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,logoUrl:coin.logoUrl,localLogoPath:`/coin-logos/${coin.symbol.toLowerCase()}.png`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,createdAt:null,updatedAt:null};
+    return {id:coin.symbol,symbol:coin.symbol,name:coin.name,pair:coin.pair??`${coin.symbol}USDT`,logoUrl:coin.logoUrl,localLogoPath:coin.localLogoPath??`/coin-logos/${coin.symbol.toLowerCase()}.png`,isActive:coin.enabled!==false,displayOrder:catalog.displayOrder,createdAt:null,updatedAt:null};
   });
 }

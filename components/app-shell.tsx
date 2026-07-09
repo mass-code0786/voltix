@@ -2068,7 +2068,7 @@ function WalletBalancesCard({assets,onOpenDeposit,onOpenWithdrawal}:{assets:(App
 
 function WalletAssetRow({asset,onOpenDeposit,onOpenWithdrawal}:{asset:AppCoin&{volume?:number;live?:boolean};onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
   const value=asset.balance*asset.price;
-  return <article className="wallet-asset-row"><CoinMark symbol={asset.symbol} color={asset.color} logoPath={assetLogoPath(asset.symbol, asset)} /><div className="min-w-0"><div className="flex items-center gap-1.5"><p>{asset.symbol}</p><span>{asset.symbol==="USDT"?"BEP20":"Spot"}</span></div><em>{asset.name}</em></div><div className="min-w-0 text-right"><strong>{compact(asset.balance)}</strong><small>{usd(value)}</small></div><div className="wallet-asset-actions">{asset.symbol==="USDT"?<><button onClick={onOpenDeposit}>+</button><button onClick={onOpenWithdrawal}>-</button></>:<ChevronRight size={18}/>}</div></article>;
+  return <article className="wallet-asset-row"><CoinMark symbol={asset.symbol} color={asset.color} logoPath={assetLogoPath(asset.symbol, asset)} /><div className="min-w-0"><div className="flex items-center gap-1.5"><p>{asset.symbol}</p><span>{asset.symbol==="USDT"?"BEP20":asset.symbol==="SHINE"?"Solana":"Spot"}</span></div><em>{asset.name}</em></div><div className="min-w-0 text-right"><strong>{compact(asset.balance)}</strong><small>{usd(value)}</small></div><div className="wallet-asset-actions">{asset.symbol==="USDT"?<><button onClick={onOpenDeposit}>+</button><button onClick={onOpenWithdrawal}>-</button></>:<ChevronRight size={18}/>}</div></article>;
 }
 
 function WalletSecurityCard() {

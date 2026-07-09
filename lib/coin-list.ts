@@ -6,12 +6,13 @@ export type CoinMetadataSeed = {
   pair?: string;
   enabled?: boolean;
   logoUrl?: string;
+  localLogoPath?: string;
 };
 
-type CoinRow = readonly [string, string, string, string, string?];
+type CoinRow = readonly [string, string, string, string, string?, string?];
 
 export const coinCatalog: CoinMetadataSeed[] = ([
-  ["BTC","Bitcoin","bitcoin","#f7931a"],["ETH","Ethereum","ethereum","#627eea"],["BNB","BNB","binancecoin","#f3ba2f"],["SOL","Solana","solana","#9945ff"],["SUI","Sui","sui","#6fbcf0"],
+  ["BTC","Bitcoin","bitcoin","#f7931a"],["ETH","Ethereum","ethereum","#627eea"],["BNB","BNB","binancecoin","#f3ba2f"],["SOL","Solana","solana","#9945ff"],["SHINE","SHINE TOKEN","shine-token","#18ff8a","SHINEUSDT","/coin-logos/shine.svg"],["SUI","Sui","sui","#6fbcf0"],
   ["XRP","XRP","ripple","#2f6bff"],["ADA","Cardano","cardano","#3f8cff"],["DOGE","Dogecoin","dogecoin","#c2a633"],["SHIB","Shiba Inu","shiba-inu","#f05a28"],["PEPE","Pepe","pepe","#66bb6a"],
   ["TRX","TRON","tron","#ef0027"],["TON","Toncoin","the-open-network","#23a5e8"],["AVAX","Avalanche","avalanche-2","#e84142"],["LINK","Chainlink","chainlink","#2a5ada"],["DOT","Polkadot","polkadot","#e6007a"],
   ["MATIC","Polygon","matic-network","#8247e5"],["LTC","Litecoin","litecoin","#345d9d"],["BCH","Bitcoin Cash","bitcoin-cash","#8dc351"],["UNI","Uniswap","uniswap","#ff007a"],["ETC","Ethereum Classic","ethereum-classic","#3ab83a"],
@@ -41,7 +42,7 @@ export const coinCatalog: CoinMetadataSeed[] = ([
   ["BAL","Balancer","balancer","#1e1e1e"],["CVX","Convex Finance","convex-finance","#3b82f6"],["LRC","Loopring","loopring","#1c60ff"],["ELF","aelf","aelf","#2b5cff"],["ONE","Harmony","harmony","#00aee9"],
   ["WAVES","Waves","waves","#0155ff"],["RVN","Ravencoin","ravencoin","#384182"],["SC","Siacoin","siacoin","#20ee82"],["DGB","DigiByte","digibyte","#006ad2"],["HNT","Helium","helium","#474dff"],
   ["TFUEL","Theta Fuel","theta-fuel","#ff8f00"],["OSMO","Osmosis","osmosis","#760dbb"],["WEMIX","WEMIX","wemix-token","#111111"],["PRIME","Echelon Prime","echelon-prime","#f5f5f5"],["ZETA","ZetaChain","zetachain","#005741"],
-] satisfies CoinRow[]).map(([symbol,name,coingeckoId,color,pair])=>({symbol,name,coingeckoId,color,pair,enabled:true,logoUrl:`https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`}));
+] satisfies CoinRow[]).map(([symbol,name,coingeckoId,color,pair,localLogoPath])=>({symbol,name,coingeckoId,color,pair,enabled:true,logoUrl:`https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,localLogoPath}));
 
 export const enabledCoinSymbols = new Set(coinCatalog.filter(coin=>coin.enabled!==false).map(coin=>coin.symbol));
 export const catalogBySymbol = new Map(coinCatalog.map((coin,index)=>[coin.symbol,{...coin,displayOrder:index+1}]));

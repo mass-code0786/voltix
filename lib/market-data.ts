@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import { enabledTradingPairs } from "./coin-list";
+import { SHINE_PAIR, SHINE_PRICE_USD } from "./shine-token";
 
 export type MarketTicker = {
   symbol: string;
@@ -71,13 +72,18 @@ class BinanceMarketData {
       this.refreshTickers("pairs-configured").catch(error=>this.logError("ticker-rest-pairs-configured",error));
     }
   }
-  getTickers(){return [...this.tickers.values()].filter(ticker=>this.tickerPairs.has(ticker.symbol)).sort((a,b)=>a.symbol.localeCompare(b.symbol));}
-  getTicker(symbol:string){return this.tickers.get(normalizeSymbol(symbol));}
+  getTickers(){
+    const rows=[...this.tickers.values()].filter(ticker=>this.tickerPairs.has(ticker.symbol));
+    if(this.tickerPairs.has(SHINE_PAIR))rows.push(shineTicker());
+    return rows.sort((a,b)=>a.symbol.localeCompare(b.symbol));
+  }
+  getTicker(symbol:string){const normalized=normalizeSymbol(symbol);return normalized===SHINE_PAIR?shineTicker():this.tickers.get(normalized);}
   getRecentTrades(symbol:string){return this.trades.get(normalizeSymbol(symbol))??[];}
 
   async getCandles(symbol:string,interval:string){
     this.ensureStarted();
     const normalized=normalizeSymbol(symbol); const safeInterval=VALID_INTERVALS.has(interval)?interval:"1m"; const key=`${normalized}:${safeInterval}`;
+    if(normalized===SHINE_PAIR)return syntheticCandles(safeInterval);
     if(!this.candles.has(key)) await this.bootstrapCandles(normalized,safeInterval);
     this.connectKlineStreams(normalized);
     return this.candles.get(key)??[];
@@ -86,6 +92,7 @@ class BinanceMarketData {
   async getOrderBook(symbol:string){
     this.ensureStarted();
     const normalized=normalizeSymbol(symbol);
+    if(normalized===SHINE_PAIR)return syntheticOrderBook();
     if(!this.books.has(normalized)) await this.bootstrapOrderBook(normalized);
     this.connectDepthStream(normalized);
     this.connectTradeStream(normalized);
@@ -95,6 +102,7 @@ class BinanceMarketData {
   async getTrades(symbol:string){
     this.ensureStarted();
     const normalized=normalizeSymbol(symbol);
+    if(normalized===SHINE_PAIR)return [];
     if(!this.trades.has(normalized)) await this.bootstrapTrades(normalized);
     this.connectTradeStream(normalized);
     return this.trades.get(normalized)??[];
@@ -108,7 +116,8 @@ class BinanceMarketData {
   }
 
   private connectMarketStreams(){
-    const streams=[...this.tickerPairs].map(symbol=>`${symbol.toLowerCase()}@ticker`).join("/");
+    const realPairs=[...this.tickerPairs].filter(symbol=>symbol!==SHINE_PAIR);
+    const streams=realPairs.map(symbol=>`${symbol.toLowerCase()}@ticker`).join("/");
     if(!streams)return;
     this.connect("ticker-symbols",`${WS_COMBINED_BASE}?streams=${streams}`,raw=>{
       const payload=JSON.parse(raw.toString()) as {data?:Record<string,string>}|Record<string,string>;
@@ -131,7 +140,8 @@ class BinanceMarketData {
       });
       this.emitTickersThrottled();
     });
-    const bookStreams=[...this.tickerPairs].map(symbol=>`${symbol.toLowerCase()}@bookTicker`).join("/");
+    const bookStreams=realPairs.map(symbol=>`${symbol.toLowerCase()}@bookTicker`).join("/");
+    if(!bookStreams)return;
     this.connect("book-ticker-symbols",`${WS_COMBINED_BASE}?streams=${bookStreams}`,raw=>{
       const payload=JSON.parse(raw.toString()) as {data?:Record<string,string>}|Record<string,string>;
       const row=("data" in payload&&payload.data?payload.data:payload) as Record<string,string>;
@@ -235,6 +245,21 @@ class BinanceMarketData {
 }
 
 function normalizeSymbol(symbol:string){const value=symbol.toUpperCase().replace(/[^A-Z0-9]/g,"");return value.endsWith("USDT")?value:`${value}USDT`;}
+
+function shineTicker(): MarketTicker {
+  return { symbol: SHINE_PAIR, price: SHINE_PRICE_USD, changePercent: 0, volume: 0, quoteVolume: 0, high: SHINE_PRICE_USD, low: SHINE_PRICE_USD, bestBidPrice: SHINE_PRICE_USD, bestBidQty: 100000, bestAskPrice: SHINE_PRICE_USD, bestAskQty: 100000, updatedAt: Date.now() };
+}
+
+function syntheticCandles(interval:string): Candle[] {
+  const now=Date.now();
+  const minute=60_000;
+  return Array.from({length:120},(_,index)=>({openTime:now-(119-index)*minute,open:SHINE_PRICE_USD,high:SHINE_PRICE_USD,low:SHINE_PRICE_USD,close:SHINE_PRICE_USD,volume:0,closeTime:now-(118-index)*minute}));
+}
+
+function syntheticOrderBook(): OrderBook {
+  const steps=[1,2,3,4,5,6,7,8,9,10];
+  return {symbol:SHINE_PAIR,lastUpdateId:Date.now(),bids:steps.map(step=>[Number((SHINE_PRICE_USD-step*.001).toFixed(6)),10000*step]),asks:steps.map(step=>[Number((SHINE_PRICE_USD+step*.001).toFixed(6)),10000*step]),updatedAt:Date.now()};
+}
 
 const globalMarket=globalThis as typeof globalThis&{__voltixMarketData?:BinanceMarketData};
 export const marketData=globalMarket.__voltixMarketData??new BinanceMarketData();

@@ -264,6 +264,26 @@ model P2PTransfer {
   @@index([status, createdAt])
 }
 
+model AssetConversion {
+  id                    String   @id @default(cuid())
+  userId                String
+  fromAssetId           String
+  toAssetId             String
+  fromSymbol            String
+  toSymbol              String
+  fromAmount            Decimal  @db.Decimal(36, 18)
+  toAmount              Decimal  @db.Decimal(36, 18)
+  price                 Decimal  @db.Decimal(36, 18)
+  idempotencyKey        String   @unique
+  usdtLedgerJournalId   String?  @unique
+  shineLedgerJournalId  String?  @unique
+  status                String   @default("COMPLETED")
+  createdAt             DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([fromSymbol, toSymbol, createdAt])
+}
+
 model Asset {
   id             String           @id @default(cuid())
   symbol         String           @unique
