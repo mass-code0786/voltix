@@ -1,3 +1,5 @@
+import { appendFile } from "fs/promises";
+import path from "path";
 import { CodeStatus, Prisma, TradeStatus, UserStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { MIN_COPY_TRADE_STAKE_USD, VIP_TRADE_ROWS, dailyTradeLimit, getVipDailyIncomePercent, getVipTradeRow, getVipTradeRowForRank, normalizeVipRank } from "./trade-rules";
@@ -20,8 +22,24 @@ const SETTLEABLE_TRADE_STATUSES = [TradeStatus.PENDING, TradeStatus.ACTIVE, Trad
 const REQUIRED_TRADE_SLOTS = [
   { label: "Window 1", utcTime: "08:30" },
   { label: "Window 2", utcTime: "12:30" },
-  { label: "Window 3", utcTime: "18:10" },
+  { label: "Window 3", utcTime: "19:00" },
 ] as const;
+const AI_TRADE_LOG_FILE = path.join(process.cwd(), "ai-trade.log");
+
+type AiTradeCycleLog = {
+  userId: string;
+  vipLevel: string | null;
+  aiSubscriptionStatus: "ACTIVE" | "INACTIVE";
+  selectedVipRow: string | null;
+  currentTradeSlot: string | null;
+  currentTime: string;
+  tradeCodeFound: string | null;
+  tradeCodeStatus: string | null;
+  walletBalance: string | null;
+  reasonIfSkipped: string | null;
+  tradeExecuted: "Yes" | "No";
+  tradeId?: string | null;
+};
 
 export class AlreadyTradedInWindowError extends Error {
   code = ALREADY_TRADED_IN_WINDOW;
@@ -146,25 +164,53 @@ export async function startVipCopyTrade(input: { userId: string; rowId: string; 
 
 export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Date; idempotencyKey?: string }) {
   const now = input.now ?? new Date();
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { vipRank: true, status: true } });
+  const [user, activeSubscription, slot] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { vipRank: true, status: true, bitexBalance: true } }),
+    prisma.aiSubscription.findFirst({ where: { userId: input.userId, active: true, startsAt: { lte: now }, expiresAt: { gt: now } }, select: { id: true } }),
+    findOpenTradeSlot(now),
+  ]);
   const normalizedVipRank = normalizeVipRank(user.vipRank);
   const row = getVipTradeRowForRank(normalizedVipRank);
+  const codePreview = row && slot ? await findLatestTradeCodeForRow({ row, userId: input.userId, slotId: slot.id, now }) : null;
+  const baseLog: AiTradeCycleLog = {
+    userId: input.userId,
+    vipLevel: normalizedVipRank,
+    aiSubscriptionStatus: activeSubscription ? "ACTIVE" : "INACTIVE",
+    selectedVipRow: row?.label ?? null,
+    currentTradeSlot: slot ? `${slot.label} (${slot.utcTime} UTC)` : null,
+    currentTime: now.toISOString(),
+    tradeCodeFound: codePreview?.code ?? null,
+    tradeCodeStatus: codePreview?.status ?? null,
+    walletBalance: user.bitexBalance.toString(),
+    reasonIfSkipped: null,
+    tradeExecuted: "No",
+  };
   if (!row) {
-    logAiAutoTradeDecision({ userId: input.userId, vipRank: normalizedVipRank, selectedRow: null, tradeCode: null, status: INELIGIBLE_TRADE_MESSAGE });
+    await logAiTradeCycle({ ...baseLog, reasonIfSkipped: INELIGIBLE_TRADE_MESSAGE });
     return { executed: false, reason: INELIGIBLE_TRADE_MESSAGE, vipRank: normalizedVipRank };
   }
+  if (!activeSubscription) {
+    await logAiTradeCycle({ ...baseLog, reasonIfSkipped: "AI Subscription is not active" });
+    return { executed: false, reason: "AI Subscription is not active", rowId: row.id, vipRank: normalizedVipRank, selectedRow: row.label };
+  }
   if (user.status !== UserStatus.ACTIVE) {
-    logAiAutoTradeDecision({ userId: input.userId, vipRank: normalizedVipRank, selectedRow: row.label, tradeCode: null, status: "Skipped: user account inactive" });
+    await logAiTradeCycle({ ...baseLog, reasonIfSkipped: "User account is not active" });
     return { executed: false, reason: "User account is not active", rowId: row.id, vipRank: normalizedVipRank };
   }
   try {
     const trade = await executeVipCopyTrade({ userId: input.userId, rowId: row.id, now, actorType: "SYSTEM", source: "AI_SUBSCRIPTION", idempotencyKey: input.idempotencyKey });
-    const tradeWithCode = await prisma.copyTrade.findUnique({ where: { id: trade.id }, include: { code: { select: { code: true } } } });
-    logAiAutoTradeDecision({ userId: input.userId, vipRank: normalizedVipRank, selectedRow: row.label, tradeCode: tradeWithCode?.code?.code ?? null, status: "Executed", tradeId: trade.id });
+    const tradeWithCode = await prisma.copyTrade.findUnique({ where: { id: trade.id }, include: { code: { select: { code: true, status: true } } } });
+    await logAiTradeCycle({
+      ...baseLog,
+      tradeCodeFound: tradeWithCode?.code?.code ?? codePreview?.code ?? null,
+      tradeCodeStatus: tradeWithCode?.code?.status ?? codePreview?.status ?? null,
+      tradeExecuted: "Yes",
+      tradeId: trade.id,
+    });
     return { executed: true, tradeId: trade.id, rowId: row.id, vipRank: normalizedVipRank, selectedRow: row.label, code: tradeWithCode?.code?.code ?? null };
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Auto copy trade failed";
-    logAiAutoTradeDecision({ userId: input.userId, vipRank: normalizedVipRank, selectedRow: row.label, tradeCode: null, status: `Skipped: ${reason}` });
+    await logAiTradeCycle({ ...baseLog, reasonIfSkipped: reason });
     return { executed: false, reason, rowId: row.id, vipRank: normalizedVipRank, selectedRow: row.label };
   }
 }
@@ -174,10 +220,11 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
   await prisma.aiSubscription.updateMany({ where: { active: true, expiresAt: { lte: now } }, data: { active: false } });
   const slot = await findOpenTradeSlot(now);
   if (!slot) {
+    const inactiveWindowLogs = await logActiveSubscriptionsSkippedOutsideLiveWindow(now);
     return {
       lastRunAt: now.toISOString(),
       liveWindow: null,
-      usersScanned: 0,
+      usersScanned: inactiveWindowLogs,
       tradesPlaced: 0,
       skipped: [] as { userId: string; reason: string }[],
       errors: [] as { userId: string; error: string }[],
@@ -362,6 +409,58 @@ async function claimLatestActiveTradeCodeForRow(
   }
 
   throw new Error(`No active trade code found for ${input.row.label}`);
+}
+
+async function findLatestTradeCodeForRow(input: { row: (typeof VIP_TRADE_ROWS)[number]; userId: string; slotId: string; now: Date }) {
+  const codeVipKeys = vipCodeKeysForRow(input.row);
+  const candidates = await prisma.tradeCode.findMany({
+    where: {
+      AND: [
+        { OR: [{ slotId: input.slotId }, { slotId: null }] },
+        { OR: [{ assignedUserId: input.userId }, { assignedUserId: null }] },
+      ],
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 50,
+  });
+  const code = candidates.find(candidate => tradeCodeVipKeyVariants(candidate.vipRank).some(key => codeVipKeys.has(key)));
+  if (!code) return null;
+  const expired = code.expiresAt !== null && code.expiresAt <= input.now;
+  const exhausted = code.usedCount >= code.maxUsage;
+  return {
+    code: code.code,
+    status: expired ? "EXPIRED" : exhausted ? "USED" : code.status,
+  };
+}
+
+async function logActiveSubscriptionsSkippedOutsideLiveWindow(now: Date) {
+  const subscriptions = await prisma.aiSubscription.findMany({
+    where: { active: true, startsAt: { lte: now }, expiresAt: { gt: now } },
+    select: {
+      userId: true,
+      user: { select: { vipRank: true, bitexBalance: true } },
+    },
+    distinct: ["userId"],
+    take: 500,
+  });
+  await Promise.all(subscriptions.map(subscription => {
+    const vipLevel = normalizeVipRank(subscription.user.vipRank);
+    const row = getVipTradeRowForRank(vipLevel);
+    return logAiTradeCycle({
+      userId: subscription.userId,
+      vipLevel,
+      aiSubscriptionStatus: "ACTIVE",
+      selectedVipRow: row?.label ?? null,
+      currentTradeSlot: null,
+      currentTime: now.toISOString(),
+      tradeCodeFound: null,
+      tradeCodeStatus: null,
+      walletBalance: subscription.user.bitexBalance.toString(),
+      reasonIfSkipped: "No live trade window",
+      tradeExecuted: "No",
+    });
+  }));
+  return subscriptions.length;
 }
 
 export async function settleDueCopyTrades(userId?: string, now = new Date()) {
@@ -635,17 +734,27 @@ function tradeCodeVipKeyVariants(label: string) {
   return [normalized, compact, toRange, toRange.replace(/\s+/g, "")];
 }
 
-function logAiAutoTradeDecision(input: { userId: string; vipRank: string; selectedRow: string | null; tradeCode: string | null; status: string; tradeId?: string }) {
+async function logAiTradeCycle(entry: AiTradeCycleLog) {
   const payload = {
-    userId: input.userId,
-    VIP: input.vipRank,
-    "Selected Row": input.selectedRow,
-    Code: input.tradeCode,
-    Status: input.status,
-    tradeId: input.tradeId ?? null,
+    event: "AI_TRADE_CYCLE",
+    loggedAt: new Date().toISOString(),
+    userId: entry.userId,
+    vipLevel: entry.vipLevel,
+    aiSubscriptionStatus: entry.aiSubscriptionStatus,
+    selectedVipRow: entry.selectedVipRow,
+    currentTradeSlot: entry.currentTradeSlot,
+    currentTime: entry.currentTime,
+    tradeCodeFound: entry.tradeCodeFound,
+    tradeCodeStatus: entry.tradeCodeStatus,
+    walletBalance: entry.walletBalance,
+    reasonIfSkipped: entry.reasonIfSkipped,
+    tradeExecuted: entry.tradeExecuted,
+    tradeId: entry.tradeId ?? null,
   };
-  if (process.env.NODE_ENV === "production") console.info("AI_AUTO_TRADE", payload);
-  else console.log("AI_AUTO_TRADE", payload);
+  console.info("AI_TRADE_CYCLE", payload);
+  await appendFile(AI_TRADE_LOG_FILE, `${JSON.stringify(payload)}\n`, "utf8").catch(error => {
+    console.error("AI_TRADE_LOG_WRITE_FAILED", error instanceof Error ? error.message : error);
+  });
 }
 
 function debugAiTradeStatus(input: { serverNow: string; slot: { label: string; utcTime: string; durationMinutes: number } | null; status: string; canTrade: boolean; reason: string | null }) {
