@@ -102,7 +102,7 @@ export async function purchaseAiSubscription(userId: string, idempotencyKey: str
 export async function runAiAutoCopyTradeJob(now = new Date()) {
   await expireOldSubscriptions(now);
   const result = await runAiAutoTradeScheduler(now);
-  return { checked: result.usersScanned, executed: result.tradesPlaced, ...result };
+  return { checked: result.usersScanned, executed: result.tradesPlacedThisCycle, ...result };
 }
 
 async function autoExecuteAiCopyTrade(userId: string, now = new Date()) {

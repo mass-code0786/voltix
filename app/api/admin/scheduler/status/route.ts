@@ -25,7 +25,10 @@ export async function GET() {
     autoTrade: {
       lastRunAt: latestAutoTradeRun?.createdAt.toISOString() ?? null,
       usersScanned: numberFromMetadata(autoTradeMetadata.usersScanned),
-      tradesPlaced: numberFromMetadata(autoTradeMetadata.tradesPlaced),
+      tradesPlacedThisCycle: numberFromMetadata(autoTradeMetadata.tradesPlacedThisCycle),
+      aiTradesAlreadyExecutedThisWindow: numberFromMetadata(autoTradeMetadata.aiTradesAlreadyExecutedThisWindow),
+      manualTradesAlreadyPlacedThisWindow: numberFromMetadata(autoTradeMetadata.manualTradesAlreadyPlacedThisWindow),
+      totalTradesForWindow: numberFromMetadata(autoTradeMetadata.totalTradesForWindow),
       skipped: Array.isArray(autoTradeMetadata.skipped) ? autoTradeMetadata.skipped : [],
       errors: Array.isArray(autoTradeMetadata.errors) ? autoTradeMetadata.errors : [],
     },

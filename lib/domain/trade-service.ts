@@ -14,6 +14,8 @@ const INELIGIBLE_TRADE_MESSAGE = "You are not eligible for this trade.";
 const TRADE_UNAVAILABLE_MESSAGE = "Trade not available.";
 export const ALREADY_TRADED_IN_WINDOW = "ALREADY_TRADED_IN_WINDOW";
 export const ALREADY_TRADED_IN_WINDOW_MESSAGE = "You have already placed a trade in this window.";
+export const AI_ALREADY_TRADED_IN_WINDOW_MESSAGE = "AI trade already executed for this window.";
+export const MANUAL_ALREADY_TRADED_IN_WINDOW_MESSAGE = "Manual trade already placed for this window.";
 export const AI_AUTO_TRADE_NOTIFICATION_MESSAGE = "AI Subscription auto trade placed successfully.";
 const TRADE_TIMEZONE = "IST";
 const TRADE_DISPLAY_TIMEZONE = "Asia/Kolkata";
@@ -78,9 +80,17 @@ type AiAutoTradeDebugResult = {
 export class AlreadyTradedInWindowError extends Error {
   code = ALREADY_TRADED_IN_WINDOW;
 
-  constructor() {
-    super(ALREADY_TRADED_IN_WINDOW_MESSAGE);
+  constructor(source?: CopyTradeSource) {
+    super(duplicateTradeWindowMessageForSource(source));
   }
+}
+
+type CopyTradeSource = "MANUAL" | "AI_SUBSCRIPTION" | "AI_SUBSCRIPTION_AUTO";
+
+function duplicateTradeWindowMessageForSource(source?: string | null) {
+  return source === "AI_SUBSCRIPTION_AUTO"
+    ? AI_ALREADY_TRADED_IN_WINDOW_MESSAGE
+    : MANUAL_ALREADY_TRADED_IN_WINDOW_MESSAGE;
 }
 
 export async function getCopyTradeStatus(userId: string, now = new Date()) {
@@ -292,7 +302,10 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
       lastRunAt: now.toISOString(),
       liveWindow: null,
       usersScanned: inactiveWindowLogs,
-      tradesPlaced: 0,
+      tradesPlacedThisCycle: 0,
+      aiTradesAlreadyExecutedThisWindow: 0,
+      manualTradesAlreadyPlacedThisWindow: 0,
+      totalTradesForWindow: 0,
       skipped: [] as { userId: string; reason: string }[],
       errors: [] as { userId: string; error: string }[],
     };
@@ -307,15 +320,22 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
     take: 500,
   });
   await logAiAutoTradeEvent("users scanned", { usersScanned: subscriptions.length });
-  let tradesPlaced = 0;
+  let tradesPlacedThisCycle = 0;
+  let aiTradesAlreadyExecutedThisWindow = 0;
+  let manualTradesAlreadyPlacedThisWindow = 0;
   const skipped: { userId: string; reason: string }[] = [];
   const errors: { userId: string; error: string }[] = [];
   for (const subscription of subscriptions) {
     const idempotencyKey = `auto-trade:${subscription.userId}:${slotStart.toISOString()}`;
     try {
       const result = await autoExecuteVipCopyTrade({ userId: subscription.userId, now, idempotencyKey });
-      if (result.executed) tradesPlaced += 1;
-      else skipped.push({ userId: subscription.userId, reason: result.reason ?? "Skipped" });
+      if (result.executed) tradesPlacedThisCycle += 1;
+      else {
+        const reason = result.reason ?? "Skipped";
+        if (reason === AI_ALREADY_TRADED_IN_WINDOW_MESSAGE) aiTradesAlreadyExecutedThisWindow += 1;
+        if (reason === MANUAL_ALREADY_TRADED_IN_WINDOW_MESSAGE) manualTradesAlreadyPlacedThisWindow += 1;
+        skipped.push({ userId: subscription.userId, reason });
+      }
       const diagnostic = await debugAiAutoTradeForUser({ userId: subscription.userId, now });
       await logAiAutoTradeEvent("user result", {
         userId: subscription.userId,
@@ -335,7 +355,19 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
       await logAiAutoTradeEvent("user error", { userId: subscription.userId, error: error instanceof Error ? error.message : "Auto trade failed" });
     }
   }
-  await logAiAutoTradeEvent("scheduler complete", { usersScanned: subscriptions.length, tradesPlaced, skipped: skipped.length, errors: errors.length });
+  const totalTradesForWindow = await prisma.copyTrade.count({
+    where: { slotId: slot.id, startedAt: { gte: slotStart, lt: slotEnd } },
+  });
+  const summary = {
+    usersScanned: subscriptions.length,
+    tradesPlacedThisCycle,
+    aiTradesAlreadyExecutedThisWindow,
+    manualTradesAlreadyPlacedThisWindow,
+    totalTradesForWindow,
+    skipped: skipped.length,
+    errors: errors.length,
+  };
+  await logAiAutoTradeEvent("scheduler complete", summary);
   return {
     lastRunAt: now.toISOString(),
     liveWindow: {
@@ -345,8 +377,7 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
       closeTime: slotEnd.toISOString(),
       idempotencyScope: slotStart.toISOString(),
     },
-    usersScanned: subscriptions.length,
-    tradesPlaced,
+    ...summary,
     skipped,
     errors,
   };
@@ -377,9 +408,9 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
     const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
     const existingSlotTrade = await tx.copyTrade.findFirst({
       where: { userId: input.userId, slotId: slot.id, startedAt: { gte: slotStart, lt: slotEnd } },
-      select: { id: true },
+      select: { id: true, source: true },
     });
-    if (existingSlotTrade) throw new AlreadyTradedInWindowError();
+    if (existingSlotTrade) throw new AlreadyTradedInWindowError(existingSlotTrade.source as CopyTradeSource);
 
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
@@ -512,11 +543,11 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
   const slotEnd = slotStart && slot ? new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000) : null;
   const dayStart = new Date(now);
   dayStart.setUTCHours(0, 0, 0, 0);
-  const [dailyTradesUsed, alreadyTradedThisWindow] = await Promise.all([
+  const [dailyTradesUsed, existingWindowTrade] = await Promise.all([
     prisma.copyTrade.count({ where: { userId: user.id, startedAt: { gte: dayStart } } }),
     slot && slotStart && slotEnd
-      ? prisma.copyTrade.count({ where: { userId: user.id, slotId: slot.id, startedAt: { gte: slotStart, lt: slotEnd } } }).then(count => count > 0)
-      : Promise.resolve(false),
+      ? prisma.copyTrade.findFirst({ where: { userId: user.id, slotId: slot.id, startedAt: { gte: slotStart, lt: slotEnd } }, select: { source: true } })
+      : Promise.resolve(null),
   ]);
   const limit = dailyTradeLimit();
   const aiWalletActive = isAiWalletActive(user);
@@ -527,7 +558,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
     { pass: user.status === UserStatus.ACTIVE, reason: "User account is not active" },
     { pass: Boolean(slot), reason: "Trade window is not LIVE" },
     { pass: dailyTradesUsed < limit, reason: "Daily trade limit reached" },
-    { pass: !alreadyTradedThisWindow, reason: ALREADY_TRADED_IN_WINDOW_MESSAGE },
+    { pass: !existingWindowTrade, reason: duplicateTradeWindowMessageForSource(existingWindowTrade?.source) },
     { pass: Boolean(selectedRow), reason: INELIGIBLE_TRADE_MESSAGE },
     { pass: aiWalletActive, reason: "AI Wallet activation required" },
     { pass: stakeAmount.gte(MIN_COPY_TRADE_STAKE), reason: `Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.` },
@@ -555,7 +586,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
     aiWalletActiveAmount: aiWalletActiveAmount.toString(),
     dailyTradesUsed,
     dailyTradeLimit: limit,
-    alreadyTradedThisWindow,
+    alreadyTradedThisWindow: Boolean(existingWindowTrade),
     tradeCodeFound: null,
     tradeCodeStatus: null,
     stakeAmount: stakeAmount.toString(),

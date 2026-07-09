@@ -223,7 +223,10 @@ const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA"
 const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, bitex: 0 }, locked: { spot: 0, futures: 0, bitex: 0 }, total: { spot: 0, futures: 0, bitex: 0 }, portfolio: 0, bitex: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
 const defaultCopyTradeCounts: CopyTradeCounts = { todaysTradeCount: 0, dailyTradeLimit: 3 };
 const activeAiSubscriptionMessage = "You already have an active AI Subscription. You can buy again after it expires.";
-const duplicateTradeWindowMessage = "You have already placed a trade in this window.";
+const duplicateTradeWindowMessages = new Set([
+  "AI trade already executed for this window.",
+  "Manual trade already placed for this window.",
+]);
 
 function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSetting>): AppCoin[] {
   const bySymbol = new Map(baseCoins.map(coin => [coin.symbol, coin]));
@@ -1272,7 +1275,7 @@ function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; s
     const result=await startTrade(row.id);
     setLoadingRow("");
     if(!result.ok){
-      if(result.message===duplicateTradeWindowMessage){
+      if(duplicateTradeWindowMessages.has(result.message)){
         setError("");
         setDuplicateToast({message:result.message,accent:vipAccent(row),id:Date.now()});
         return;

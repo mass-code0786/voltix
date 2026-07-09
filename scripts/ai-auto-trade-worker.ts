@@ -28,7 +28,10 @@ async function tick() {
     log("scheduler completed", {
       liveWindow: result.liveWindow,
       usersScanned: result.usersScanned,
-      tradesPlaced: result.tradesPlaced,
+      tradesPlacedThisCycle: result.tradesPlacedThisCycle,
+      aiTradesAlreadyExecutedThisWindow: result.aiTradesAlreadyExecutedThisWindow,
+      manualTradesAlreadyPlacedThisWindow: result.manualTradesAlreadyPlacedThisWindow,
+      totalTradesForWindow: result.totalTradesForWindow,
       skipped: result.skipped,
       errors: result.errors,
     });
