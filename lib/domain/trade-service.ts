@@ -22,7 +22,7 @@ const SETTLEABLE_TRADE_STATUSES = [TradeStatus.PENDING, TradeStatus.ACTIVE, Trad
 const REQUIRED_TRADE_SLOTS = [
   { label: "Window 1", utcTime: "08:30" },
   { label: "Window 2", utcTime: "12:30" },
-  { label: "Window 3", utcTime: "19:00" },
+  { label: "Window 3", utcTime: "19:50" },
 ] as const;
 const AI_AUTO_TRADE_LOG_FILE = path.join(process.cwd(), "logs", "ai-auto-trade.log");
 
