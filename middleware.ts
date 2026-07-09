@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const unsafeMethods = new Set(["POST", "PATCH", "DELETE", "PUT"]);
-const csrfExemptPrefixes = ["/api/webhooks/nowpayments", "/api/scheduler/income"];
+const csrfExemptPrefixes = [
+  "/api/webhooks/nowpayments",
+  "/api/scheduler/income",
+  "/api/scheduler/ai-auto-trade",
+  "/api/scheduler/copy-trade-settlement",
+];
 const safeAuthEndpoints = new Set(["/api/auth/logout"]);
 const productionOrigin = "https://voltix.zenithsoftech.com";
 
