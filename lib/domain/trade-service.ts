@@ -231,8 +231,41 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
     return { executed: false, reason: "User account is not active", rowId: row.id, vipRank: normalizedVipRank };
   }
   try {
+    await logAiAutoTradeEvent("========== AI BOT START ==========", {
+      currentTime: now.toISOString(),
+      timezone: TRADE_TIMEZONE,
+      userId: input.userId,
+      vip: normalizedVipRank,
+      subscription: "ACTIVE",
+      tradeId: null,
+      tradeStatus: slot ? "LIVE" : "NOT_LIVE",
+      tradeCode: codePreview?.code ?? null,
+      selectedVipRow: row.label,
+    });
+    await logAiAutoTradeEvent("Executing Trade...", {
+      userId: input.userId,
+      selectedVipRow: row.label,
+      tradeCode: codePreview?.code ?? null,
+    });
     const trade = await executeVipCopyTrade({ userId: input.userId, rowId: row.id, now, actorType: "SYSTEM", source: "AI_SUBSCRIPTION_AUTO", idempotencyKey: input.idempotencyKey });
     const tradeWithCode = await prisma.copyTrade.findUnique({ where: { id: trade.id }, include: { code: { select: { code: true, status: true } } } });
+    const updatedUser = await prisma.user.findUnique({ where: { id: input.userId }, select: { bitexBalance: true } });
+    await logAiAutoTradeEvent("Completed Successfully", {
+      tradeExecuted: true,
+      walletUpdated: true,
+      tradeHistoryCreated: true,
+      profitScheduled: true,
+      userId: input.userId,
+      vip: normalizedVipRank,
+      selectedVipRow: row.label,
+      tradeId: trade.id,
+      tradeCode: tradeWithCode?.code?.code ?? codePreview?.code ?? null,
+      principalDeducted: trade.principalAmount.toString(),
+      walletBalanceAfter: updatedUser?.bitexBalance.toString() ?? null,
+      status: trade.status,
+      completesAt: trade.completesAt.toISOString(),
+      creditDueAt: trade.creditDueAt.toISOString(),
+    });
     await logAiTradeCycle({
       ...baseLog,
       tradeCodeFound: tradeWithCode?.code?.code ?? codePreview?.code ?? null,
