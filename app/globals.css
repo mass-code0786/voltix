@@ -96,14 +96,13 @@ button { -webkit-tap-highlight-color: transparent; }
   place-items: center;
   margin: 0 auto;
   max-width: 72rem;
-  padding: clamp(2.5rem, 6vw, 5rem) 0 clamp(1.5rem, 4vw, 3rem);
+  padding: clamp(2.5rem, 6vw, 5rem) 0 40px;
   text-align: center;
 }
 
 .voltix-landing-copy {
   position: relative;
   z-index: 2;
-  margin-bottom: -2rem;
 }
 
 .voltix-landing-copy p {
@@ -120,34 +119,47 @@ button { -webkit-tap-highlight-color: transparent; }
   margin: 0;
   font-size: clamp(2.55rem, 8vw, 6.4rem);
   font-weight: 950;
-  line-height: .92;
+  line-height: .95;
   text-shadow: 0 0 38px rgba(24, 255, 138, .24);
 }
 
 .voltix-phone-stage {
   display: grid;
   width: min(40rem, 96vw);
-  margin-top: clamp(1.5rem, 4vw, 2.5rem);
+  margin: clamp(1.875rem, 4vw, 2.5rem) auto 0;
   place-items: center;
 }
 
 .voltix-hero-mobile-image {
   display: block;
-  width: min(100%, 34rem);
+  width: min(100%, 420px);
   height: auto;
   object-fit: contain;
-  filter: drop-shadow(0 2rem 4rem rgba(0, 0, 0, .55)) drop-shadow(0 0 2rem rgba(24, 255, 138, .16));
+  animation: voltix-float 5.5s ease-in-out infinite;
+  filter: drop-shadow(0 2rem 4rem rgba(0, 0, 0, .52)) drop-shadow(0 0 2.2rem rgba(24, 255, 138, .18));
+}
+
+@keyframes voltix-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }
 
 .voltix-install-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
   gap: 1rem;
   max-width: 45rem;
-  margin: 0 auto;
+  margin: 0 auto 40px;
 }
 
 .voltix-install-card {
+  display: flex;
+  width: calc(50% - .5rem);
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
   border: 1px solid rgba(24, 255, 138, .2);
   border-radius: .5rem;
   padding: 1.15rem;
@@ -161,14 +173,25 @@ button { -webkit-tap-highlight-color: transparent; }
   margin: 0 0 .9rem;
   font-size: clamp(1rem, 3vw, 1.25rem);
   font-weight: 950;
+  line-height: 1.15;
 }
 
 .voltix-install-button {
   width: 100%;
+  min-height: 2.7rem;
+  border-radius: .95rem;
+  padding: .8rem .9rem;
+}
+
+.voltix-install-card:nth-child(2) .voltix-install-button {
+  border-color: rgba(255, 255, 255, .28);
+  background: rgba(255, 255, 255, .055);
+  color: #f3f7f5;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 18px 42px rgba(0, 0, 0, .22);
 }
 
 .voltix-landing-footer {
-  margin-top: clamp(1.35rem, 4vw, 2rem);
+  margin-top: 0;
   text-align: center;
   color: #b7c7c0;
   font-size: .85rem;
@@ -191,21 +214,77 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 
   .voltix-landing-hero {
-    min-height: 34rem;
-    padding-top: 3rem;
+    min-height: auto;
+    padding: 3rem 0 40px;
+    align-content: center;
   }
 
-  .voltix-landing-copy {
-    margin-bottom: -1rem;
+  .voltix-landing-copy p {
+    margin-bottom: .75rem;
+    font-size: 18px;
+    letter-spacing: .12em;
+  }
+
+  .voltix-landing-copy h1 {
+    max-width: 22rem;
+    font-size: min(42px, 12vw);
+    line-height: 1.03;
   }
 
   .voltix-phone-stage {
     width: 100%;
-    margin-top: 1.25rem;
+    margin-top: 36px;
+  }
+
+  .voltix-hero-mobile-image {
+    width: 85%;
+    max-width: 420px;
   }
 
   .voltix-install-grid {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+    max-width: 420px;
+    margin-bottom: 40px;
+  }
+
+  .voltix-install-card {
+    width: calc(50% - 8px);
+    padding: .85rem .7rem;
+  }
+
+  .voltix-install-card h2 {
+    margin-bottom: .75rem;
+    font-size: .88rem;
+  }
+
+  .voltix-install-button {
+    min-height: 2.5rem;
+    padding: .72rem .45rem;
+    font-size: .72rem;
+  }
+}
+
+@media (max-width: 340px) {
+  .voltix-install-grid {
+    gap: 10px;
+  }
+
+  .voltix-install-card {
+    width: calc(50% - 5px);
+    padding: .75rem .55rem;
+  }
+
+  .voltix-install-card h2 {
+    font-size: .78rem;
+  }
+
+  .voltix-install-button {
+    font-size: .66rem;
   }
 }
 
