@@ -28,6 +28,315 @@ button { -webkit-tap-highlight-color: transparent; }
 @keyframes pulse-ring { 0%,100% { box-shadow: 0 0 0 0 rgba(24,255,138,.25); } 50% { box-shadow: 0 0 0 10px rgba(24,255,138,0); } }
 .pulse-ring { animation: pulse-ring 2s infinite; }
 
+.voltix-landing {
+  min-height: 100svh;
+  overflow: hidden;
+  padding: max(1rem, env(safe-area-inset-top)) clamp(1rem, 3vw, 2.5rem) max(1.25rem, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 50% 12%, rgba(24, 255, 138, .18), transparent 18rem),
+    radial-gradient(circle at 78% 46%, rgba(24, 200, 255, .08), transparent 15rem),
+    linear-gradient(180deg, #050807 0%, #07110d 48%, #050807 100%);
+  color: #f3f7f5;
+}
+
+.voltix-landing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 auto;
+  max-width: 72rem;
+}
+
+.voltix-landing-logo img {
+  display: block;
+  height: clamp(2rem, 5vw, 2.85rem);
+  width: auto;
+}
+
+.voltix-landing-actions {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.voltix-landing-login,
+.voltix-landing-register,
+.voltix-install-button {
+  display: inline-flex;
+  min-height: 2.55rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: .95rem;
+  padding: .75rem 1.15rem;
+  font-size: .8rem;
+  font-weight: 900;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.voltix-landing-login {
+  border: 1px solid rgba(24, 255, 138, .24);
+  background: rgba(255, 255, 255, .045);
+  color: #f3f7f5;
+}
+
+.voltix-landing-register,
+.voltix-install-button {
+  border: 1px solid rgba(24, 255, 138, .45);
+  background: linear-gradient(135deg, #18ff8a 0%, #00c96b 100%);
+  color: #050807;
+  box-shadow: 0 18px 42px rgba(24, 255, 138, .22);
+}
+
+.voltix-landing-hero {
+  display: grid;
+  min-height: clamp(30rem, 66svh, 45rem);
+  place-items: center;
+  margin: 0 auto;
+  max-width: 72rem;
+  padding: clamp(2.5rem, 6vw, 5rem) 0 clamp(1.5rem, 4vw, 3rem);
+  text-align: center;
+}
+
+.voltix-landing-copy {
+  position: relative;
+  z-index: 2;
+  margin-bottom: -2rem;
+}
+
+.voltix-landing-copy p {
+  margin: 0 0 .8rem;
+  color: #18ff8a;
+  font-size: clamp(.82rem, 2vw, 1rem);
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.voltix-landing-copy h1 {
+  max-width: 50rem;
+  margin: 0;
+  font-size: clamp(2.55rem, 8vw, 6.4rem);
+  font-weight: 950;
+  line-height: .92;
+  text-shadow: 0 0 38px rgba(24, 255, 138, .24);
+}
+
+.voltix-phone-stage {
+  position: relative;
+  width: min(38rem, 96vw);
+  height: clamp(22rem, 50vw, 34rem);
+  margin-top: clamp(1.5rem, 4vw, 2.5rem);
+}
+
+.voltix-phone {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: clamp(11.5rem, 26vw, 16rem);
+  aspect-ratio: 9 / 18.6;
+  border: .55rem solid #101916;
+  border-radius: 2.2rem;
+  background: #050807;
+  box-shadow:
+    0 2rem 5rem rgba(0, 0, 0, .6),
+    0 0 0 1px rgba(24, 255, 138, .18),
+    0 0 3rem rgba(24, 255, 138, .18);
+}
+
+.voltix-phone-dashboard {
+  transform: translate(-76%, -42%) rotate(-13deg);
+  z-index: 2;
+}
+
+.voltix-phone-markets {
+  transform: translate(-22%, -38%) rotate(13deg);
+  z-index: 1;
+}
+
+.voltix-phone-speaker {
+  position: absolute;
+  left: 50%;
+  top: .55rem;
+  z-index: 3;
+  width: 3rem;
+  height: .34rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .16);
+  transform: translateX(-50%);
+}
+
+.voltix-phone-screen {
+  height: 100%;
+  overflow: hidden;
+  border-radius: 1.65rem;
+  padding: 2.2rem .85rem .9rem;
+  background:
+    radial-gradient(circle at 72% 12%, rgba(24, 255, 138, .2), transparent 6rem),
+    linear-gradient(180deg, #0d1b14 0%, #07100d 100%);
+}
+
+.voltix-phone-top,
+.voltix-phone-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.voltix-phone-top span {
+  color: #f3f7f5;
+  font-size: .78rem;
+  font-weight: 950;
+}
+
+.voltix-phone-top i {
+  width: .65rem;
+  height: .65rem;
+  border-radius: 999px;
+  background: #18ff8a;
+  box-shadow: 0 0 1.1rem rgba(24, 255, 138, .8);
+}
+
+.voltix-phone-balance {
+  margin-top: 1.2rem;
+  border: 1px solid rgba(24, 255, 138, .18);
+  border-radius: 1rem;
+  padding: .85rem;
+  background: rgba(255, 255, 255, .045);
+}
+
+.voltix-phone-balance small,
+.voltix-phone-list em {
+  color: #8ea29a;
+  font-size: .62rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.voltix-phone-balance strong {
+  display: block;
+  margin-top: .25rem;
+  color: #18ff8a;
+  font-size: 1.18rem;
+  font-weight: 950;
+}
+
+.voltix-phone-chart {
+  display: flex;
+  height: 5.5rem;
+  align-items: end;
+  gap: .38rem;
+  margin: 1rem 0;
+}
+
+.voltix-phone-chart span {
+  flex: 1;
+  border-radius: 999px 999px .35rem .35rem;
+  background: linear-gradient(180deg, #18ff8a, rgba(24, 255, 138, .18));
+}
+
+.voltix-phone-chart span:nth-child(1) { height: 44%; }
+.voltix-phone-chart span:nth-child(2) { height: 70%; }
+.voltix-phone-chart span:nth-child(3) { height: 56%; }
+.voltix-phone-chart span:nth-child(4) { height: 86%; }
+.voltix-phone-chart span:nth-child(5) { height: 64%; }
+
+.voltix-phone-list {
+  display: grid;
+  gap: .45rem;
+}
+
+.voltix-phone-list div {
+  border: 1px solid rgba(255, 255, 255, .075);
+  border-radius: .8rem;
+  padding: .55rem .65rem;
+  background: rgba(0, 0, 0, .22);
+}
+
+.voltix-phone-list b {
+  color: #f3f7f5;
+  font-size: .68rem;
+}
+
+.voltix-install-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  max-width: 45rem;
+  margin: 0 auto;
+}
+
+.voltix-install-card {
+  border: 1px solid rgba(24, 255, 138, .2);
+  border-radius: .5rem;
+  padding: 1.15rem;
+  background:
+    linear-gradient(145deg, rgba(19, 31, 26, .9), rgba(6, 13, 10, .94));
+  text-align: center;
+  box-shadow: 0 1.5rem 3.5rem rgba(0, 0, 0, .32);
+}
+
+.voltix-install-card h2 {
+  margin: 0 0 .9rem;
+  font-size: clamp(1rem, 3vw, 1.25rem);
+  font-weight: 950;
+}
+
+.voltix-install-button {
+  width: 100%;
+}
+
+.voltix-landing-footer {
+  margin-top: clamp(1.35rem, 4vw, 2rem);
+  text-align: center;
+  color: #b7c7c0;
+  font-size: .85rem;
+  font-weight: 900;
+}
+
+@media (max-width: 720px) {
+  .voltix-landing {
+    padding-inline: .9rem;
+  }
+
+  .voltix-landing-actions {
+    gap: .45rem;
+  }
+
+  .voltix-landing-login,
+  .voltix-landing-register {
+    min-height: 2.35rem;
+    padding-inline: .8rem;
+  }
+
+  .voltix-landing-hero {
+    min-height: 34rem;
+    padding-top: 3rem;
+  }
+
+  .voltix-landing-copy {
+    margin-bottom: -1rem;
+  }
+
+  .voltix-phone-stage {
+    height: 24rem;
+  }
+
+  .voltix-phone-dashboard {
+    transform: translate(-72%, -38%) rotate(-12deg);
+  }
+
+  .voltix-phone-markets {
+    transform: translate(-28%, -36%) rotate(12deg);
+  }
+
+  .voltix-install-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dark-gradient-bg {
   background:
     linear-gradient(180deg, #050807 0%, #07110d 44%, #050807 100%);

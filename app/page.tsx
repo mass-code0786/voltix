@@ -1,5 +1,84 @@
-import AppShell from "@/components/app-shell";
+import Link from "next/link";
 
 export default function HomePage() {
-  return <AppShell />;
+  const androidHref = process.env.NEXT_PUBLIC_ANDROID_APK_URL || "/downloads/voltix.apk";
+  const iosHref = process.env.NEXT_PUBLIC_IOS_APP_URL || process.env.NEXT_PUBLIC_IOS_IPA_URL || "#";
+
+  return (
+    <main className="voltix-landing">
+      <header className="voltix-landing-header">
+        <Link href="/" className="voltix-landing-logo" aria-label="Voltix home">
+          <img src="/logo.png" alt="Voltix" />
+        </Link>
+        <nav className="voltix-landing-actions" aria-label="Account actions">
+          <Link href="/auth?mode=login" className="voltix-landing-login">Login</Link>
+          <Link href="/auth?mode=register" className="voltix-landing-register">Register</Link>
+        </nav>
+      </header>
+
+      <section className="voltix-landing-hero" aria-label="Voltix mobile apps">
+        <div className="voltix-landing-copy">
+          <p>Welcome to VOLTIX</p>
+          <h1>Trade Smarter. Earn Faster.</h1>
+        </div>
+        <div className="voltix-phone-stage" aria-hidden="true">
+          <PhoneMockup variant="dashboard" />
+          <PhoneMockup variant="markets" />
+        </div>
+      </section>
+
+      <section className="voltix-install-grid" aria-label="Install Voltix">
+        <InstallCard title="Install APK Android" button="Download APK" href={androidHref} />
+        <InstallCard title="Install App iOS" button="Download iOS" href={iosHref} />
+      </section>
+
+      <footer className="voltix-landing-footer">Secure • Fast • Reliable</footer>
+    </main>
+  );
+}
+
+function InstallCard({ title, button, href }: { title: string; button: string; href: string }) {
+  return (
+    <article className="voltix-install-card">
+      <h2>{title}</h2>
+      <a href={href} className="voltix-install-button">{button}</a>
+    </article>
+  );
+}
+
+function PhoneMockup({ variant }: { variant: "dashboard" | "markets" }) {
+  const coins = variant === "dashboard"
+    ? [["USDT", "$12,840"], ["AI", "+18.4%"], ["VIP", "Active"]]
+    : [["BTC", "+2.8%"], ["ETH", "+3.6%"], ["SOL", "+6.2%"]];
+
+  return (
+    <div className={`voltix-phone voltix-phone-${variant}`}>
+      <div className="voltix-phone-speaker" />
+      <div className="voltix-phone-screen">
+        <div className="voltix-phone-top">
+          <span>Voltix</span>
+          <i />
+        </div>
+        <div className="voltix-phone-balance">
+          <small>{variant === "dashboard" ? "Assets" : "Markets"}</small>
+          <strong>{variant === "dashboard" ? "$24,918.50" : "Live Prices"}</strong>
+        </div>
+        <div className="voltix-phone-chart">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="voltix-phone-list">
+          {coins.map(([label, value]) => (
+            <div key={label}>
+              <b>{label}</b>
+              <em>{value}</em>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
