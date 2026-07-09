@@ -95,7 +95,7 @@ button { -webkit-tap-highlight-color: transparent; }
   place-items: start center;
   margin: 0 auto;
   max-width: 72rem;
-  padding: clamp(1.5rem, 4vw, 3rem) 0 20px;
+  padding: clamp(1rem, 3vw, 2rem) 0 0;
   text-align: center;
 }
 
@@ -125,7 +125,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .voltix-phone-stage {
   display: grid;
   width: min(40rem, 96vw);
-  margin: 24px auto 20px;
+  margin: 14px auto 12px;
   place-items: center;
 }
 
@@ -212,7 +212,7 @@ button { -webkit-tap-highlight-color: transparent; }
   }
 
   .voltix-landing-hero {
-    padding: 1.5rem 0 0;
+    padding: 1rem 0 0;
     align-content: start;
   }
 
@@ -230,7 +230,7 @@ button { -webkit-tap-highlight-color: transparent; }
 
   .voltix-phone-stage {
     width: 100%;
-    margin: 24px auto 20px;
+    margin: 12px auto 12px;
   }
 
   .voltix-hero-mobile-image {
