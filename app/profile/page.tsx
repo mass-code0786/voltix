@@ -104,6 +104,15 @@ const maxProcessedProfilePhotoBytes = 1024 * 1024;
 const profilePhotoSize = 512;
 const allowedSourceProfilePhotoTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/heic", "image/heif"];
 
+function withProfileImageCacheBuster(url: string) {
+  if (!url) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
+
+function stripProfileImageCacheBuster(url: string) {
+  return url.split("?")[0] ?? url;
+}
+
 function initials(name: string) {
   return name
     .split(" ")
@@ -227,6 +236,20 @@ export default function ProfilePage() {
     window.setTimeout(() => setMessage(""), 2600);
   };
 
+  const refreshProfileImageFromMe = async (preferredDisplayUrl?: string) => {
+    const response = await fetch("/api/me", {
+      cache: "no-store",
+      credentials: "include",
+      headers: { "Cache-Control": "no-cache" },
+    });
+    const data = await response.json().catch(() => ({}));
+    const nextUrl = typeof data.user?.profileImageUrl === "string" ? data.user.profileImageUrl : "";
+    if (!response.ok || !nextUrl) return;
+    const displayUrl = preferredDisplayUrl && stripProfileImageCacheBuster(preferredDisplayUrl) === nextUrl ? preferredDisplayUrl : nextUrl;
+    setProfile(current => current ? { ...current, avatar: displayUrl, profileImageUrl: displayUrl } : current);
+    setProfileImageUrl(nextUrl);
+  };
+
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
@@ -313,8 +336,10 @@ export default function ProfilePage() {
         return;
       }
       const nextUrl = String(data.profileImageUrl);
-      setProfile(current => current ? { ...current, avatar: nextUrl, profileImageUrl: nextUrl } : current);
+      const displayUrl = withProfileImageCacheBuster(nextUrl);
+      setProfile(current => current ? { ...current, avatar: displayUrl, profileImageUrl: displayUrl } : current);
       setProfileImageUrl(nextUrl);
+      await refreshProfileImageFromMe(displayUrl);
       notify("Profile photo updated");
     } catch (err) {
       setError(errorMessageFromUnknown(err));

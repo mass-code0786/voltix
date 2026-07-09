@@ -6,13 +6,11 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ authenticated: false, user: null });
-  const refreshed = await refreshUserVipRank(user.id);
-  const currentUser = refreshed
-    ? await prisma.user.findUnique({
-        where: { id: user.id },
-        select: { id: true, uid: true, name: true, email: true, country: true, language: true, vipRank: true, role: true },
-      })
-    : user;
+  await refreshUserVipRank(user.id);
+  const currentUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { id: true, uid: true, name: true, email: true, country: true, language: true, profileImageUrl: true, vipRank: true, role: true },
+  });
   const latestKyc = await prisma.kycRequest.findFirst({
     where: { userId: user.id },
     orderBy: { submittedAt: "desc" },
