@@ -4,9 +4,10 @@
 
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
-html { background: #050807; overflow-x: hidden; }
+html { background: #050807; min-height: 100%; overflow-x: hidden; }
 body {
   margin: 0;
+  min-height: 100%;
   color: #f3f7f5;
   background:
     linear-gradient(180deg, #050807 0%, #07110d 48%, #050807 100%);

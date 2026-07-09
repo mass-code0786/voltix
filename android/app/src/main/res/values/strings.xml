@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Voltix</string>
+    <string name="title_activity_main">Voltix</string>
+    <string name="package_name">com.voltix.app</string>
+    <string name="custom_url_scheme">com.voltix.app</string>
+</resources>

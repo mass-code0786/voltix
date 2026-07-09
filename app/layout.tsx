@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import type { Viewport } from "next";
+import { CapacitorBridge } from "@/components/capacitor-bridge";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,10 +13,19 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: "#050807",
+  colorScheme: "dark",
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <CapacitorBridge />
+        {children}
+      </body>
     </html>
   );
 }

@@ -8,6 +8,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "cap:sync": "cap sync",
+    "android:build": "cap sync android && cd android && gradlew assembleDebug",
+    "ios:prepare": "cap sync ios",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
@@ -15,6 +18,14 @@
     "vip:backfill": "tsx scripts/backfill-vip-zero.ts"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
+    "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@prisma/client": "^6.8.2",
     "@types/ws": "^8.18.1",
     "clsx": "^2.1.1",
@@ -28,6 +39,7 @@
     "zod": "^3.25.42"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@types/node": "^22.15.21",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
