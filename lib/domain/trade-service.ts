@@ -18,6 +18,7 @@ export const AI_AUTO_TRADE_NOTIFICATION_MESSAGE = "AI Subscription auto trade pl
 const TRADE_TIMEZONE = "IST";
 const TRADE_DISPLAY_TIMEZONE = "Asia/Kolkata";
 const MIN_TRADE_WINDOW_MINUTES = 30;
+const TRADE_WINDOW_DAY_OFFSETS = [-1, 0, 1] as const;
 const SETTLEABLE_TRADE_STATUSES = [TradeStatus.PENDING, TradeStatus.ACTIVE, TradeStatus.COMPLETED] as const;
 const REQUIRED_TRADE_SLOTS = [
   { label: "Window 1", utcTime: "08:30" },
@@ -286,7 +287,7 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
   const slot = await findOpenTradeSlot(now);
   if (!slot) {
     const inactiveWindowLogs = await logActiveSubscriptionsSkippedOutsideLiveWindow(now);
-    await logAiAutoTradeEvent("no live slot", { currentTime: now.toISOString(), usersScanned: inactiveWindowLogs });
+    await logAiAutoTradeEvent("no live slot", { currentTime: now.toISOString(), currentIstTime: formatTradeDebugIst(now), usersScanned: inactiveWindowLogs, windows: await tradeWindowComparisons(now) });
     return {
       lastRunAt: now.toISOString(),
       liveWindow: null,
@@ -664,22 +665,18 @@ function isSettleableTradeStatus(status: TradeStatus) {
 async function findOpenTradeSlot(now: Date, client: Prisma.TransactionClient | typeof prisma = prisma) {
   await ensureRequiredTradeSlots(client);
   const slots = await client.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
-  return slots.find(slot => isSlotOpen(slot.utcTime, slot.durationMinutes, now)) ?? null;
+  const live = tradeWindowCandidates(slots, now).find(candidate => candidate.isLive);
+  return live?.slot ?? null;
 }
 
 async function getCurrentTradeWindow(now: Date) {
   await ensureRequiredTradeSlots();
   const slots = await prisma.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
-  const windows = slots.flatMap(slot => [0, 1].map(dayOffset => {
-    const start = tradeSlotStart(slot.utcTime, now, dayOffset);
-    const durationMinutes = effectiveTradeSlotDuration(slot.durationMinutes);
-    const end = new Date(start.getTime() + durationMinutes * 60_000);
-    return { slot, start, end, durationMinutes };
-  })).sort((a, b) => a.start.getTime() - b.start.getTime());
+  const windows = tradeWindowCandidates(slots, now).sort((a, b) => a.start.getTime() - b.start.getTime());
   const live = windows.find(window => now >= window.start && now < window.end);
   const upcoming = windows.find(window => window.start > now);
-  if (live) return tradeWindowPayload("LIVE", live.start, live.end, now, live.slot, upcoming?.slot ?? null, upcoming?.start ?? null);
-  if (upcoming) return tradeWindowPayload("UPCOMING", upcoming.start, upcoming.end, now, null, upcoming.slot, upcoming.start);
+  if (live) return tradeWindowPayload("LIVE", live.start, live.end, now, live.slot, upcoming?.slot ?? null, upcoming?.start ?? null, windows);
+  if (upcoming) return tradeWindowPayload("UPCOMING", upcoming.start, upcoming.end, now, null, upcoming.slot, upcoming.start, windows);
   return {
     status: "CLOSED" as const,
     nextOpenTime: null,
@@ -689,14 +686,16 @@ async function getCurrentTradeWindow(now: Date) {
     secondsUntilOpen: 0,
     secondsUntilClose: 0,
     slot: null,
-    debug: buildTradeWindowDebug(now, null, null, "CLOSED", 0, 0),
+    debug: buildTradeWindowDebug(now, null, null, "CLOSED", 0, 0, windows),
   };
 }
 
 function isSlotOpen(utcTime: string, durationMinutes: number, now: Date) {
-  const start = tradeSlotStart(utcTime, now);
-  const end = new Date(start.getTime() + effectiveTradeSlotDuration(durationMinutes) * 60_000);
-  return now >= start && now < end;
+  return TRADE_WINDOW_DAY_OFFSETS.some(dayOffset => {
+    const start = tradeSlotStart(utcTime, now, dayOffset);
+    const end = new Date(start.getTime() + effectiveTradeSlotDuration(durationMinutes) * 60_000);
+    return now >= start && now < end;
+  });
 }
 
 function tradeSlotStart(utcTime: string, now: Date, dayOffset = 0) {
@@ -707,7 +706,7 @@ function tradeSlotStart(utcTime: string, now: Date, dayOffset = 0) {
   return start;
 }
 
-function tradeWindowPayload(status: "LIVE" | "UPCOMING" | "CLOSED", start: Date, end: Date, now: Date, currentSlot: TradeWindowSlot | null, nextSlot: TradeWindowSlot | null, nextStart: Date | null) {
+function tradeWindowPayload(status: "LIVE" | "UPCOMING" | "CLOSED", start: Date, end: Date, now: Date, currentSlot: TradeWindowSlot | null, nextSlot: TradeWindowSlot | null, nextStart: Date | null, windows?: ReturnType<typeof tradeWindowCandidates>) {
   const displaySlot = currentSlot ?? nextSlot;
   const secondsUntilOpen = status === "UPCOMING" ? Math.max(0, Math.ceil((start.getTime() - now.getTime()) / 1000)) : 0;
   const secondsUntilClose = status === "LIVE" || status === "UPCOMING" ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 1000)) : 0;
@@ -725,7 +724,7 @@ function tradeWindowPayload(status: "LIVE" | "UPCOMING" | "CLOSED", start: Date,
       utcTime: displaySlot.utcTime,
       durationMinutes: effectiveTradeSlotDuration(displaySlot.durationMinutes),
     } : null,
-    debug: buildTradeWindowDebug(now, currentSlot, nextSlot, status, secondsUntilOpen, secondsUntilClose),
+    debug: buildTradeWindowDebug(now, currentSlot, nextSlot, status, secondsUntilOpen, secondsUntilClose, windows),
   };
 }
 
@@ -766,15 +765,67 @@ async function ensureRequiredTradeSlots(client: Pick<typeof prisma, "tradeSlot">
   });
 }
 
-function buildTradeWindowDebug(now: Date, currentSlot: TradeWindowSlot | null, nextSlot: TradeWindowSlot | null, tradeStatus: "LIVE" | "UPCOMING" | "CLOSED", secondsUntilOpen: number, secondsUntilClose: number) {
+function tradeWindowCandidates(slots: TradeWindowSlot[], now: Date) {
+  return slots.flatMap(slot => TRADE_WINDOW_DAY_OFFSETS.map(dayOffset => {
+    const start = tradeSlotStart(slot.utcTime, now, dayOffset);
+    const durationMinutes = effectiveTradeSlotDuration(slot.durationMinutes);
+    const end = new Date(start.getTime() + durationMinutes * 60_000);
+    return {
+      slot,
+      dayOffset,
+      start,
+      end,
+      durationMinutes,
+      isLive: now >= start && now < end,
+      startsInSeconds: Math.ceil((start.getTime() - now.getTime()) / 1000),
+      endedSecondsAgo: Math.ceil((now.getTime() - end.getTime()) / 1000),
+    };
+  }));
+}
+
+async function tradeWindowComparisons(now: Date) {
+  const slots = await prisma.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
+  return tradeWindowCandidates(slots, now).map(serializeWindowComparison);
+}
+
+function serializeWindowComparison(window: ReturnType<typeof tradeWindowCandidates>[number]) {
+  return {
+    label: window.slot.label,
+    configuredUtcTime: window.slot.utcTime,
+    dayOffset: window.dayOffset,
+    durationMinutes: window.durationMinutes,
+    openUtc: window.start.toISOString(),
+    closeUtc: window.end.toISOString(),
+    openIst: formatTradeDebugIst(window.start),
+    closeIst: formatTradeDebugIst(window.end),
+    nowAfterOrEqualOpen: window.isLive || window.startsInSeconds <= 0,
+    nowBeforeClose: window.isLive || window.endedSecondsAgo <= 0,
+    isLive: window.isLive,
+    startsInSeconds: window.startsInSeconds,
+    endedSecondsAgo: window.endedSecondsAgo,
+  };
+}
+
+function buildTradeWindowDebug(now: Date, currentSlot: TradeWindowSlot | null, nextSlot: TradeWindowSlot | null, tradeStatus: "LIVE" | "UPCOMING" | "CLOSED", secondsUntilOpen: number, secondsUntilClose: number, windows?: ReturnType<typeof tradeWindowCandidates>) {
   return {
     serverNowUTC: now.toISOString(),
+    serverNowIST: formatTradeDebugIst(now),
     currentSlot: currentSlot ? serializeDebugSlot(currentSlot) : null,
     nextSlot: nextSlot ? serializeDebugSlot(nextSlot) : null,
     tradeStatus,
     secondsUntilOpen,
     secondsUntilClose,
+    windows: windows?.map(serializeWindowComparison) ?? null,
   };
+}
+
+function formatTradeDebugIst(value: Date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "medium",
+    hour12: false,
+    timeZone: TRADE_DISPLAY_TIMEZONE,
+  }).format(value);
 }
 
 function serializeDebugSlot(slot: TradeWindowSlot) {
