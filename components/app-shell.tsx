@@ -860,7 +860,7 @@ export default function AppShell() {
     trade: <TradeWorkspace category={tradeCategory} coins={marketCoins} loading={marketCoinsLoading} error={marketCoinsError} />,
     bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
-    wallet: <WalletScreen notify={notify} assets={walletAssets} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { setWalletAction("deposit"); updateUrl("wallet", walletSection, "deposit"); }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
+    wallet: <WalletScreen notify={notify} assets={walletAssets} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
 
   return (
@@ -978,7 +978,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, o
   }),[assets,tickerMap]);
   const pulseCoins=marketPulseAssets.filter(coin=>["BTC","ETH","BNB","SOL"].includes(coin.symbol)).slice(0,4);
   const shortcuts: { icon: typeof Home; label: string; onClick: () => void }[] = [
-    { icon: ArrowDownToLine, label: "Deposit", onClick: () => onNavigate("wallet", "overview", "deposit") },
+    { icon: ArrowDownToLine, label: "Deposit", onClick: () => { window.location.href = "/wallet/deposit"; } },
     { icon: Send, label: "Withdraw", onClick: () => { window.location.href = "/wallet/withdraw"; } },
     { icon: Send, label: "P2P", onClick: onOpenP2P },
     { icon: Users, label: "Invite", onClick: () => onNavigate("team") },
@@ -2031,7 +2031,6 @@ return <div className="wallet-page -mt-1 min-h-screen">
   <WalletBalancesCard assets={activeAssets} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
   {section==="ledger"&&<section className="wallet-glass wallet-ledger-card"><div className="flex justify-between gap-3"><div><h3>Wallet ledger</h3><p>All balance movements and AI income credits</p></div><button onClick={()=>notify("Ledger export prepared")}>Export</button></div><ActivityRows rows={activity}/></section>}
   <WalletSecurityCard/>
-  {action==="deposit"&&<DepositModal close={onCloseAction} notify={notify} createDeposit={onCreateDeposit}/>}
 </div>;
 }
 
