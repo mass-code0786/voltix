@@ -297,7 +297,7 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
       errors: [] as { userId: string; error: string }[],
     };
   }
-  await logAiAutoTradeEvent("live slot detected", { slotId: slot.id, label: slot.label, utcTime: slot.utcTime, currentTime: now.toISOString() });
+  await logAiAutoTradeEvent("live slot detected", { slotId: slot.id, label: slot.label, utcTime: slot.utcTime, currentTime: now.toISOString(), currentIstTime: formatTradeDebugIst(now), windows: await tradeWindowComparisons(now) });
   const slotStart = tradeSlotStart(slot.utcTime, now);
   const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
   const subscriptions = await prisma.aiSubscription.findMany({
@@ -663,15 +663,13 @@ function isSettleableTradeStatus(status: TradeStatus) {
 }
 
 async function findOpenTradeSlot(now: Date, client: Prisma.TransactionClient | typeof prisma = prisma) {
-  await ensureRequiredTradeSlots(client);
-  const slots = await client.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
+  const slots = await configuredTradeSlots(client);
   const live = tradeWindowCandidates(slots, now).find(candidate => candidate.isLive);
   return live?.slot ?? null;
 }
 
 async function getCurrentTradeWindow(now: Date) {
-  await ensureRequiredTradeSlots();
-  const slots = await prisma.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
+  const slots = await configuredTradeSlots();
   const windows = tradeWindowCandidates(slots, now).sort((a, b) => a.start.getTime() - b.start.getTime());
   const live = windows.find(window => now >= window.start && now < window.end);
   const upcoming = windows.find(window => window.start > now);
@@ -765,6 +763,24 @@ async function ensureRequiredTradeSlots(client: Pick<typeof prisma, "tradeSlot">
   });
 }
 
+async function configuredTradeSlots(client: Pick<typeof prisma, "tradeSlot"> = prisma): Promise<TradeWindowSlot[]> {
+  await ensureRequiredTradeSlots(client);
+  const rows = await client.tradeSlot.findMany({
+    where: { label: { in: REQUIRED_TRADE_SLOTS.map(slot => slot.label) } },
+    orderBy: { label: "asc" },
+  });
+  return REQUIRED_TRADE_SLOTS.map(required => {
+    const row = rows.find(slot => slot.label === required.label);
+    if (!row) throw new Error(`Required trade slot missing after sync: ${required.label}`);
+    return {
+      id: row.id,
+      label: required.label,
+      utcTime: required.utcTime,
+      durationMinutes: MIN_TRADE_WINDOW_MINUTES,
+    };
+  });
+}
+
 function tradeWindowCandidates(slots: TradeWindowSlot[], now: Date) {
   return slots.flatMap(slot => TRADE_WINDOW_DAY_OFFSETS.map(dayOffset => {
     const start = tradeSlotStart(slot.utcTime, now, dayOffset);
@@ -784,8 +800,17 @@ function tradeWindowCandidates(slots: TradeWindowSlot[], now: Date) {
 }
 
 async function tradeWindowComparisons(now: Date) {
-  const slots = await prisma.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } });
-  return tradeWindowCandidates(slots, now).map(serializeWindowComparison);
+  const [configuredSlots, dbSlots] = await Promise.all([
+    configuredTradeSlots(),
+    prisma.tradeSlot.findMany({ where: { enabled: true }, orderBy: { utcTime: "asc" } }),
+  ]);
+  return {
+    currentUtcTime: now.toISOString(),
+    currentIstTime: formatTradeDebugIst(now),
+    sourceOfTruth: "REQUIRED_TRADE_SLOTS",
+    configuredSlots: tradeWindowCandidates(configuredSlots, now).map(serializeWindowComparison),
+    databaseSlots: tradeWindowCandidates(dbSlots, now).map(serializeWindowComparison),
+  };
 }
 
 function serializeWindowComparison(window: ReturnType<typeof tradeWindowCandidates>[number]) {
