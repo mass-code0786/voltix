@@ -18,7 +18,7 @@ type AuthScreenProps = {
 export function AuthScreen({ initialMode = "login", initialReferralCode = "", lockedReferral = false, initialSponsorLabel = "" }: AuthScreenProps) {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>(initialMode);
-  const [returnTo, setReturnTo] = useState("/");
+  const [returnTo, setReturnTo] = useState("/dashboard");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [country, setCountry] = useState("United States");
@@ -42,8 +42,8 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
     setMode(nextMode);
     if (urlReferralCode) setReferralCode(urlReferralCode);
     if (urlLocked) setIsReferralLocked(true);
-    const next = params.get("returnTo") || "/";
-    setReturnTo(next.startsWith("/") && !next.startsWith("/auth") ? next : "/");
+    const next = params.get("returnTo") || "/dashboard";
+    setReturnTo(next.startsWith("/") && !next.startsWith("/auth") ? next : "/dashboard");
   }, [initialMode]);
 
   const switchMode = (nextMode: AuthMode) => {
@@ -75,7 +75,8 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Authentication failed");
-      await refreshAuthenticatedData();
+      const user = await refreshAuthenticatedData();
+      if (!user) throw new Error("Login session could not be verified. Please try again.");
       router.replace(returnTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
@@ -187,12 +188,16 @@ function PasswordInput({ label, value, onChange, visible, setVisible, autoComple
 }
 
 async function refreshAuthenticatedData() {
+  const meResponse = await fetch("/api/me", { cache: "no-store", credentials: "include" });
+  const meData = await meResponse.json().catch(() => ({}));
+  const user = meResponse.ok && meData?.authenticated ? meData.user : null;
+  if (!user) return null;
   await Promise.allSettled([
-    fetch("/api/me", { cache: "no-store" }),
-    fetch("/api/dashboard", { cache: "no-store" }),
-    fetch("/api/wallet", { cache: "no-store" }),
-    fetch("/api/notifications", { cache: "no-store" }),
-    fetch("/api/team", { cache: "no-store" }),
-    fetch("/api/ai/subscription", { cache: "no-store" }),
+    fetch("/api/dashboard", { cache: "no-store", credentials: "include" }),
+    fetch("/api/wallet", { cache: "no-store", credentials: "include" }),
+    fetch("/api/notifications", { cache: "no-store", credentials: "include" }),
+    fetch("/api/team", { cache: "no-store", credentials: "include" }),
+    fetch("/api/ai/subscription", { cache: "no-store", credentials: "include" }),
   ]);
+  return user;
 }

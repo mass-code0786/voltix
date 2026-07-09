@@ -40,7 +40,7 @@ export default function TopUpTeamPage() {
   const loadRoot=()=> {
     setLoading(true);
     setError("");
-    fetch("/api/team/tree?mode=top-up", { cache: "no-store" })
+      fetch("/api/team/tree?mode=top-up", { cache: "no-store", credentials: "include" })
       .then(response=>response.ok?response.json():Promise.reject())
       .then(data=>setMembers(Array.isArray(data.members)?data.members.map(toNode):[]))
       .catch(()=>{setMembers([]);setError("Top-up team unavailable");})
@@ -52,7 +52,7 @@ export default function TopUpTeamPage() {
   const loadChildren=async(parentId:string)=>{
     setMembers(nodes=>updateNode(nodes,parentId,node=>({...node,loading:true})));
     try {
-      const response=await fetch(`/api/team/tree?mode=top-up&parentUserId=${encodeURIComponent(parentId)}`, { cache: "no-store" });
+      const response=await fetch(`/api/team/tree?mode=top-up&parentUserId=${encodeURIComponent(parentId)}`, { cache: "no-store", credentials: "include" });
       if(!response.ok) throw new Error("request failed");
       const data=await response.json();
       const children=Array.isArray(data.members)?data.members.map(toNode):[];

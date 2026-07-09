@@ -50,8 +50,8 @@ export default function KycPage() {
   useEffect(()=>{
     let active=true;
     Promise.all([
-      fetch("/api/kyc").then(async response=>{if(response.status===401){router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/kyc")}`);return null;}if(!response.ok)throw new Error("KYC request failed");return response.json() as Promise<KycSnapshot>;}),
-      fetch("/api/profile").then(response=>response.ok?response.json() as Promise<ProfileResponse>:null).catch(()=>null),
+      fetch("/api/kyc",{cache:"no-store",credentials:"include"}).then(async response=>{if(response.status===401){router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/kyc")}`);return null;}if(!response.ok)throw new Error("KYC request failed");return response.json() as Promise<KycSnapshot>;}),
+      fetch("/api/profile",{cache:"no-store",credentials:"include"}).then(response=>response.ok?response.json() as Promise<ProfileResponse>:null).catch(()=>null),
     ]).then(([kyc,profile])=>{
       if(!active||!kyc)return;
       setSnapshot(kyc);
@@ -80,7 +80,7 @@ export default function KycPage() {
     form.set("frontIdImage",frontUpload.file);
     if(backUpload.file)form.set("backIdImage",backUpload.file);
     form.set("selfieImage",selfieUpload.file);
-    const response=await fetch("/api/kyc",{method:"POST",body:form});
+    const response=await fetch("/api/kyc",{method:"POST",credentials:"include",body:form});
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){setError(data.error||"KYC submission failed");return;}

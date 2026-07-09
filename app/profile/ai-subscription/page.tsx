@@ -21,7 +21,7 @@ export default function AiSubscriptionPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const load = () => fetch("/api/ai/subscription")
+  const load = () => fetch("/api/ai/subscription", { cache: "no-store", credentials: "include" })
     .then(async response => {
       const data = await response.json().catch(() => ({}));
       if (response.status === 401) {
@@ -58,6 +58,7 @@ export default function AiSubscriptionPage() {
     const idempotencyKey = crypto.randomUUID();
     const response = await fetch("/api/ai/subscription/purchase", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({ idempotencyKey }),
     });

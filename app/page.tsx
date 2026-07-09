@@ -1,6 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const currentUser = await getCurrentUser();
+  if (currentUser) redirect("/dashboard");
+
   const androidHref = process.env.NEXT_PUBLIC_ANDROID_APK_URL || "/downloads/voltix.apk";
   const iosHref = process.env.NEXT_PUBLIC_IOS_APP_URL || process.env.NEXT_PUBLIC_IOS_IPA_URL || "#";
 
@@ -11,8 +16,8 @@ export default function HomePage() {
           <img src="/logo.png" alt="Voltix" />
         </Link>
         <nav className="voltix-landing-actions" aria-label="Account actions">
-          <Link href="/auth?mode=login" className="voltix-landing-login">Login</Link>
-          <Link href="/auth?mode=register" className="voltix-landing-register">Register</Link>
+          <Link href="/auth?mode=login&returnTo=%2Fdashboard" className="voltix-landing-login">Login</Link>
+          <Link href="/auth?mode=register&returnTo=%2Fdashboard" className="voltix-landing-register">Register</Link>
         </nav>
       </header>
 

@@ -162,7 +162,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/profile")
+    fetch("/api/profile", { cache: "no-store", credentials: "include" })
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         if (response.status === 401) {
@@ -188,11 +188,11 @@ export default function ProfilePage() {
       });
 
     Promise.allSettled([
-      fetch("/api/dashboard").then(r => r.ok ? r.json() : null),
-      fetch("/api/team").then(r => r.ok ? r.json() : null),
-      fetch("/api/ai/subscription").then(r => r.ok ? r.json() : null),
-      fetch("/api/notifications").then(r => r.ok ? r.json() : null),
-      fetch("/api/income").then(r => r.ok ? r.json() : null),
+      fetch("/api/dashboard", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
+      fetch("/api/team", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
+      fetch("/api/ai/subscription", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
+      fetch("/api/notifications", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
+      fetch("/api/income", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
     ]).then(results => {
       if (!active) return;
       const [dashboardResult, teamResult, aiResult, notificationResult, incomeResult] = results;
@@ -228,6 +228,7 @@ export default function ProfilePage() {
     setSavingProfile(true);
     const response = await fetch("/api/profile", {
       method: "PATCH",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, country, language, profileImageUrl }),
     });
@@ -256,6 +257,7 @@ export default function ProfilePage() {
     setSavingPassword(true);
     const response = await fetch("/api/profile/password", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
     });
@@ -284,7 +286,7 @@ export default function ProfilePage() {
       setAi(null);
       setIncome(null);
       setUnreadNotifications(0);
-      window.location.replace("/auth?mode=login");
+      window.location.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Logout failed");
     }
@@ -304,9 +306,9 @@ export default function ProfilePage() {
 
   const navTo = (id: MobileNavTab, section?: string) => {
     if (id === "profile") return;
-    if (id === "home") router.push("/");
-    else if (id === "wallet") router.push(section && section !== "overview" ? `/?view=wallet&wallet=${section}` : "/?view=wallet");
-    else router.push(`/?view=${id}`);
+    if (id === "home") router.push("/dashboard");
+    else if (id === "wallet") router.push(section && section !== "overview" ? `/dashboard?view=wallet&wallet=${section}` : "/dashboard?view=wallet");
+    else router.push(`/dashboard?view=${id}`);
   };
 
   return (
@@ -316,7 +318,7 @@ export default function ProfilePage() {
         subtitle="Account Center"
         initials={initials(profile?.fullName ?? "")}
         unreadNotifications={unreadNotifications}
-        onNotifications={() => router.push("/?view=home")}
+        onNotifications={() => router.push("/dashboard?view=home")}
         onMenu={() => router.push("/")}
         onMenuButton={() => router.push("/")}
       />

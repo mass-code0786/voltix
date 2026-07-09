@@ -18,7 +18,7 @@ export function CoinDetail({symbol}:{symbol:string}){
   const price=ticker?.price??(isShine?SHINE_PRICE_USD:0);
   return <main className="coin-detail-page mx-auto min-h-screen max-w-[430px] overflow-x-hidden px-4 pb-[120px] pt-4 lg:max-w-6xl">
     <div className="coin-detail-atmosphere" aria-hidden="true"><span/><span/><i/><i/></div>
-    <Link href="/?view=markets" className="coin-back-link"><span><ArrowLeft size={18}/></span>Back to Markets</Link>
+    <Link href="/dashboard?view=markets" className="coin-back-link"><span><ArrowLeft size={18}/></span>Back to Markets</Link>
     <section className="coin-hero-card">
       <div className="relative z-10 min-w-0">
         <p className="coin-kicker">Live Market</p>
@@ -55,7 +55,7 @@ function TradeActions(){return <section className="coin-action-card">
   <button disabled className="coin-action-buy opacity-60">Buy Coming Soon</button>
   <button disabled className="coin-action-sell opacity-60">Sell Coming Soon</button>
   <button type="button" className="coin-action-watch"><Star size={15}/> Watchlist</button>
-  <Link href="/?view=wallet&action=deposit" className="coin-action-deposit">Deposit <ArrowUpRight size={14}/></Link>
+  <Link href="/dashboard?view=wallet&action=deposit" className="coin-action-deposit">Deposit <ArrowUpRight size={14}/></Link>
 </section>;}
 
 type ConversionRow={id:string;fromAmount:number;toAmount:number;price:number;status:string;createdAt:string};
@@ -71,8 +71,8 @@ function ShineConvertCard(){
   const value=Number(amount)||0;
   const receive=useMemo(()=>value>0?value/SHINE_PRICE_USD:0,[value]);
   const load=()=>Promise.all([
-    fetch("/api/assets").then(r=>r.ok?r.json():null),
-    fetch("/api/convert/shine").then(r=>r.ok?r.json():null),
+    fetch("/api/assets",{cache:"no-store",credentials:"include"}).then(r=>r.ok?r.json():null),
+    fetch("/api/convert/shine",{cache:"no-store",credentials:"include"}).then(r=>r.ok?r.json():null),
   ]).then(([assetsData,historyData])=>{
     const assets=Array.isArray(assetsData?.assets)?assetsData.assets as {symbol:string;walletType:string;balance:number}[]:[];
     setUsdtBalance(Number(assetsData?.totals?.total?.spot??0));
@@ -86,7 +86,7 @@ function ShineConvertCard(){
     if(value<=0){setError("Enter a valid USDT amount");return;}
     if(value>usdtBalance){setError("Insufficient Spot Wallet USDT balance");return;}
     setLoading(true);
-    const response=await fetch("/api/convert/shine",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount:value,idempotencyKey:crypto.randomUUID()})});
+    const response=await fetch("/api/convert/shine",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount:value,idempotencyKey:crypto.randomUUID()})});
     const data=await response.json().catch(()=>({}));
     setLoading(false);
     if(!response.ok){setError(data.error||"SHINE conversion failed");return;}

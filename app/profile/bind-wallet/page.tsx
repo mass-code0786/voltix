@@ -34,7 +34,7 @@ export default function BindWalletPage() {
 
   useEffect(()=>{
     let active=true;
-    fetch("/api/profile/wallet-bindings").then(async response=>{
+    fetch("/api/profile/wallet-bindings",{cache:"no-store",credentials:"include"}).then(async response=>{
       const data=await response.json().catch(()=>({}));
       if(response.status===401){router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/profile/bind-wallet")}`);return null;}
       if(!response.ok)throw new Error(data.error||"Wallet bindings request failed");
@@ -58,7 +58,7 @@ export default function BindWalletPage() {
     const validationError=validateExternalWalletAddress(network,normalized);
     if(validationError){setError(validationError);return;}
     setSubmitting(true);
-    const response=await fetch("/api/profile/wallet-bindings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({network,walletAddress:normalized,walletName})});
+    const response=await fetch("/api/profile/wallet-bindings",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({network,walletAddress:normalized,walletName})});
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){setError(data.error||"Wallet binding failed");return;}
@@ -73,7 +73,7 @@ export default function BindWalletPage() {
     setError("");
     setMessage("");
     setSubmitting(true);
-    const response=await fetch("/api/profile/wallet-bindings",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({network})});
+    const response=await fetch("/api/profile/wallet-bindings",{method:"DELETE",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({network})});
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){setError(data.error||"Remove wallet failed");return;}

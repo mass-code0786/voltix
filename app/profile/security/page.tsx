@@ -21,7 +21,7 @@ export default function SecurityPage() {
   const [error, setError] = useState("");
 
   const loadSecurity = () => {
-    fetch("/api/profile/security").then(async response => {
+    fetch("/api/profile/security",{cache:"no-store",credentials:"include"}).then(async response => {
       const data = await response.json().catch(() => ({}));
       if (response.status === 401) {
         router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/profile/security")}`);
@@ -41,7 +41,7 @@ export default function SecurityPage() {
     setError("");
     setMessage("");
     setLoading(true);
-    const response = await fetch("/api/profile/password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword, confirmPassword }) });
+    const response = await fetch("/api/profile/password", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword, confirmPassword }) });
     const data = await response.json().catch(() => ({}));
     setLoading(false);
     if (!response.ok) {
@@ -57,14 +57,14 @@ export default function SecurityPage() {
   const logoutAll = async () => {
     setError("");
     setLoading(true);
-    const response = await fetch("/api/profile/security", { method: "DELETE" });
+    const response = await fetch("/api/profile/security", { method: "DELETE", credentials: "include" });
     setLoading(false);
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       setError(data.error || "Logout all failed");
       return;
     }
-    window.location.replace("/auth?mode=login");
+      window.location.replace("/");
   };
 
   return <Frame title="Security" icon={LockKeyhole}>
@@ -119,7 +119,7 @@ function TransactionPinSection({ status, refreshed }: { status: TransactionPinSt
     setLoading(true);
     const endpoint = mode === "create" ? "/api/profile/transaction-pin/create" : "/api/profile/transaction-pin/change";
     const body = mode === "create" ? { pin, confirmPin } : { currentPin, newPin: pin, confirmPin };
-    const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const response = await fetch(endpoint, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await response.json().catch(() => ({}));
     setLoading(false);
     if (!response.ok) {

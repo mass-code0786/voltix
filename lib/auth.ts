@@ -8,7 +8,7 @@ const sessionCookieName = "voltix_session";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 const sessionCookieOptions = {
   httpOnly: true,
-  sameSite: "lax" as const,
+  sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
   secure: process.env.NODE_ENV === "production",
   path: "/",
 };

@@ -48,7 +48,7 @@ export default function WalletDepositPage() {
     setMessage("");
     if(value<=0){setError("Enter a valid deposit amount");return;}
     setSubmitting(true);
-    const response=await fetch("/api/deposits/nowpayments/create",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount:value,network,payCurrency})});
+    const response=await fetch("/api/deposits/nowpayments/create",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount:value,network,payCurrency})});
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(response.status===401){router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/wallet/deposit")}`);return;}
@@ -68,7 +68,7 @@ export default function WalletDepositPage() {
   return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-3 text-white sm:px-6">
     <div className="mx-auto max-w-2xl pb-[calc(7rem+env(safe-area-inset-bottom))]">
       <header className="flex h-12 items-center gap-3">
-        <Link href="/?view=wallet" className="grid h-10 w-10 place-items-center text-white" aria-label="Back to wallet"><ArrowLeft size={22}/></Link>
+        <Link href="/dashboard?view=wallet" className="grid h-10 w-10 place-items-center text-white" aria-label="Back to wallet"><ArrowLeft size={22}/></Link>
         <h1 className="text-xl font-black">Deposit</h1>
       </header>
 

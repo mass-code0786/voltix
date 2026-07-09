@@ -32,7 +32,7 @@ export default function WalletWithdrawPage() {
 
   useEffect(()=>{
     let active=true;
-    fetch("/api/assets").then(async response=>{
+    fetch("/api/assets",{cache:"no-store",credentials:"include"}).then(async response=>{
       const data=await response.json().catch(()=>({}));
       if(response.status===401){router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/wallet/withdraw")}`);return null;}
       if(!response.ok)throw new Error(data.error||"Wallet request failed");
@@ -70,7 +70,7 @@ export default function WalletWithdrawPage() {
     resetError();
     if(transactionPin.length!==6){setError("Invalid Transaction PIN.");return;}
     setSubmitting(true);
-    const response=await fetch("/api/withdrawals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({walletType,amount:value,address,network,transactionPin})});
+    const response=await fetch("/api/withdrawals",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({walletType,amount:value,address,network,transactionPin})});
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){
@@ -86,7 +86,7 @@ export default function WalletWithdrawPage() {
   return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-3 text-white sm:px-6">
     <div className="mx-auto max-w-2xl pb-[calc(7rem+env(safe-area-inset-bottom))]">
       <header className="flex h-12 items-center gap-3">
-        <Link href="/?view=wallet" className="grid h-10 w-10 place-items-center text-white" aria-label="Back to wallet"><ArrowLeft size={22}/></Link>
+        <Link href="/dashboard?view=wallet" className="grid h-10 w-10 place-items-center text-white" aria-label="Back to wallet"><ArrowLeft size={22}/></Link>
         <h1 className="text-xl font-black">{confirming?"Confirm Withdrawal":"Withdraw"}</h1>
       </header>
 

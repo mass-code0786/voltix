@@ -371,7 +371,7 @@ export default function AppShell() {
   }, []);
 
   const refreshMe = useCallback(async () => {
-    const response = await fetch("/api/me");
+    const response = await fetch("/api/me", { cache: "no-store", credentials: "include" });
     const data = await response.json();
     const user = data?.authenticated ? data.user as CurrentUser : null;
     applyAuthenticatedUser(user);
@@ -407,7 +407,7 @@ export default function AppShell() {
       applyWalletSnapshot(null);
       return;
     }
-    const response = await fetch("/api/wallet");
+    const response = await fetch("/api/wallet", { cache: "no-store", credentials: "include" });
     if (!response.ok) throw new Error("Wallet request failed");
     const data = await response.json();
     applyWalletSnapshot(data?.authenticated ? data.wallet as WalletSnapshot : null);
@@ -418,7 +418,7 @@ export default function AppShell() {
       setDashboard(null);
       return;
     }
-    const response = await fetch("/api/dashboard");
+    const response = await fetch("/api/dashboard", { cache: "no-store", credentials: "include" });
     if (!response.ok) throw new Error("Dashboard request failed");
     const data = await response.json();
     setDashboard(data?.authenticated ? data.dashboard as DashboardSnapshot : null);
@@ -432,7 +432,7 @@ export default function AppShell() {
       setCopyTradeCounts(defaultCopyTradeCounts);
       return;
     }
-    const response = await fetch("/api/copy-trade/status");
+    const response = await fetch("/api/copy-trade/status", { cache: "no-store", credentials: "include" });
     if (!response.ok) throw new Error("Copy trade status request failed");
     const data = await response.json();
     const status = data?.status;
@@ -450,7 +450,7 @@ export default function AppShell() {
       setAiSubscription(null);
       return null;
     }
-    const response = await fetch("/api/ai/subscription");
+    const response = await fetch("/api/ai/subscription", { cache: "no-store", credentials: "include" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "AI request failed");
     const status = data as AiSubscriptionStatus;
@@ -466,12 +466,12 @@ export default function AppShell() {
       setWalletActivity([]);
       return;
     }
-    const response = await fetch("/api/assets");
+    const response = await fetch("/api/assets", { cache: "no-store", credentials: "include" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "Assets request failed");
     const assets = Array.isArray(data.assets) ? data.assets as AssetRecord[] : [];
     const totals = data.totals as AssetTotals;
-    const historyResponse = await fetch("/api/wallet/history");
+    const historyResponse = await fetch("/api/wallet/history", { cache: "no-store", credentials: "include" });
     const historyData = await historyResponse.json().catch(() => ({}));
     const history = Array.isArray(historyData.history) ? historyData.history as WalletHistoryRecord[] : Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
     setWalletAssets(mergeAssetRecords(marketCoins, assets));
@@ -492,7 +492,7 @@ export default function AppShell() {
       setNotificationOpen(false);
       return;
     }
-    const response = await fetch("/api/notifications");
+    const response = await fetch("/api/notifications", { cache: "no-store", credentials: "include" });
     if (!response.ok) throw new Error("Notifications request failed");
     const data = await response.json();
     setNotifications(Array.isArray(data.notifications) ? data.notifications as NotificationItem[] : []);
@@ -527,7 +527,7 @@ export default function AppShell() {
       if (!response.ok) throw new Error(data.error || "Logout failed");
       clearAuthenticatedState();
       setMenu(false);
-      window.location.replace("/auth?mode=login");
+      window.location.replace("/");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Logout failed");
     }
@@ -734,7 +734,7 @@ export default function AppShell() {
     const spotBalance = Number(assetTotals.total?.spot ?? 0);
     const balances = { SPOT: spotBalance, FUTURES: futuresBalance, BITEX: bitexBalance };
     if (from === "BITEX" || amount <= 0 || amount > balances[from]) return false;
-    const response = await fetch("/api/wallet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromWallet: from, toWallet: to, amount }) });
+    const response = await fetch("/api/wallet", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromWallet: from, toWallet: to, amount }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       notify(data.error || "Transfer could not be completed");
@@ -747,7 +747,7 @@ export default function AppShell() {
   }, [assetTotals, bitexBalance, currentUser, futuresBalance, notify, refreshAssets, refreshDashboard, refreshWallet]);
 
   const createDeposit = useCallback(async ({ amount, network, payCurrency }: DepositInput) => {
-    const response = await fetch("/api/deposits/nowpayments/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, network, payCurrency }) });
+    const response = await fetch("/api/deposits/nowpayments/create", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, network, payCurrency }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, message: data.error || "NOWPayments deposit failed" };
     await refreshAssets(currentUser);
@@ -763,7 +763,7 @@ export default function AppShell() {
     const fee = walletType === "SPOT" ? 2 + amount * .05 : 0;
     const received = amount - fee;
     if (received <= 0) return { ok: false, message: "Withdrawal amount must exceed the total fee" };
-    const response = await fetch("/api/withdrawals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletType, amount, address, network, transactionPin }) });
+    const response = await fetch("/api/withdrawals", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletType, amount, address, network, transactionPin }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, message: data.error || "Withdrawal request failed" };
     await refreshAssets(currentUser);
@@ -773,7 +773,7 @@ export default function AppShell() {
   }, [assetTotals, bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, notify, refreshAssets]);
 
   const sendP2PTransfer = useCallback(async (input: P2PTransferInput) => {
-    const response = await fetch("/api/p2p/transfer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+    const response = await fetch("/api/p2p/transfer", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, message: data.error || "P2P transfer failed" };
     await Promise.all([refreshAssets(currentUser), refreshWallet(currentUser), refreshDashboard(currentUser), refreshNotifications(currentUser)]);
@@ -782,7 +782,7 @@ export default function AppShell() {
   }, [currentUser, notify, refreshAssets, refreshDashboard, refreshNotifications, refreshWallet]);
 
   const startCopyTrade = useCallback(async (rowId: string) => {
-    const response = await fetch("/api/copy-trade/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rowId }) });
+    const response = await fetch("/api/copy-trade/execute", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rowId }) });
     const data = await response.json();
     if (!response.ok) return { ok: false, message: data.error || "Copy trade failed" };
     await refreshCopyTradeStatus(currentUser);
@@ -808,6 +808,7 @@ export default function AppShell() {
       const idempotencyKey = crypto.randomUUID();
       const response = await fetch("/api/ai/subscription/purchase", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({ idempotencyKey }),
       });
@@ -836,7 +837,7 @@ export default function AppShell() {
 
   const markNotificationsRead = useCallback(async () => {
     if (!currentUser || !unreadNotifications) return;
-    const response = await fetch("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const response = await fetch("/api/notifications/read", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
     const data = await response.json().catch(() => ({}));
     if (response.ok) {
       setUnreadNotifications(Number(data.unreadCount ?? 0));
@@ -846,7 +847,7 @@ export default function AppShell() {
 
   const deleteNotification = useCallback(async (id: string) => {
     if (!currentUser) return;
-    const response = await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+    const response = await fetch(`/api/notifications/${id}`, { method: "DELETE", credentials: "include" });
     const data = await response.json().catch(() => ({}));
     if (response.ok) {
       setNotifications(current => current.filter(notification => notification.id !== id));
@@ -2092,7 +2093,7 @@ function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:Cu
       setTeam(null);
       return;
     }
-    fetch("/api/team")
+    fetch("/api/team",{cache:"no-store",credentials:"include"})
       .then(response=>response.ok?response.json():Promise.reject())
       .then(data=>{if(active)setTeam(data?.authenticated?data.team:null);})
       .catch(()=>{if(active)setTeam(null);});
@@ -2106,7 +2107,7 @@ function TeamScreen({notify,currentUser}:{notify:(s:string)=>void;currentUser:Cu
     if (/^https?:\/\/localhost(?::\d+)?\b/i.test(link)) return fallback;
     return link;
   }, [team?.referralLink, team?.referralUid]);
-  const copyReferral=()=>{if(!referralLink){notify("Referral link unavailable");return;}navigator.clipboard?.writeText(referralLink);fetch("/api/audit/referral-copy",{method:"POST"}).catch(()=>{});notify("Referral link copied");};
+  const copyReferral=()=>{if(!referralLink){notify("Referral link unavailable");return;}navigator.clipboard?.writeText(referralLink);fetch("/api/audit/referral-copy",{method:"POST",credentials:"include"}).catch(()=>{});notify("Referral link copied");};
 
   return <div className="space-y-5">
     <div><h2 className="text-2xl font-black">My Network</h2><p className="mt-1 text-sm text-slate-500">Grow your team and unlock rewards</p></div>
@@ -2205,12 +2206,12 @@ function VerificationRequestModal({close,notify,user}:{close:()=>void;notify:(me
   const [kyc,setKyc]=useState<KycSnapshot|null>(null);
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
-  useEffect(()=>{let active=true;if(!user){setKyc(null);return;}fetch("/api/kyc").then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(!active)return;const snapshot=data as KycSnapshot;setKyc(snapshot);const request=snapshot.request;if(request){setFullName(request.fullName??"");setDateOfBirth(request.dateOfBirth??"");setCountry(request.country??user.country??"");setAddress(request.address??"");setGovernmentIdType(request.governmentIdType??"Aadhaar Card");setGovernmentIdNumber(request.governmentIdNumber??"");setFrontIdImageUrl(request.frontIdImageUrl??"");setBackIdImageUrl(request.backIdImageUrl??"");setSelfieImageUrl(request.selfieImageUrl??"");}}).catch(()=>{if(active)setKyc(null);});return()=>{active=false};},[user]);
+  useEffect(()=>{let active=true;if(!user){setKyc(null);return;}fetch("/api/kyc",{cache:"no-store",credentials:"include"}).then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(!active)return;const snapshot=data as KycSnapshot;setKyc(snapshot);const request=snapshot.request;if(request){setFullName(request.fullName??"");setDateOfBirth(request.dateOfBirth??"");setCountry(request.country??user.country??"");setAddress(request.address??"");setGovernmentIdType(request.governmentIdType??"Aadhaar Card");setGovernmentIdNumber(request.governmentIdNumber??"");setFrontIdImageUrl(request.frontIdImageUrl??"");setBackIdImageUrl(request.backIdImageUrl??"");setSelfieImageUrl(request.selfieImageUrl??"");}}).catch(()=>{if(active)setKyc(null);});return()=>{active=false};},[user]);
   const locked=kyc?.status==="APPROVED"||kyc?.status==="PENDING"||kyc?.status==="UNDER_REVIEW";
   const documentTypes=useMemo(()=>getKycDocumentTypes(country),[country]);
   const backRequired=kycDocumentRequiresBackPhoto(governmentIdType);
   useEffect(()=>{if(!documentTypes.includes(governmentIdType))setGovernmentIdType(documentTypes[0]);},[documentTypes,governmentIdType]);
-  const submit=async()=>{setError("");if(!user){setError("Login required");notify("Login required");return;}if(locked){setError(kyc?.status==="APPROVED"?"Verification is already approved":"Verification request is pending");return;}if(!fullName.trim()||!dateOfBirth.trim()||!country.trim()||!address.trim()||!governmentIdNumber.trim()||!frontIdImageUrl.trim()||backRequired&&!backIdImageUrl.trim()||!selfieImageUrl.trim()){setError("Complete all verification fields");return;}setLoading(true);const response=await fetch("/api/kyc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,dateOfBirth,country,address,governmentIdType,governmentIdNumber,frontIdImageUrl,backIdImageUrl,selfieImageUrl})});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Verification request failed");return;}notify(data.message||"Your KYC has been submitted successfully. It is now under review.");close();};
+  const submit=async()=>{setError("");if(!user){setError("Login required");notify("Login required");return;}if(locked){setError(kyc?.status==="APPROVED"?"Verification is already approved":"Verification request is pending");return;}if(!fullName.trim()||!dateOfBirth.trim()||!country.trim()||!address.trim()||!governmentIdNumber.trim()||!frontIdImageUrl.trim()||backRequired&&!backIdImageUrl.trim()||!selfieImageUrl.trim()){setError("Complete all verification fields");return;}setLoading(true);const response=await fetch("/api/kyc",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,dateOfBirth,country,address,governmentIdType,governmentIdNumber,frontIdImageUrl,backIdImageUrl,selfieImageUrl})});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Verification request failed");return;}notify(data.message||"Your KYC has been submitted successfully. It is now under review.");close();};
   return (
     <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4">
       <div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl">
@@ -2240,13 +2241,13 @@ function HelpCenterModal({close,notify}:{close:()=>void;notify:(message:string)=
   const [input,setInput]=useState("");
   const [tickets,setTickets]=useState<SupportTicket[]>([]);
   const [ticketOpen,setTicketOpen]=useState(false);
-  const refreshTickets=()=>fetch("/api/support").then(response=>response.ok?response.json():Promise.reject()).then(data=>setTickets(Array.isArray(data.tickets)?data.tickets:[])).catch(()=>setTickets([]));
+  const refreshTickets=()=>fetch("/api/support",{cache:"no-store",credentials:"include"}).then(response=>response.ok?response.json():Promise.reject()).then(data=>setTickets(Array.isArray(data.tickets)?data.tickets:[])).catch(()=>setTickets([]));
   useEffect(()=>{refreshTickets();},[]);
   const sendMessage=(text=input)=>{const clean=text.trim();if(!clean)return;setMessages(current=>[...current,{from:"user",text:clean},{from:"ai",text:"Raise a support ticket below if you need account review."}]);setInput("");};
   return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="flex h-[85vh] w-full max-w-md flex-col rounded-t-3xl border border-line bg-[#111c18] sm:rounded-3xl"><header className="flex items-center justify-between border-b border-line p-5"><div><h3 className="text-xl font-black">Help Center</h3><p className="mt-1 text-xs text-lime">AI assistant online</p></div><button onClick={close}><X/></button></header>{ticketOpen?<SupportTicketForm close={()=>setTicketOpen(false)} submitted={()=>{notify("Support ticket submitted");refreshTickets();setTicketOpen(false);}}/>:<><div className="border-b border-line p-3"><p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Common help topics</p><div className="flex gap-2 overflow-x-auto no-scrollbar">{["Deposit pending","Transfer fee","Copy trade","Verification"].map(topic=><button key={topic} onClick={()=>sendMessage(topic)} className="whitespace-nowrap rounded-full border border-line px-3 py-1.5 text-[11px] text-slate-300">{topic}</button>)}</div></div><div className="flex-1 space-y-3 overflow-y-auto p-4">{messages.map((message,index)=><div key={index} className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-5 ${message.from==="user"?"ml-auto bg-lime text-ink":"bg-ink text-slate-300"}`}>{message.text}</div>)}<div className="pt-2"><p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Tickets</p>{tickets.length?tickets.slice(0,3).map(ticket=><div key={ticket.id} className="mb-2 rounded-xl border border-line bg-ink/60 p-3 text-xs"><div className="flex justify-between gap-3"><span className="font-bold">{ticket.subject}</span><span className="text-lime">{ticket.status}</span></div>{ticket.attachmentUrl&&<a href={ticket.attachmentUrl} className="mt-2 inline-flex items-center gap-1.5 text-lime"><FileText size={13}/>{ticket.attachmentName||"Attachment"}</a>}{ticket.adminReply&&<p className="mt-2 text-slate-400">{ticket.adminReply}</p>}</div>):<p className="rounded-xl border border-line bg-ink/60 p-3 text-center text-xs text-slate-500">No records available</p>}</div></div><div className="border-t border-line p-4"><button onClick={()=>setTicketOpen(true)} className="mb-3 w-full rounded-xl border border-line py-2.5 text-xs font-bold text-lime">Raise Ticket</button><div className="flex gap-2"><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendMessage();}} placeholder="Type your message..." className="min-w-0 flex-1 rounded-xl border border-line bg-ink px-4 py-3 text-xs outline-none focus:border-lime/50"/><button onClick={()=>sendMessage()} className="rounded-xl bg-lime px-4 text-ink"><Send size={17}/></button></div></div></>}</div></div>;
 }
 
-function SupportTicketForm({close,submitted}:{close:()=>void;submitted:()=>void}) { const [subject,setSubject]=useState(""); const [message,setMessage]=useState(""); const [attachment,setAttachment]=useState<File|null>(null); const [error,setError]=useState(""); const [loading,setLoading]=useState(false); const chooseAttachment=(file?:File)=>{setError("");if(!file){setAttachment(null);return;}if(!["image/jpeg","image/png","application/pdf"].includes(file.type)){setError("Only JPG, JPEG, PNG, or PDF attachments are allowed");return;}if(file.size>10*1024*1024){setError("Attachment must be 10MB or smaller");return;}setAttachment(file);}; const submit=async()=>{setError("");if(!subject.trim()||!message.trim()){setError("Complete all ticket fields");return;}const form=new FormData();form.set("subject",subject);form.set("message",message);if(attachment)form.set("attachment",attachment);setLoading(true);const response=await fetch("/api/support",{method:"POST",body:form});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Support ticket failed");return;}submitted();}; return <div className="flex-1 overflow-y-auto p-5"><button onClick={close} className="text-xs font-bold text-lime">Back to chat</button><h4 className="mt-4 text-lg font-black">Raise Ticket</h4><div className="mt-5 space-y-4"><FormField label="Subject" value={subject} onChange={setSubject} placeholder="Brief issue summary"/><label className="block text-xs font-bold text-slate-400">Message<textarea value={message} onChange={e=>setMessage(e.target.value)} rows={5} className="mt-2 w-full resize-none rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Attachment<input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e=>chooseAttachment(e.target.files?.[0])} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-xs text-white outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-lime file:px-3 file:py-1.5 file:text-xs file:font-black file:text-ink"/></label>{attachment&&<p className="text-xs text-slate-500">{attachment.name}</p>}</div>{error&&<p className="mt-3 text-xs text-danger">{error}</p>}<button onClick={submit} disabled={loading} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Submitting...":"Submit Ticket"}</button></div> }
+function SupportTicketForm({close,submitted}:{close:()=>void;submitted:()=>void}) { const [subject,setSubject]=useState(""); const [message,setMessage]=useState(""); const [attachment,setAttachment]=useState<File|null>(null); const [error,setError]=useState(""); const [loading,setLoading]=useState(false); const chooseAttachment=(file?:File)=>{setError("");if(!file){setAttachment(null);return;}if(!["image/jpeg","image/png","application/pdf"].includes(file.type)){setError("Only JPG, JPEG, PNG, or PDF attachments are allowed");return;}if(file.size>10*1024*1024){setError("Attachment must be 10MB or smaller");return;}setAttachment(file);}; const submit=async()=>{setError("");if(!subject.trim()||!message.trim()){setError("Complete all ticket fields");return;}const form=new FormData();form.set("subject",subject);form.set("message",message);if(attachment)form.set("attachment",attachment);setLoading(true);const response=await fetch("/api/support",{method:"POST",credentials:"include",body:form});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Support ticket failed");return;}submitted();}; return <div className="flex-1 overflow-y-auto p-5"><button onClick={close} className="text-xs font-bold text-lime">Back to chat</button><h4 className="mt-4 text-lg font-black">Raise Ticket</h4><div className="mt-5 space-y-4"><FormField label="Subject" value={subject} onChange={setSubject} placeholder="Brief issue summary"/><label className="block text-xs font-bold text-slate-400">Message<textarea value={message} onChange={e=>setMessage(e.target.value)} rows={5} className="mt-2 w-full resize-none rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Attachment<input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e=>chooseAttachment(e.target.files?.[0])} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-xs text-white outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-lime file:px-3 file:py-1.5 file:text-xs file:font-black file:text-ink"/></label>{attachment&&<p className="text-xs text-slate-500">{attachment.name}</p>}</div>{error&&<p className="mt-3 text-xs text-danger">{error}</p>}<button onClick={submit} disabled={loading} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Submitting...":"Submit Ticket"}</button></div> }
 
 function FormField({label,value,onChange,placeholder,readOnly}:{label:string;value:string;onChange:(value:string)=>void;placeholder?:string;readOnly?:boolean}) { return <label className="block text-xs font-bold text-slate-400">{label}<input value={value} readOnly={readOnly} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50 read-only:text-slate-500"/></label> }
 
