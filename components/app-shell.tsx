@@ -978,8 +978,8 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, o
   }),[assets,tickerMap]);
   const pulseCoins=marketPulseAssets.filter(coin=>["BTC","ETH","BNB","SOL"].includes(coin.symbol)).slice(0,4);
   const shortcuts: { icon: typeof Home; label: string; onClick: () => void }[] = [
-    { icon: Wallet, label: "AI Wallet", onClick: () => onNavigate("wallet") },
-    { icon: Copy, label: "Copy Trading", onClick: onOpenCopyTrade },
+    { icon: ArrowDownToLine, label: "Deposit", onClick: () => onNavigate("wallet", "overview", "deposit") },
+    { icon: Send, label: "Withdraw", onClick: () => { window.location.href = "/wallet/withdraw"; } },
     { icon: Send, label: "P2P", onClick: onOpenP2P },
     { icon: Users, label: "Invite", onClick: () => onNavigate("team") },
   ];
