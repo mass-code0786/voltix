@@ -84,6 +84,13 @@ type IncomeHistory = {
 type MobileNavTab = "home" | "markets" | "bitex" | "wallet" | "profile";
 type Panel = "account" | "security" | "settings" | null;
 type IconType = ComponentType<LucideProps>;
+type NativePhoto = {
+  webPath?: string;
+  path?: string;
+  dataUrl?: string;
+  base64String?: string;
+  format?: string;
+};
 
 const mobileTabs: { id: MobileNavTab; label: string; icon: IconType; section?: string }[] = [
   { id: "home", label: "Home", icon: Home },
@@ -92,8 +99,10 @@ const mobileTabs: { id: MobileNavTab; label: string; icon: IconType; section?: s
   { id: "wallet", label: "Wallet", icon: Wallet, section: "overview" },
   { id: "profile", label: "Profile", icon: Settings },
 ];
-const maxProfilePhotoBytes = 5 * 1024 * 1024;
-const allowedProfilePhotoTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+const maxSourceProfilePhotoBytes = 25 * 1024 * 1024;
+const maxProcessedProfilePhotoBytes = 1024 * 1024;
+const profilePhotoSize = 512;
+const allowedSourceProfilePhotoTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/heic", "image/heif"];
 
 function initials(name: string) {
   return name
@@ -263,11 +272,7 @@ export default function ProfilePage() {
           promptLabelPhoto: "Choose from Gallery",
           promptLabelPicture: "Take Photo",
         });
-        if (!photo.webPath) throw new Error("Photo selection failed");
-        const photoResponse = await fetch(photo.webPath);
-        const blob = await photoResponse.blob();
-        const type = blob.type || mimeFromFormat(photo.format);
-        await uploadProfilePhoto(new File([blob], `profile-photo.${extensionFromMime(type)}`, { type }));
+        await uploadProfilePhoto(await fileFromNativePhoto(photo as NativePhoto));
         return;
       } catch (err) {
         if (err instanceof Error && /cancel/i.test(err.message)) return;
@@ -287,22 +292,24 @@ export default function ProfilePage() {
   const uploadProfilePhoto = async (file: File) => {
     setError("");
     setMessage("");
-    if (!allowedProfilePhotoTypes.includes(file.type)) {
-      setError("Only PNG, JPG, JPEG, or WEBP images are allowed");
+    const sourceType = normalizedImageType(file.type, file.name);
+    if (!allowedSourceProfilePhotoTypes.includes(sourceType)) {
+      setError("Unsupported image format. Please upload JPG, PNG, or WEBP.");
       return;
     }
-    if (file.size > maxProfilePhotoBytes) {
-      setError("Profile photo must be 5MB or smaller");
+    if (file.size > maxSourceProfilePhotoBytes) {
+      setError("Image size is too large. Please upload a smaller photo.");
       return;
     }
-    const form = new FormData();
-    form.set("photo", file);
     setUploadingPhoto(true);
     try {
+      const processedPhoto = await processProfilePhoto(file, sourceType);
+      const form = new FormData();
+      form.set("photo", processedPhoto);
       const response = await fetch("/api/profile/photo", { method: "POST", credentials: "include", body: form });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.profileImageUrl) {
-        setError(data.error || "Profile photo upload failed");
+        setError(profilePhotoApiError(data.error));
         return;
       }
       const nextUrl = String(data.profileImageUrl);
@@ -310,7 +317,7 @@ export default function ProfilePage() {
       setProfileImageUrl(nextUrl);
       notify("Profile photo updated");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Profile photo upload failed");
+      setError(errorMessageFromUnknown(err));
     } finally {
       setUploadingPhoto(false);
     }
@@ -422,9 +429,9 @@ export default function ProfilePage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/heic,image/heif"
               className="hidden"
-              onChange={event => chooseBrowserProfilePhoto(event.target.files?.[0]).catch(err => setError(err instanceof Error ? err.message : "Profile photo upload failed"))}
+              onChange={event => chooseBrowserProfilePhoto(event.target.files?.[0]).catch(err => setError(errorMessageFromUnknown(err)))}
             />
 
             <VipProgressCard currentVip={currentVip} nextVip={nextVip} progress={vipProgress} />
@@ -488,11 +495,15 @@ export default function ProfilePage() {
 
 function ProfileHero({profile,initialsText,kycTone,totalBalance,totalIncome,referralIncome,teamSize,copyUid,uploadPhoto,uploadingPhoto}:{profile:Profile;initialsText:string;kycTone:string;totalBalance:number;totalIncome:number;referralIncome:number;teamSize:number;copyUid:()=>void;uploadPhoto:()=>void;uploadingPhoto:boolean}) {
   const photoUrl = profile.profileImageUrl || profile.avatar;
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [photoUrl]);
   return (
     <section className="profile-hero-card">
       <div className="profile-hero-main">
         <button type="button" onClick={uploadPhoto} disabled={uploadingPhoto} className="profile-avatar" aria-label="Upload profile photo">
-          {photoUrl ? <img src={photoUrl} alt={profile.fullName || "Profile"} /> : <span>{initialsText}</span>}
+          <span className="profile-avatar-frame">
+            {photoUrl && !imageFailed ? <img src={photoUrl} alt={profile.fullName || "Profile"} onError={() => setImageFailed(true)} /> : <span>{initialsText}</span>}
+          </span>
           <span className="profile-camera"><Camera size={13}/></span>
         </button>
         <div className="profile-identity">
@@ -526,13 +537,157 @@ function mimeFromFormat(format?: string) {
   const normalized = format?.toLowerCase();
   if (normalized === "png") return "image/png";
   if (normalized === "webp") return "image/webp";
+  if (normalized === "heic") return "image/heic";
+  if (normalized === "heif") return "image/heif";
   return "image/jpeg";
 }
 
 function extensionFromMime(type: string) {
   if (type === "image/png") return "png";
   if (type === "image/webp") return "webp";
+  if (type === "image/heic") return "heic";
+  if (type === "image/heif") return "heif";
   return "jpg";
+}
+
+async function fileFromNativePhoto(photo: NativePhoto) {
+  if (photo.dataUrl) {
+    const blob = dataUrlToBlob(photo.dataUrl);
+    return new File([blob], `profile-photo.${extensionFromMime(blob.type || mimeFromFormat(photo.format))}`, { type: blob.type || mimeFromFormat(photo.format) });
+  }
+  if (photo.base64String) {
+    const type = mimeFromFormat(photo.format);
+    const blob = base64ToBlob(photo.base64String, type);
+    return new File([blob], `profile-photo.${extensionFromMime(type)}`, { type });
+  }
+  const uri = photo.webPath || photo.path;
+  if (!uri) throw new Error("Could not process this image. Please try another photo.");
+  const source = photo.webPath ? uri : await nativePathToWebPath(uri);
+  const response = await fetch(source);
+  if (!response.ok) throw new Error("Could not process this image. Please try another photo.");
+  const blob = await response.blob();
+  const type = blob.type || mimeFromFormat(photo.format);
+  return new File([blob], `profile-photo.${extensionFromMime(type)}`, { type });
+}
+
+async function nativePathToWebPath(pathValue: string) {
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    return Capacitor.convertFileSrc(pathValue);
+  } catch {
+    return pathValue;
+  }
+}
+
+function dataUrlToBlob(dataUrl: string) {
+  const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
+  if (!match) throw new Error("Could not process this image. Please try another photo.");
+  const type = match[1] || "image/jpeg";
+  const payload = match[3] || "";
+  if (match[2]) return base64ToBlob(payload, type);
+  return new Blob([decodeURIComponent(payload)], { type });
+}
+
+function base64ToBlob(base64: string, type: string) {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type });
+}
+
+function normalizedImageType(type: string, name = "") {
+  const normalized = type.toLowerCase();
+  if (normalized === "image/jpg") return "image/jpeg";
+  if (normalized) return normalized;
+  const extension = name.split(".").pop()?.toLowerCase();
+  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+  if (extension === "png") return "image/png";
+  if (extension === "webp") return "image/webp";
+  if (extension === "heic") return "image/heic";
+  if (extension === "heif") return "image/heif";
+  return "";
+}
+
+async function processProfilePhoto(file: File, sourceType: string) {
+  let loaded: Awaited<ReturnType<typeof loadImageForCanvas>> | null = null;
+  try {
+    loaded = await loadImageForCanvas(file);
+  } catch {
+    if (sourceType === "image/heic" || sourceType === "image/heif") {
+      throw new Error("Unsupported image format. Please upload JPG, PNG, or WEBP.");
+    }
+    throw new Error("Could not process this image. Please try another photo.");
+  }
+
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = profilePhotoSize;
+    canvas.height = profilePhotoSize;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not process this image. Please try another photo.");
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, profilePhotoSize, profilePhotoSize);
+    const cropSize = Math.min(loaded.width, loaded.height);
+    const cropX = Math.max(0, (loaded.width - cropSize) / 2);
+    const cropY = Math.max(0, (loaded.height - cropSize) / 2);
+    context.drawImage(loaded.image, cropX, cropY, cropSize, cropSize, 0, 0, profilePhotoSize, profilePhotoSize);
+
+    for (const quality of [0.86, 0.78, 0.7, 0.62, 0.54]) {
+      const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+      if (blob.size <= maxProcessedProfilePhotoBytes) {
+        return new File([blob], "profile-photo.jpg", { type: "image/jpeg" });
+      }
+    }
+    throw new Error("Image size is too large. Please upload a smaller photo.");
+  } finally {
+    loaded.cleanup();
+  }
+}
+
+async function loadImageForCanvas(file: File): Promise<{ image: CanvasImageSource; width: number; height: number; cleanup: () => void }> {
+  if ("createImageBitmap" in window) {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      return { image: bitmap, width: bitmap.width, height: bitmap.height, cleanup: () => bitmap.close() };
+    } catch {
+      // Fall through to HTMLImageElement decoding for WebViews that lack full bitmap support.
+    }
+  }
+
+  const url = URL.createObjectURL(file);
+  const image = new Image();
+  image.decoding = "async";
+  image.src = url;
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Could not process this image. Please try another photo."));
+  });
+  return {
+    image,
+    width: image.naturalWidth,
+    height: image.naturalHeight,
+    cleanup: () => URL.revokeObjectURL(url),
+  };
+}
+
+async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, type, quality));
+  if (!blob) throw new Error("Could not process this image. Please try another photo.");
+  return blob;
+}
+
+function profilePhotoApiError(error: unknown) {
+  if (typeof error !== "string") return "Could not process this image. Please try another photo.";
+  if (/too large|size/i.test(error)) return "Image size is too large. Please upload a smaller photo.";
+  if (/unsupported|format|png|jpg|jpeg|webp|heic/i.test(error)) return "Unsupported image format. Please upload JPG, PNG, or WEBP.";
+  if (/process|image|photo/i.test(error)) return "Could not process this image. Please try another photo.";
+  return error;
+}
+
+function errorMessageFromUnknown(error: unknown) {
+  if (!(error instanceof Error)) return "Could not process this image. Please try another photo.";
+  return profilePhotoApiError(error.message);
 }
 
 function VoltixVMark() {

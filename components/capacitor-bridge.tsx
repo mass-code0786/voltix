@@ -5,6 +5,7 @@ import { getMobileSessionTokenWithBiometric, getNativePlatform, hapticImpact, is
 
 const VOLTIX_STATUS_BAR_COLOR = "#050b08";
 const refreshRoutes = ["/dashboard", "/profile"];
+type CapacitorNetwork = typeof import("@capacitor/network").Network;
 
 export function CapacitorBridge() {
   const [offline, setOffline] = useState(false);
@@ -12,6 +13,8 @@ export function CapacitorBridge() {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
+    let disposed = false;
+    let startupTasksDone = false;
 
     async function configureNativeShell() {
       const [{ Capacitor }, { App }, { StatusBar, Style }, { SplashScreen }, { Keyboard, KeyboardResize, KeyboardStyle }, { Network }] = await Promise.all([
@@ -32,11 +35,30 @@ export function CapacitorBridge() {
         StatusBar.setStyle({ style: Style.Dark }),
         StatusBar.setBackgroundColor({ color: VOLTIX_STATUS_BAR_COLOR }),
         StatusBar.setOverlaysWebView({ overlay: false }),
-        SplashScreen.hide(),
         Keyboard.setResizeMode({ mode: KeyboardResize.Body }),
         Keyboard.setStyle({ style: KeyboardStyle.Dark }),
       ]);
 
+      const runStartupTasks = async () => {
+        if (startupTasksDone) return;
+        startupTasksDone = true;
+        await Promise.allSettled([restoreMobileSession(), registerPushNotifications(), checkForAppUpdate()]);
+      };
+      const refreshConnectivity = async () => {
+        const reachable = await isNativeOnline(Network);
+        if (!disposed) setOffline(!reachable);
+        return reachable;
+      };
+      const reconnectHandler = () => {
+        setBooting(true);
+        refreshConnectivity()
+          .then(async reachable => {
+            if (reachable) await runStartupTasks();
+          })
+          .finally(() => {
+            if (!disposed) setBooting(false);
+          });
+      };
       const backListener = await App.addListener("backButton", ({ canGoBack }) => {
         if (canGoBack) {
           window.history.back();
@@ -45,11 +67,12 @@ export function CapacitorBridge() {
         App.exitApp();
       });
       const urlListener = await App.addListener("appUrlOpen", ({ url }) => handleDeepLink(url));
-      const networkStatus = await Network.getStatus();
-      setOffline(!networkStatus.connected);
       const networkListener = await Network.addListener("networkStatusChange", status => {
-        setOffline(!status.connected);
-        if (status.connected) window.dispatchEvent(new CustomEvent("voltix:native-reconnect"));
+        if (!status.connected) {
+          setOffline(true);
+          return;
+        }
+        reconnectHandler();
       });
       const clickHandler = (event: MouseEvent) => {
         const target = event.target as HTMLElement | null;
@@ -57,15 +80,23 @@ export function CapacitorBridge() {
       };
       const refreshCleanup = installPullToRefresh();
       document.addEventListener("click", clickHandler, { passive: true });
+      window.addEventListener("voltix:native-reconnect", reconnectHandler);
 
-      await Promise.allSettled([restoreMobileSession(), registerPushNotifications(), checkForAppUpdate()]);
-      setBooting(false);
+      try {
+        const reachable = await refreshConnectivity();
+        if (reachable) await runStartupTasks();
+      } finally {
+        await SplashScreen.hide().catch(() => null);
+        if (!disposed) setBooting(false);
+      }
 
       cleanup = () => {
+        disposed = true;
         backListener.remove();
         urlListener.remove();
         networkListener.remove();
         document.removeEventListener("click", clickHandler);
+        window.removeEventListener("voltix:native-reconnect", reconnectHandler);
         refreshCleanup();
         document.documentElement.classList.remove("voltix-capacitor");
         document.body.classList.remove("voltix-capacitor");
@@ -77,12 +108,38 @@ export function CapacitorBridge() {
       cleanup = undefined;
     });
 
-    return () => cleanup?.();
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
   }, []);
 
   if (offline) return <OfflineScreen retry={() => window.dispatchEvent(new CustomEvent("voltix:native-reconnect"))} />;
   if (booting) return <VoltixNativeLoader />;
   return null;
+}
+
+async function isNativeOnline(Network: CapacitorNetwork) {
+  const status = await Network.getStatus().catch(() => ({ connected: true }));
+  if (!status.connected) return false;
+  return canReachApi();
+}
+
+async function canReachApi() {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 7000);
+  try {
+    const response = await fetch("/api/health", {
+      cache: "no-store",
+      credentials: "include",
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 async function restoreMobileSession() {
@@ -168,9 +225,29 @@ function installPullToRefresh() {
 }
 
 function VoltixNativeLoader() {
-  return <div className="voltix-native-overlay" aria-live="polite"><div className="voltix-native-loader"><span>V</span></div></div>;
+  return <div className="voltix-native-overlay" aria-live="polite"><div className="voltix-native-loader"><VoltixVLogo /></div></div>;
 }
 
 function OfflineScreen({ retry }: { retry: () => void }) {
-  return <div className="voltix-native-overlay" role="alertdialog" aria-modal="true" aria-label="No Internet Connection"><div className="voltix-offline-card"><div className="voltix-native-loader small"><span>V</span></div><h2>No Internet Connection</h2><p>Please check your connection and try again.</p><button onClick={retry}>Retry</button></div></div>;
+  return <div className="voltix-native-overlay" role="alertdialog" aria-modal="true" aria-label="No Internet Connection"><div className="voltix-offline-card"><div className="voltix-native-loader small"><VoltixVLogo /></div><h2>No Internet Connection</h2><p>Please check your connection and try again.</p><button onClick={retry}>Retry</button></div></div>;
+}
+
+function VoltixVLogo() {
+  return <svg viewBox="0 0 120 120" className="voltix-native-v" aria-hidden="true">
+    <defs>
+      <linearGradient id="voltixNativeV" x1="26" y1="18" x2="91" y2="104" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#ecfff7" />
+        <stop offset=".36" stopColor="#18ff8a" />
+        <stop offset="1" stopColor="#00b86b" />
+      </linearGradient>
+      <radialGradient id="voltixNativeGlow" cx="50%" cy="52%" r="58%">
+        <stop stopColor="#18ff8a" stopOpacity=".76" />
+        <stop offset="1" stopColor="#18ff8a" stopOpacity="0" />
+      </radialGradient>
+    </defs>
+    <ellipse cx="60" cy="92" rx="40" ry="16" fill="url(#voltixNativeGlow)" opacity=".72" />
+    <path d="M29 20h17l14 39 14-39h19L66 92l-6 12-6-12L29 20Z" fill="url(#voltixNativeV)" />
+    <path d="M45 28 60 70l15-42" fill="none" stroke="#f3fff9" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" opacity=".64" />
+    <path d="M29 20h17l14 39 14-39h19L66 92l-6 12-6-12L29 20Z" fill="none" stroke="#9cffd9" strokeOpacity=".46" strokeWidth="2" strokeLinejoin="round" />
+  </svg>;
 }

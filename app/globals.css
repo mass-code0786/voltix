@@ -64,29 +64,45 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   display: grid;
   place-items: center;
   padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
-  background: radial-gradient(circle at 50% 42%, rgba(24, 255, 138, .16), transparent 34%), #050807;
+  background:
+    radial-gradient(circle at 50% 43%, rgba(24, 255, 138, .18), transparent 35%),
+    radial-gradient(circle at 50% 72%, rgba(0, 184, 107, .14), transparent 26%),
+    linear-gradient(180deg, #050b08 0%, #07110d 52%, #030604 100%);
   color: #fff;
 }
 .voltix-native-loader {
+  position: relative;
   display: grid;
-  width: 96px;
-  height: 96px;
+  width: 116px;
+  height: 116px;
   place-items: center;
-  border-radius: 30px;
-  border: 1px solid rgba(24, 255, 138, .28);
-  background: linear-gradient(145deg, rgba(24, 255, 138, .14), rgba(255, 255, 255, .04));
-  box-shadow: 0 0 52px rgba(24, 255, 138, .22), inset 0 0 22px rgba(24, 255, 138, .09);
+  border-radius: 34px;
+  border: 1px solid rgba(24, 255, 138, .24);
+  background:
+    radial-gradient(circle at 50% 38%, rgba(24, 255, 138, .18), transparent 56%),
+    rgba(4, 10, 7, .68);
+  box-shadow: 0 0 62px rgba(24, 255, 138, .28), inset 0 0 28px rgba(24, 255, 138, .1);
   animation: voltix-loader-pulse 1.45s ease-in-out infinite;
 }
-.voltix-native-loader.small { width: 70px; height: 70px; border-radius: 22px; }
-.voltix-native-loader span {
-  font-size: 48px;
-  font-weight: 1000;
-  line-height: 1;
-  color: #18ff8a;
-  text-shadow: 0 0 24px rgba(24, 255, 138, .9);
+.voltix-native-loader::after {
+  content: "";
+  position: absolute;
+  width: 148px;
+  height: 148px;
+  border-radius: 999px;
+  border: 1px solid rgba(24, 255, 138, .2);
+  animation: voltix-loader-ring 1.8s ease-in-out infinite;
 }
-.voltix-native-loader.small span { font-size: 34px; }
+.voltix-native-loader.small { width: 74px; height: 74px; border-radius: 24px; }
+.voltix-native-loader.small::after { width: 98px; height: 98px; }
+.voltix-native-v {
+  position: relative;
+  z-index: 1;
+  width: 82px;
+  height: 82px;
+  filter: drop-shadow(0 0 18px rgba(24, 255, 138, .86));
+}
+.voltix-native-loader.small .voltix-native-v { width: 52px; height: 52px; }
 .voltix-offline-card {
   width: min(100%, 360px);
   display: grid;
@@ -119,6 +135,7 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
 @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @keyframes pulse-ring { 0%,100% { box-shadow: 0 0 0 0 rgba(24,255,138,.25); } 50% { box-shadow: 0 0 0 10px rgba(24,255,138,0); } }
 @keyframes voltix-loader-pulse { 0%,100% { transform: scale(.96); opacity: .78; } 50% { transform: scale(1.03); opacity: 1; } }
+@keyframes voltix-loader-ring { 0%,100% { transform: scale(.86); opacity: .22; } 50% { transform: scale(1.04); opacity: .58; } }
 .pulse-ring { animation: pulse-ring 2s infinite; }
 
 .voltix-landing {
@@ -2752,19 +2769,29 @@ textarea:focus {
   cursor: wait;
   opacity: .72;
 }
-.profile-avatar > img {
-  display: block;
-  height: 100%;
-  width: 100%;
-  border-radius: inherit;
-  object-fit: cover;
-}
-.profile-avatar > span:first-child {
+.profile-avatar-frame {
   display: grid;
   height: 100%;
   width: 100%;
   place-items: center;
-  border-radius: inherit;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.profile-avatar-frame > img {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 9999px;
+  object-fit: cover;
+  object-position: center;
+}
+.profile-avatar-frame > span {
+  display: grid;
+  height: 100%;
+  width: 100%;
+  place-items: center;
+  border-radius: 9999px;
+  overflow: hidden;
 }
 
 .ai-trade-hero::before {

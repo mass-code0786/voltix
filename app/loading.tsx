@@ -1,14 +1,23 @@
 export default function Loading() {
-  return <main className="system-state-page grid place-items-center p-4">
-    <section className="system-state-card">
-      <svg viewBox="0 0 180 126" aria-hidden="true">
-        <defs><radialGradient id="loadingGlow" cx="50%" cy="65%" r="58%"><stop stopColor="#18ff8a" stopOpacity=".42"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></radialGradient></defs>
-        <ellipse cx="90" cy="100" rx="58" ry="18" fill="url(#loadingGlow)"/>
-        <ellipse cx="90" cy="96" rx="52" ry="13" fill="#06110d" stroke="#18ff8a" strokeOpacity=".42" strokeDasharray="24 12"/>
-        <path d="M74 34H62l20 47 8 14 8-14 20-47h-12L90 71 74 34Z" fill="#18ff8a" fillOpacity=".28" stroke="#9cffd9" strokeOpacity=".48"/>
+  return <main className="voltix-native-overlay" aria-live="polite">
+    <div className="voltix-native-loader">
+      <svg viewBox="0 0 120 120" className="voltix-native-v" aria-hidden="true">
+        <defs>
+          <linearGradient id="voltixRouteV" x1="26" y1="18" x2="91" y2="104" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#ecfff7" />
+            <stop offset=".36" stopColor="#18ff8a" />
+            <stop offset="1" stopColor="#00b86b" />
+          </linearGradient>
+          <radialGradient id="voltixRouteGlow" cx="50%" cy="52%" r="58%">
+            <stop stopColor="#18ff8a" stopOpacity=".76" />
+            <stop offset="1" stopColor="#18ff8a" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <ellipse cx="60" cy="92" rx="40" ry="16" fill="url(#voltixRouteGlow)" opacity=".72" />
+        <path d="M29 20h17l14 39 14-39h19L66 92l-6 12-6-12L29 20Z" fill="url(#voltixRouteV)" />
+        <path d="M45 28 60 70l15-42" fill="none" stroke="#f3fff9" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" opacity=".64" />
+        <path d="M29 20h17l14 39 14-39h19L66 92l-6 12-6-12L29 20Z" fill="none" stroke="#9cffd9" strokeOpacity=".46" strokeWidth="2" strokeLinejoin="round" />
       </svg>
-      <h1>Loading</h1>
-      <p>Preparing the latest Voltix market data and account experience.</p>
-    </section>
+    </div>
   </main>;
 }
