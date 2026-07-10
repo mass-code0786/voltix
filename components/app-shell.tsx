@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import Link from "next/link";
 import {
   ArrowDownLeft, ArrowDownToLine, ArrowLeftRight, ArrowUpRight, BarChart3, Bell,
-  Bot, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Copy, Eye, FileClock, FileText, Grid2X2,
+  Bot, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Copy, Eye, EyeOff, FileClock, FileText, Grid2X2,
   Headphones, Home, Landmark, LineChart, Menu, Network, Plus, QrCode, Search, SlidersHorizontal,
   Send, Settings, Share2, ShieldCheck, Star,
   Trophy, Users, Wallet, X, Zap,
@@ -55,6 +55,8 @@ type AppCoin = Coin;
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath"|"logoUrl">> & { localLogoPath?: string | null; logoUrl?: string | null };
 type CurrentUser = { id?: string | null; uid?: string | null; name?: string | null; email?: string | null; country?: string | null; language?: string | null; vipRank?: string | null; role?: string | null; kycStatus?: "NOT_SUBMITTED" | "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | null };
+const BALANCE_VISIBILITY_STORAGE_KEY = "voltix.balanceVisible";
+const BALANCE_MASK = "••••••";
 type WalletSnapshot = {
   balances?: {
     spot?: number;
@@ -317,7 +319,7 @@ export default function AppShell() {
   const [walletAction, setWalletAction] = useState<WalletAction>(null);
   const [menu, setMenu] = useState(false);
   const [tradeMenuOpen, setTradeMenuOpen] = useState(false);
-  const [balanceVisible, setBalanceVisible] = useState(true);
+  const [balanceVisible, setBalanceVisible] = useState(false);
   const [toast, setToast] = useState("");
   const [activeCopyTrade, setActiveCopyTrade] = useState<ActiveCopyTrade | null>(null);
   const [copyTradeHistory, setCopyTradeHistory] = useState<CopyTradeHistory[]>([]);
@@ -351,6 +353,22 @@ export default function AppShell() {
   const [userCountry, setUserCountry] = useState("United States");
   const [userLanguage, setUserLanguage] = useState("en");
   const t = useMemo(() => getTranslator(userLanguage), [userLanguage]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(BALANCE_VISIBILITY_STORAGE_KEY);
+      setBalanceVisible(stored !== "hidden");
+    } catch {
+      setBalanceVisible(true);
+    }
+  }, []);
+
+  const updateBalanceVisible = useCallback((visible: boolean) => {
+    setBalanceVisible(visible);
+    try {
+      window.localStorage.setItem(BALANCE_VISIBILITY_STORAGE_KEY, visible ? "visible" : "hidden");
+    } catch {}
+  }, []);
   const tabLabel = useCallback((id: Tab) => t(id === "bitex" ? "ai" : id === "wallet" ? "asset" : id), [t]);
   const isAdminUser = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
 
@@ -896,12 +914,12 @@ export default function AppShell() {
   }, [currentUser]);
 
   const screen = {
-    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} bitexBalance={bitexBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
+    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} bitexBalance={bitexBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} loading={marketCoinsLoading} error={marketCoinsError} />,
     trade: <TradeWorkspace category={tradeCategory} coins={marketCoins} loading={marketCoinsLoading} error={marketCoinsError} />,
     bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
-    wallet: <WalletScreen notify={notify} assets={walletAssets} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
+    wallet: <WalletScreen notify={notify} assets={walletAssets} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*2} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
 
   return (
@@ -1087,11 +1105,14 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
         </div>
         <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>
         <div className="mt-1 flex min-w-0 flex-wrap items-end gap-x-2 gap-y-1">
-          <button onClick={() => setBalanceVisible(!balanceVisible)} className="min-w-0 text-left text-[27px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
-            {balanceVisible ? usd(total) : "$ ******"}
+          <p className="min-w-0 text-left text-[27px] font-black leading-none text-[#18ff8a] drop-shadow-[0_0_14px_rgba(24,255,138,.32)]">
+            {balanceVisible ? usd(total) : BALANCE_MASK}
+          </p>
+          <button type="button" onClick={() => setBalanceVisible(!balanceVisible)} className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" aria-label={balanceVisible ? "Hide wallet balance" : "Show wallet balance"} aria-pressed={!balanceVisible}>
+            {balanceVisible ? <Eye size={15} /> : <EyeOff size={15} />}
           </button>
           <div className={`inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black leading-none min-[390px]:text-[11px] ${todaysProfit >= 0 ? "border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" : "border-danger/20 bg-danger/10 text-danger"}`}>
-            {balanceVisible ? `${todaysProfit >= 0 ? "+" : ""}${usd(todaysProfit)} today` : "Balance hidden"}
+            {balanceVisible ? `${todaysProfit >= 0 ? "+" : ""}${usd(todaysProfit)} today` : BALANCE_MASK}
           </div>
         </div>
       </div>
@@ -1230,8 +1251,8 @@ function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome:
     <div className="mt-2 grid grid-cols-[minmax(0,1fr)_136px] items-end gap-2.5">
       <div>
         <p className="text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Income</p>
-        <p className="mt-0.5 text-[24px] font-black leading-none text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : "$ ******"}</p>
-        <p className="mt-0.5 text-[10px] font-bold text-slate-500">{history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT` : "No chart data yet"}</p>
+        <p className="mt-0.5 text-[24px] font-black leading-none text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : BALANCE_MASK}</p>
+        <p className="mt-0.5 text-[10px] font-bold text-slate-500">{balanceVisible ? history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT` : "No chart data yet" : `${BALANCE_MASK} USDT`}</p>
       </div>
       <IncomeChart data={chartData} />
     </div>
@@ -2062,14 +2083,14 @@ function CopyTradeScreen({activeTrade,bitexBalance,tradeRows,startTrade,complete
   };
   return <div className="space-y-5"><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="font-bold">Copy Trade Income</h3><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="p-4 sm:p-5"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="divide-y divide-line/70">{rows.map(row=>{const status=localTradeStatus(row,nowTick);const countdown=tradeCountdownLabel(row,nowTick);const tradeEnabled=isTradeButtonEnabled(row,nowTick);const actionLabel=tradeButtonLabel(row,status,tradeEnabled);return <div key={row.id} className="flex items-center gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black">{displayVipLabel(row.vipRange??row.label)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${status==="LIVE"?"bg-lime/10 text-lime":status==="UPCOMING"?"bg-[#f6c85f]/10 text-[#f6c85f]":"bg-white/5 text-slate-500"}`}>{status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade time: {readableTradeTime(row)}{countdown?` | ${countdown}`:""}</p><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${Number(row.tradeAmount ?? bitexBalance*.01).toFixed(2)} | Daily {row.dailyReturnMin??row.dailyPercentMin}% - {row.dailyReturnMax??row.dailyPercentMax}%</p>{!tradeEnabled&&status==="LIVE"&&<p className="mt-1 text-[10px] text-danger">{actionLabel}</p>}</div><button onClick={()=>start(row)} disabled={loadingRow===row.id||!tradeEnabled} className="w-[112px] shrink-0 rounded-lg bg-lime px-3 py-2 text-[10px] font-black leading-tight text-ink disabled:opacity-50">{loadingRow===row.id?"Wait":actionLabel}</button></div>})}</div>}{error&&<p className="border-t border-line px-5 py-3 text-xs text-danger">{error}</p>}</section></div>;
 }
-function WalletScreen({notify,assets,spotBalance,futuresBalance,bitexBalance,bitexIncomeEarned,bitexTarget,activity,section,action,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];spotBalance:number;futuresBalance:number;bitexBalance:number;bitexIncomeEarned:number;bitexTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
+function WalletScreen({notify,assets,spotBalance,futuresBalance,bitexBalance,bitexIncomeEarned,bitexTarget,activity,section,action,balanceVisible,setBalanceVisible,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];spotBalance:number;futuresBalance:number;bitexBalance:number;bitexIncomeEarned:number;bitexTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
  const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+bitexBalance;
 return <div className="wallet-page -mt-1 min-h-screen">
   <WalletHero/>
-  <WalletTotalCard total={total} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
-  <WalletTypeCards spot={spotBalance} ai={bitexBalance} futures={futuresBalance}/>
+  <WalletTotalCard total={total} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
+  <WalletTypeCards spot={spotBalance} ai={bitexBalance} futures={futuresBalance} balanceVisible={balanceVisible}/>
   <WalletQuickActions onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal} onOpenTransfer={onOpenTransfer} onHistory={()=>onSectionChange("ledger")} onAddressBook={()=>notify("Address book unavailable")}/>
-  <WalletBalancesCard assets={activeAssets} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
+  <WalletBalancesCard assets={activeAssets} balanceVisible={balanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
   {section==="ledger"&&<section className="wallet-glass wallet-ledger-card"><div className="flex justify-between gap-3"><div><h3>Wallet ledger</h3><p>All balance movements and AI income credits</p></div><button onClick={()=>notify("Ledger export prepared")}>Export</button></div><ActivityRows rows={activity}/></section>}
   <WalletSecurityCard/>
 </div>;
@@ -2085,17 +2106,17 @@ function WalletHeroSvg() {
   return <svg viewBox="0 0 180 136" className="wallet-hero-svg" aria-hidden="true"><defs><linearGradient id="walletCase" x1="42" y1="35" x2="132" y2="96"><stop stopColor="#f4fff9"/><stop offset=".36" stopColor="#18ff8a"/><stop offset="1" stopColor="#047a49"/></linearGradient><radialGradient id="walletGlow" cx="50%" cy="50%" r="55%"><stop stopColor="#18ff8a" stopOpacity=".42"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></radialGradient><filter id="walletBlur"><feGaussianBlur stdDeviation="4"/></filter></defs><ellipse cx="91" cy="104" rx="62" ry="18" fill="url(#walletGlow)" filter="url(#walletBlur)" className="wallet-svg-pulse"/><g className="wallet-svg-orbit"><ellipse cx="91" cy="100" rx="58" ry="15" fill="#06110d" stroke="#18ff8a" strokeOpacity=".42" strokeDasharray="28 15"/></g><rect x="44" y="47" width="88" height="54" rx="14" fill="#07130f" stroke="#18ff8a" strokeOpacity=".5"/><path d="M56 47h64c8 0 12 5 12 12v5H44v-5c0-8 5-12 12-12Z" fill="url(#walletCase)" fillOpacity=".22"/><rect x="111" y="64" width="30" height="22" rx="8" fill="#0b1712" stroke="#18ff8a" strokeOpacity=".55"/><circle cx="123" cy="75" r="3" fill="#18ff8a"/><path d="M74 61h-9l16 30 5 9 5-9 16-30h-9L86 81 74 61Z" fill="url(#walletCase)" stroke="#eafff4" strokeOpacity=".28"/><g className="wallet-coin-a"><circle cx="42" cy="42" r="14" fill="#06110d" stroke="#18ff8a"/><text x="42" y="45" textAnchor="middle" fill="#18ff8a" fontSize="7" fontWeight="900">USDT</text></g><g className="wallet-coin-b"><circle cx="142" cy="38" r="13" fill="#120d05" stroke="#f6c85f"/><text x="142" y="41" textAnchor="middle" fill="#f6c85f" fontSize="7" fontWeight="900">BTC</text></g><g fill="#9cffd9">{[28,151,34,148].map((x,i)=><circle key={x} cx={x} cy={72+i*9} r="1.4" opacity=".5" className="wallet-svg-particle"/>)}</g></svg>;
 }
 
-function WalletTotalCard({total,onOpenDeposit,onOpenWithdrawal}:{total:number;onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
-  return <section className="wallet-glass wallet-total-card"><div className="min-w-0"><div className="flex items-center gap-2"><p>Total Wallet Balance</p><Eye size={15} className="text-[#18ff8a]"/></div><h2>{usd(total)}</h2><div className="mt-2 flex items-center gap-2"><span>USD</span><em>{total>0?"+0.00% today":"0.00% today"}</em></div></div><div className="wallet-total-actions"><button onClick={onOpenDeposit}><Plus size={16}/>Add Funds</button><button onClick={onOpenWithdrawal}><Send size={16}/>Withdraw</button></div></section>;
+function WalletTotalCard({total,balanceVisible,setBalanceVisible,onOpenDeposit,onOpenWithdrawal}:{total:number;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
+  return <section className="wallet-glass wallet-total-card"><div className="min-w-0"><div className="flex items-center gap-2"><p>Total Wallet Balance</p><button type="button" onClick={() => setBalanceVisible(!balanceVisible)} className="grid h-7 w-7 place-items-center rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" aria-label={balanceVisible ? "Hide wallet balance" : "Show wallet balance"} aria-pressed={!balanceVisible}>{balanceVisible ? <Eye size={15}/> : <EyeOff size={15}/>}</button></div><h2>{balanceVisible ? usd(total) : BALANCE_MASK}</h2><div className="mt-2 flex items-center gap-2"><span>{balanceVisible ? `${total.toFixed(2)} USDT` : `${BALANCE_MASK} USDT`}</span><em>{balanceVisible ? total>0?"+0.00% today":"0.00% today" : BALANCE_MASK}</em></div></div><div className="wallet-total-actions"><button onClick={onOpenDeposit}><Plus size={16}/>Add Funds</button><button onClick={onOpenWithdrawal}><Send size={16}/>Withdraw</button></div></section>;
 }
 
-function WalletTypeCards({spot,ai,futures}:{spot:number;ai:number;futures:number}) {
+function WalletTypeCards({spot,ai,futures,balanceVisible}:{spot:number;ai:number;futures:number;balanceVisible:boolean}) {
   const items=[
     ["Spot Wallet",spot,Wallet,"green"],
     ["AI Wallet",ai,Bot,"purple"],
     ["Futures Wallet",futures,LineChart,"blue"],
   ] as const;
-  return <section className="wallet-type-grid">{items.map(([label,value,Icon,tone])=><div key={label} className="wallet-glass wallet-type-card"><div className="wallet-type-head"><span className={`wallet-type-icon wallet-type-${tone}`}><Icon size={16}/></span><p>{label}</p></div><div className="wallet-type-body"><strong>{value.toFixed(2)}</strong></div></div>)}</section>;
+  return <section className="wallet-type-grid">{items.map(([label,value,Icon,tone])=><div key={label} className="wallet-glass wallet-type-card"><div className="wallet-type-head"><span className={`wallet-type-icon wallet-type-${tone}`}><Icon size={16}/></span><p>{label}</p></div><div className="wallet-type-body"><strong>{balanceVisible ? value.toFixed(2) : BALANCE_MASK}</strong></div></div>)}</section>;
 }
 
 function WalletQuickActions({onOpenDeposit,onOpenWithdrawal,onOpenTransfer,onHistory,onAddressBook}:{onOpenDeposit:()=>void;onOpenWithdrawal:()=>void;onOpenTransfer:()=>void;onHistory:()=>void;onAddressBook:()=>void}) {
@@ -2103,13 +2124,13 @@ function WalletQuickActions({onOpenDeposit,onOpenWithdrawal,onOpenTransfer,onHis
   return <section className="wallet-glass wallet-actions">{actions.map(([label,Icon,onClick])=><button key={label} onClick={onClick}><span><Icon size={18}/></span><p>{label==="Address Book"?<><b>Address</b><b>Book</b></>:label}</p></button>)}</section>;
 }
 
-function WalletBalancesCard({assets,onOpenDeposit,onOpenWithdrawal}:{assets:(AppCoin&{volume?:number;live?:boolean})[];onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
-  return <section className="wallet-glass wallet-balances-card"><div className="wallet-card-head"><h2>Wallet Balances</h2><label><span>Hide Small Balances</span><input type="checkbox" /></label></div><div className="wallet-asset-list">{assets.length?assets.map(asset=><WalletAssetRow key={asset.symbol} asset={asset} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>):<EmptyState title="No wallet assets available" icon={Wallet}/>}</div></section>;
+function WalletBalancesCard({assets,balanceVisible,onOpenDeposit,onOpenWithdrawal}:{assets:(AppCoin&{volume?:number;live?:boolean})[];balanceVisible:boolean;onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
+  return <section className="wallet-glass wallet-balances-card"><div className="wallet-card-head"><h2>Wallet Balances</h2><label><span>Hide Small Balances</span><input type="checkbox" /></label></div><div className="wallet-asset-list">{assets.length?assets.map(asset=><WalletAssetRow key={asset.symbol} asset={asset} balanceVisible={balanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>):<EmptyState title="No wallet assets available" icon={Wallet}/>}</div></section>;
 }
 
-function WalletAssetRow({asset,onOpenDeposit,onOpenWithdrawal}:{asset:AppCoin&{volume?:number;live?:boolean};onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
+function WalletAssetRow({asset,balanceVisible,onOpenDeposit,onOpenWithdrawal}:{asset:AppCoin&{volume?:number;live?:boolean};balanceVisible:boolean;onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
   const value=asset.balance*asset.price;
-  return <article className="wallet-asset-row"><CoinMark symbol={asset.symbol} color={asset.color} logoPath={assetLogoPath(asset.symbol, asset)} /><div className="min-w-0"><div className="flex items-center gap-1.5"><p>{asset.symbol}</p><span>{asset.symbol==="USDT"?"BEP20":asset.symbol==="SHINE"?"Solana":"Spot"}</span></div><em>{asset.name}</em></div><div className="min-w-0 text-right"><strong>{compact(asset.balance)}</strong><small>{usd(value)}</small></div><div className="wallet-asset-actions">{asset.symbol==="USDT"?<><button onClick={onOpenDeposit}>+</button><button onClick={onOpenWithdrawal}>-</button></>:<ChevronRight size={18}/>}</div></article>;
+  return <article className="wallet-asset-row"><CoinMark symbol={asset.symbol} color={asset.color} logoPath={assetLogoPath(asset.symbol, asset)} /><div className="min-w-0"><div className="flex items-center gap-1.5"><p>{asset.symbol}</p><span>{asset.symbol==="USDT"?"BEP20":asset.symbol==="SHINE"?"Solana":"Spot"}</span></div><em>{asset.name}</em></div><div className="min-w-0 text-right"><strong>{balanceVisible ? compact(asset.balance) : BALANCE_MASK}</strong><small>{balanceVisible ? usd(value) : BALANCE_MASK}</small></div><div className="wallet-asset-actions">{asset.symbol==="USDT"?<><button onClick={onOpenDeposit}>+</button><button onClick={onOpenWithdrawal}>-</button></>:<ChevronRight size={18}/>}</div></article>;
 }
 
 function WalletSecurityCard() {

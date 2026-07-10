@@ -80,6 +80,8 @@ export function TradingViewChart({ baseSymbol, interval = "1" }: TradingViewChar
         target.innerHTML = "";
         widgetRef.current = new widget({
           autosize: true,
+          width: "100%",
+          height: "100%",
           symbol: tradingViewSymbol,
           interval,
           timezone: "Asia/Kolkata",
