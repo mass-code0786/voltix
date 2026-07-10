@@ -232,6 +232,7 @@ function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSet
   const bySymbol = new Map(baseCoins.map(coin => [coin.symbol, coin]));
   const merged = baseCoins.map(coin => {
     const setting=settings[coin.symbol] ?? {};
+    if (coin.symbol === "SHINE") return { ...coin, ...setting, localLogoPath: "/shine.png", logoPath: "/shine.png" };
     return { ...coin, ...setting, localLogoPath: setting.localLogoPath ?? coin.localLogoPath, logoPath: setting.localLogoPath ?? coin.logoPath };
   });
   for (const [symbol, setting] of Object.entries(settings)) {
@@ -296,6 +297,7 @@ function mergeAssetRecords(baseCoins: AppCoin[], assets: AssetRecord[]): AppCoin
 function assetLogoPath(symbol: string, base?: AppCoin) {
   const normalized = symbol.toUpperCase();
   if (normalized === "USDT" || normalized === "USDTBEP20" || normalized === "USDTTRC20" || normalized === "USDTERC20") return "/coin-logos/usdt.png";
+  if (normalized === "SHINE") return "/shine.png";
   return base?.localLogoPath ?? base?.logoPath ?? `/coin-logos/${symbol.toLowerCase()}.png`;
 }
 

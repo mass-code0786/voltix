@@ -100,9 +100,89 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   z-index: 1;
   width: 82px;
   height: 82px;
+  object-fit: contain;
   filter: drop-shadow(0 0 18px rgba(24, 255, 138, .86));
 }
 .voltix-native-loader.small .voltix-native-v { width: 52px; height: 52px; }
+.app-launch-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 43%, rgba(24, 255, 138, .18), transparent 35%),
+    radial-gradient(circle at 50% 72%, rgba(0, 184, 107, .14), transparent 28%),
+    linear-gradient(180deg, #050b08 0%, #07110d 52%, #030604 100%);
+  opacity: 1;
+  animation: app-launch-fade 2.8s ease forwards;
+  perspective: 980px;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+.app-launch-logo-scene {
+  position: relative;
+  display: grid;
+  width: clamp(126px, 34vw, 184px);
+  aspect-ratio: 1;
+  place-items: center;
+  transform-style: preserve-3d;
+}
+.app-launch-glow {
+  position: absolute;
+  inset: -28%;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(24,255,138,.42), rgba(24,255,138,.12) 34%, transparent 68%);
+  filter: blur(13px);
+  opacity: .68;
+  animation: app-launch-glow 2.8s ease forwards;
+}
+.app-launch-logo-shell {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 34%;
+  transform: perspective(900px) translateZ(-130px) rotateY(-25deg) scale(.65);
+  filter: blur(12px) drop-shadow(0 22px 46px rgba(0,0,0,.42));
+  opacity: 0;
+  animation: app-launch-logo 2.8s cubic-bezier(.18,.78,.22,1) forwards;
+  will-change: transform, opacity, filter;
+}
+.app-launch-logo-shell img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.app-launch-logo-shell span {
+  position: absolute;
+  inset: -20%;
+  background: linear-gradient(105deg, transparent 34%, rgba(255,255,255,.78) 48%, rgba(255,255,255,.2) 54%, transparent 68%);
+  transform: translateX(-135%) rotate(8deg);
+  animation: app-launch-shine 2.8s ease forwards;
+  mix-blend-mode: screen;
+}
+.app-launch-particles {
+  position: absolute;
+  inset: 0;
+}
+.app-launch-particles i {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: 2px;
+  height: var(--h);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(205,255,232,.9), rgba(24,255,138,0));
+  opacity: .18;
+  transform: translate3d(0, 16px, 0) rotate(28deg);
+  animation: app-launch-particle 2.8s ease-in-out forwards;
+  animation-delay: calc(var(--i) * 42ms);
+}
 .voltix-offline-card {
   width: min(100%, 360px);
   display: grid;
@@ -753,7 +833,7 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   height: 54px;
   width: 54px;
   border-radius: 999px;
-  object-fit: cover;
+  object-fit: contain;
   box-shadow: 0 0 22px rgba(24,255,138,.18), 0 12px 24px rgba(0,0,0,.34);
 }
 
@@ -2165,7 +2245,7 @@ textarea:focus {
 .markets-ref-logo svg {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .markets-coin-name,
@@ -3897,6 +3977,73 @@ textarea:focus {
 @keyframes profile-v-particle {
   0%, 100% { opacity: .22; transform: scale(.92); }
   50% { opacity: .82; transform: scale(1.08); }
+}
+
+@keyframes app-launch-logo {
+  0%, 14% {
+    opacity: 0;
+    transform: perspective(900px) translateZ(-130px) rotateY(-25deg) scale(.65);
+    filter: blur(12px) drop-shadow(0 22px 46px rgba(0,0,0,.42));
+  }
+  54% {
+    opacity: 1;
+    transform: perspective(900px) translateZ(90px) rotateY(8deg) scale(1.08);
+    filter: blur(0) drop-shadow(0 0 34px rgba(24,255,138,.56));
+  }
+  75% {
+    opacity: 1;
+    transform: perspective(900px) translateZ(0) rotateY(0deg) scale(1);
+    filter: blur(0) drop-shadow(0 0 40px rgba(24,255,138,.68));
+  }
+  100% {
+    opacity: 0;
+    transform: perspective(900px) translateZ(0) rotateY(0deg) scale(1);
+    filter: blur(0) drop-shadow(0 0 24px rgba(24,255,138,.28));
+  }
+}
+
+@keyframes app-launch-fade {
+  0%, 75% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
+@keyframes app-launch-glow {
+  0%, 18% { opacity: .18; transform: scale(.8); }
+  58% { opacity: .82; transform: scale(1.08); }
+  78% { opacity: .72; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.04); }
+}
+
+@keyframes app-launch-shine {
+  0%, 52% { transform: translateX(-135%) rotate(8deg); opacity: 0; }
+  62% { opacity: .9; }
+  76%, 100% { transform: translateX(135%) rotate(8deg); opacity: 0; }
+}
+
+@keyframes app-launch-particle {
+  0% { opacity: 0; transform: translate3d(0, 16px, -40px) rotate(28deg); }
+  22%, 72% { opacity: .5; }
+  100% { opacity: 0; transform: translate3d(0, -28px, 80px) rotate(28deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-launch-splash {
+    animation-duration: .65s;
+  }
+  .app-launch-logo-shell {
+    animation: app-launch-reduced .65s ease forwards;
+  }
+  .app-launch-logo-shell span,
+  .app-launch-glow,
+  .app-launch-particles i {
+    animation: none;
+  }
+}
+
+@keyframes app-launch-reduced {
+  0% { opacity: 0; transform: scale(.98); filter: none; }
+  35%, 82% { opacity: 1; transform: scale(1); filter: none; }
+  100% { opacity: 0; transform: scale(1); filter: none; }
 }
 
 @keyframes market-grid-drift {
