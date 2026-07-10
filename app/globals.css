@@ -1061,22 +1061,6 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   font-weight: 900;
 }
 
-.orderbook-columns,
-.recent-trade-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 6px;
-  align-items: center;
-}
-
-.orderbook-columns {
-  padding: 0 8px 8px;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
 .orderbook-split {
   display: grid;
   grid-template-columns: minmax(0,1fr) minmax(0,1fr);
@@ -1203,7 +1187,6 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
 }
 
 .orderbook-pressure {
-  margin-top: 12px;
   border: 1px solid rgba(255,255,255,.07);
   border-radius: 14px;
   background: rgba(0,0,0,.18);
@@ -1218,23 +1201,6 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;
-}
-
-.recent-trades {
-  margin-top: 12px;
-}
-
-.recent-trade-row {
-  border-radius: 9px;
-  padding: 5px 8px;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.recent-trade-row span:nth-child(2),
-.recent-trade-row span:nth-child(3) {
-  text-align: right;
-  color: #94a3b8;
 }
 
 .coin-action-card {
@@ -1265,10 +1231,6 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
 @media (min-width: 900px) {
   .coin-detail-page {
     max-width: 1180px;
-  }
-
-  .coin-detail-stack {
-    grid-template-columns: minmax(0, 1.45fr) minmax(340px, .55fr);
   }
 
   .coin-action-card {

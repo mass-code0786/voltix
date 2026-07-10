@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, Star } from "lucide-react";
-import { OrderBookPanel } from "./order-book";
+import { BuySellPressurePanel, OrderBookPanel } from "./order-book";
 import { TradingViewChart } from "./trading-view-chart";
 import { useLiveTickers } from "@/lib/use-market-data";
 import { SHINE_LOGO_PATH, SHINE_NAME, SHINE_PAIR, SHINE_PRICE_USD, SHINE_SYMBOL } from "@/lib/shine-token";
@@ -37,7 +37,7 @@ export function CoinDetail({symbol}:{symbol:string}){
         <span className={positive?"coin-change-up":"coin-change-down"}>{changeLabel}</span>
       </div>
     </section>
-    <div className="coin-detail-stack"><TradingViewChart baseSymbol={base} pairLabel={pair} price={priceLabel} changeLabel={changeLabel} positive={positive}/><OrderBookPanel symbol={symbol}/>{isShine?<ShineConvertCard/>:<TradeActions/>}</div>
+    <div className="coin-detail-stack"><TradingViewChart baseSymbol={base} pairLabel={pair} price={priceLabel} changeLabel={changeLabel} positive={positive}/><TradeButtons/><BuySellPressurePanel symbol={symbol}/><OrderBookPanel symbol={symbol}/><UtilityActions/>{isShine?<ShineConvertCard/>:null}</div>
   </main>;
 }
 
@@ -48,9 +48,12 @@ function CoinPlatformSvg(){return <svg viewBox="0 0 92 76" aria-hidden="true">
   <path d="M16 58h60M25 46h42M34 35h24" stroke="#18ff8a" strokeOpacity=".16"/>
 </svg>;}
 
-function TradeActions(){return <section className="coin-action-card">
+function TradeButtons(){return <section className="coin-action-card coin-trade-buttons">
   <button disabled className="coin-action-buy opacity-60">Buy Coming Soon</button>
   <button disabled className="coin-action-sell opacity-60">Sell Coming Soon</button>
+</section>;}
+
+function UtilityActions(){return <section className="coin-action-card coin-utility-actions">
   <button type="button" className="coin-action-watch"><Star size={15}/> Watchlist</button>
   <Link href="/dashboard?view=wallet&action=deposit" className="coin-action-deposit">Deposit <ArrowUpRight size={14}/></Link>
 </section>;}
