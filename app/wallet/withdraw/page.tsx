@@ -162,19 +162,30 @@ function LineItem({label,value}:{label:string;value:string}) {
 
 function EarlyWithdrawalWarning({breakdown}:{breakdown:EarlyWithdrawalBreakdown}) {
   return <div className="rounded-2xl border border-[#f6c85f]/30 bg-[#2a2412] p-4 text-xs leading-5 text-[#e8d59a]">
-    <p>Abhi aapka withdrawal eligibility volume complete nahi hua hai. Aapne required profit target ka {breakdown.completedPercentage.toFixed(2)}% complete kiya hai aur {breakdown.remainingPercentage.toFixed(2)}% abhi baaki hai.</p>
-    <p className="mt-2">Agar aap abhi withdrawal karte hain, toh requested amount par 20% early withdrawal charge lagega. Iske alawa $2 fixed withdrawal fee aur 5% withdrawal fee bhi apply hogi.</p>
+    <h2 className="text-lg font-black text-white">Early Withdrawal Confirmation</h2>
+    <p className="mt-2">You have not yet reached the required profit target for free withdrawal.</p>
+    <div className="mt-3 rounded-2xl border border-white/[.08] bg-black/20 p-3">
+      <p className="font-bold text-white">Current Progress:</p>
+      <p className="mt-1">{breakdown.completedPercentage.toFixed(2)}% Completed</p>
+      <p>{breakdown.remainingPercentage.toFixed(2)}% Remaining</p>
+    </div>
+    <div className="mt-3">
+      <p className="font-bold text-white">An early withdrawal will apply:</p>
+      <p className="mt-1">• 20% Early Withdrawal Charge</p>
+      <p>• 5% Withdrawal Fee</p>
+      <p>• $2 Fixed Fee</p>
+    </div>
+    <p className="mt-3">Review the fee summary below before continuing.</p>
     <div className="mt-4 space-y-2 rounded-2xl border border-white/[.08] bg-black/20 p-3">
-      <LineItem label="Capital amount" value={`$${breakdown.capitalAmount.toFixed(2)}`}/>
-      <LineItem label="Earned profit" value={`$${breakdown.earnedProfit.toFixed(2)}`}/>
-      <LineItem label="Required profit" value={`$${breakdown.requiredProfit.toFixed(2)}`}/>
-      <LineItem label="Requested Amount" value={`$${breakdown.withdrawalAmount.toFixed(2)}`}/>
-      <LineItem label="Early Withdrawal Charge" value={`$${breakdown.earlyWithdrawalCharge.toFixed(2)}`}/>
+      <LineItem label="Capital Amount" value={`$${breakdown.capitalAmount.toFixed(2)}`}/>
+      <LineItem label="Earned Profit" value={`$${breakdown.earnedProfit.toFixed(2)}`}/>
+      <LineItem label="Required Profit" value={`$${breakdown.requiredProfit.toFixed(2)}`}/>
+      <LineItem label="Withdrawal Amount" value={`$${breakdown.withdrawalAmount.toFixed(2)}`}/>
+      <LineItem label="20% Early Withdrawal Charge" value={`$${breakdown.earlyWithdrawalCharge.toFixed(2)}`}/>
       <LineItem label="5% Withdrawal Fee" value={`$${breakdown.percentageFee.toFixed(2)}`}/>
       <LineItem label="Fixed Fee" value={`$${breakdown.fixedFee.toFixed(2)}`}/>
-      <LineItem label="Total charges" value={`$${breakdown.totalFees.toFixed(2)}`}/>
-      <LineItem label="Net Receivable Amount" value={`$${breakdown.netAmount.toFixed(2)}`}/>
+      <LineItem label="Total Fees" value={`$${breakdown.totalFees.toFixed(2)}`}/>
+      <LineItem label="Net Receivable" value={`$${breakdown.netAmount.toFixed(2)}`}/>
     </div>
-    <p className="mt-3 font-bold">Kya aap early withdrawal confirm karna chahte hain?</p>
   </div>;
 }
