@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import type { Viewport } from "next";
-import { AppLaunchSplash } from "@/components/app-launch-splash";
 import { CapacitorBridge } from "@/components/capacitor-bridge";
 import "./globals.css";
 
@@ -25,7 +24,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
-        <AppLaunchSplash />
         <CapacitorBridge />
         {children}
       </body>

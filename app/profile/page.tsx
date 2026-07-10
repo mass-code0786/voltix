@@ -387,6 +387,7 @@ export default function ProfilePage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Logout failed");
       await clearMobileNativeSession().catch(() => null);
+      window.sessionStorage.removeItem("voltixIntroShown");
       setProfile(null);
       setDashboard(null);
       setTeam(null);

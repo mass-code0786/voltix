@@ -64,7 +64,8 @@ export default function SecurityPage() {
       setError(data.error || "Logout all failed");
       return;
     }
-      window.location.replace("/");
+    window.sessionStorage.removeItem("voltixIntroShown");
+    window.location.replace("/");
   };
 
   return <Frame title="Security" icon={LockKeyhole}>

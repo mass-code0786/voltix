@@ -78,7 +78,10 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
       if (!response.ok) throw new Error(data.error || "Authentication failed");
       const user = await refreshAuthenticatedData();
       if (!user) throw new Error("Login session could not be verified. Please try again.");
-      if (mode === "login") await offerBiometricEnrollment(data.mobileSessionToken).catch(() => null);
+      if (mode === "login") {
+        window.sessionStorage.removeItem("voltixIntroShown");
+        await offerBiometricEnrollment(data.mobileSessionToken).catch(() => null);
+      }
       router.replace(returnTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");

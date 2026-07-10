@@ -552,6 +552,7 @@ export default function AppShell() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Logout failed");
       await clearMobileNativeSession().catch(() => null);
+      window.sessionStorage.removeItem("voltixIntroShown");
       clearAuthenticatedState();
       setMenu(false);
       window.location.replace("/");
