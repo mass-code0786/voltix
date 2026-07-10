@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, Star } from "lucide-react";
-import { CandlestickChart } from "./candlestick-chart";
 import { OrderBookPanel } from "./order-book";
+import { TradingViewChart } from "./trading-view-chart";
 import { useLiveTickers } from "@/lib/use-market-data";
 import { SHINE_LOGO_PATH, SHINE_NAME, SHINE_PAIR, SHINE_PRICE_USD, SHINE_SYMBOL } from "@/lib/shine-token";
 
@@ -16,6 +16,9 @@ export function CoinDetail({symbol}:{symbol:string}){
   const positive=(ticker?.changePercent??0)>=0;
   const isShine=symbol===SHINE_PAIR;
   const price=ticker?.price??(isShine?SHINE_PRICE_USD:0);
+  const priceLabel=price?formatPrice(price):"--";
+  const changePercent=ticker?.changePercent??0;
+  const changeLabel=price?`${positive?"+":""}${changePercent.toFixed(2)}%`:"--";
   return <main className="coin-detail-page mx-auto min-h-screen max-w-[430px] overflow-x-hidden px-4 pb-[120px] pt-4 lg:max-w-6xl">
     <div className="coin-detail-atmosphere" aria-hidden="true"><span/><span/><i/><i/></div>
     <Link href="/dashboard?view=markets" className="coin-back-link"><span><ArrowLeft size={18}/></span>Back to Markets</Link>
@@ -30,17 +33,11 @@ export function CoinDetail({symbol}:{symbol:string}){
           <CoinPlatformSvg/>
           <img src={isShine?SHINE_LOGO_PATH:`/coin-logos/${base.toLowerCase()}.png`} alt={`${base} logo`} />
         </div>
-        <p>{price?formatPrice(price):"--"}</p>
-        <span className={positive?"coin-change-up":"coin-change-down"}>{price?`${positive?"+":""}${(ticker?.changePercent??0).toFixed(2)}%`:"--"}</span>
+        <p>{priceLabel}</p>
+        <span className={positive?"coin-change-up":"coin-change-down"}>{changeLabel}</span>
       </div>
     </section>
-    {(ticker||isShine)&&<div className="coin-stats-grid">
-      <MiniStat label="24h High" value={ticker?.high?formatPrice(ticker.high):isShine?formatPrice(SHINE_PRICE_USD):"--"}/>
-      <MiniStat label="24h Low" value={ticker?.low?formatPrice(ticker.low):isShine?formatPrice(SHINE_PRICE_USD):"--"}/>
-      <MiniStat label="24h Volume" value={ticker?.volume?formatQty(ticker.volume):"--"}/>
-      <MiniStat label="Quote Volume" value={ticker?.quoteVolume?formatQty(ticker.quoteVolume):"--"}/>
-    </div>}
-    <div className="coin-detail-stack"><CandlestickChart symbol={symbol}/><OrderBookPanel symbol={symbol}/>{isShine?<ShineConvertCard/>:<TradeActions/>}</div>
+    <div className="coin-detail-stack"><TradingViewChart baseSymbol={base} pairLabel={pair} price={priceLabel} changeLabel={changeLabel} positive={positive}/><OrderBookPanel symbol={symbol}/>{isShine?<ShineConvertCard/>:<TradeActions/>}</div>
   </main>;
 }
 
@@ -118,6 +115,4 @@ function ShineConvertCard(){
   </section>;
 }
 
-function MiniStat({label,value}:{label:string;value:string}){return <div className="coin-stat-card"><p>{label}</p><strong>{value}</strong></div>;}
-function formatQty(value:number){return new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:2}).format(value);}
 function formatPrice(value:number){return value<1?value.toFixed(6):value.toLocaleString("en-US",{maximumFractionDigits:2});}
