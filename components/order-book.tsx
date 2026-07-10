@@ -78,9 +78,9 @@ export function OrderBookPanel({symbol="BTCUSDT"}:{symbol?:string}){
 }
 
 function OrderRows({label,rows,tone,maxTotal}:{label:"Buy"|"Sell";rows:[number,number][];tone:"buy"|"sell";maxTotal:number}){const isBuy=tone==="buy";return <div className={`orderbook-side is-${tone}`}>
-  <div className="orderbook-side-head"><span>{label} Orders</span></div>
-  <div className="orderbook-side-columns">{isBuy?<><span>Total</span><span>Amount</span><span>Price</span></>:<><span>Price</span><span>Amount</span><span>Total</span></>}</div>
-  <div className="orderbook-side-rows">{rows.map(([price,amount])=>{const total=price*amount;const depth=Math.min(100,(total/maxTotal)*100);return <div key={`${label}-${price}-${amount}`} className={`orderbook-row is-${tone}`}><i style={{width:`${depth}%`}}/>{isBuy?<><span>{formatQty(total)}</span><span>{amount.toFixed(3)}</span><span>{formatPrice(price)}</span></>:<><span>{formatPrice(price)}</span><span>{amount.toFixed(3)}</span><span>{formatQty(total)}</span></>}</div>;})}</div>
+  <div className="orderbook-side-head"><span>{isBuy?"Buy / Bids":"Sell / Asks"}</span></div>
+  <div className="orderbook-side-columns">{isBuy?<><span>Amount</span><span>Price</span></>:<><span>Price</span><span>Amount</span></>}</div>
+  <div className="orderbook-side-rows">{rows.map(([price,amount])=>{const total=price*amount;const depth=Math.min(100,(total/maxTotal)*100);return <div key={`${label}-${price}-${amount}`} className={`orderbook-row is-${tone}`}><i style={{width:`${depth}%`}}/>{isBuy?<><span>{formatAmount(amount)}</span><span>{formatPrice(price)}</span></>:<><span>{formatPrice(price)}</span><span>{formatAmount(amount)}</span></>}</div>;})}</div>
 </div>}
 const formatPrice=(value:number)=>value<1?value.toFixed(6):value.toLocaleString("en-US",{maximumFractionDigits:2});
-const formatQty=(value:number)=>new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:2}).format(value);
+const formatAmount=(value:number)=>value<1?value.toFixed(5):value.toLocaleString("en-US",{maximumFractionDigits:4});

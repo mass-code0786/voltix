@@ -36,10 +36,7 @@ declare global {
 
 type TradingViewChartProps = {
   baseSymbol: string;
-  pairLabel: string;
-  price: string;
-  changeLabel: string;
-  positive: boolean;
+  interval?: string;
 };
 
 export function resolveTradingViewSymbol(symbol: string) {
@@ -48,7 +45,7 @@ export function resolveTradingViewSymbol(symbol: string) {
   return `BINANCE:${normalized}USDT`;
 }
 
-export function TradingViewChart({ baseSymbol, pairLabel, price, changeLabel, positive }: TradingViewChartProps) {
+export function TradingViewChart({ baseSymbol, interval = "1" }: TradingViewChartProps) {
   const reactId = useId().replace(/:/g, "");
   const containerId = useMemo(() => `tradingview_${baseSymbol.toLowerCase()}_${reactId}`, [baseSymbol, reactId]);
   const widgetRef = useRef<{ remove?: () => void } | null>(null);
@@ -84,7 +81,7 @@ export function TradingViewChart({ baseSymbol, pairLabel, price, changeLabel, po
         widgetRef.current = new widget({
           autosize: true,
           symbol: tradingViewSymbol,
-          interval: "1",
+          interval,
           timezone: "Asia/Kolkata",
           theme: "dark",
           style: "1",
@@ -124,16 +121,10 @@ export function TradingViewChart({ baseSymbol, pairLabel, price, changeLabel, po
       const target = document.getElementById(containerId);
       if (target) target.innerHTML = "";
     };
-  }, [containerId, tradingViewSymbol]);
+  }, [containerId, interval, tradingViewSymbol]);
 
   return (
     <section className="trade-chart-card tradingview-chart-card">
-      <div className="trade-chart-head">
-        <div className="min-w-0">
-          <h2>{pairLabel}</h2>
-          <div className="mt-2 flex items-end gap-2"><p>{price}</p><span className={positive ? "text-[#18ff8a]" : "text-[#ff4f6d]"}>{changeLabel}</span></div>
-        </div>
-      </div>
       <div className="tradingview-chart-shell">
         <div id={containerId} className="tradingview-chart-container" />
         {state === "loading" && <div className="tradingview-chart-state">Loading TradingView chart...</div>}
