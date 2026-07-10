@@ -89,7 +89,7 @@ export async function GET() {
     ...incomes.map(row => ({
       id: row.id,
       type: "INCOME",
-      walletType: displayWalletName(copyTradeIncomeTypes.has(row.type) ? "BITEX" : "SPOT"),
+      walletType: displayWalletName(copyTradeIncomeTypes.has(row.type) ? "AI" : "SPOT"),
       asset: "USDT",
       direction: "CREDIT",
       amount: Number(row.amount.toString()),
@@ -104,7 +104,7 @@ export async function GET() {
     ...trades.map(row => ({
       id: row.id,
       type: "COPY_TRADE",
-      walletType: displayWalletName("BITEX"),
+      walletType: displayWalletName("AI"),
       asset: "USDT",
       direction: "DEBIT",
       amount: Number(row.principalAmount.toString()),
@@ -119,7 +119,7 @@ export async function GET() {
     ...trades.filter(row => row.incomeCreditedAt).map(row => ({
       id: `${row.id}:principal-return`,
       type: "COPY_TRADE_PRINCIPAL_RETURN",
-      walletType: displayWalletName("BITEX"),
+      walletType: displayWalletName("AI"),
       asset: "USDT",
       direction: "CREDIT" as const,
       amount: Number(row.principalAmount.toString()),

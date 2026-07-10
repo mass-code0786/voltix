@@ -9,8 +9,8 @@ import { auditFailure, auditSuccess } from "@/lib/audit";
 import { displayWalletName } from "@/lib/wallet-labels";
 
 const transferSchema = z.object({
-  fromWallet: z.enum(["SPOT", "FUTURES", "BITEX"]),
-  toWallet: z.enum(["SPOT", "FUTURES", "BITEX"]),
+  fromWallet: z.enum(["SPOT", "FUTURES", "AI"]),
+  toWallet: z.enum(["SPOT", "FUTURES", "AI"]),
   amount: z.coerce.number().positive(),
 });
 

@@ -16,7 +16,7 @@ const networkNames: Record<string, string> = {
   eth: "Ethereum",
 };
 
-type WithdrawalWallet = Extract<WalletType, "SPOT" | "BITEX">;
+type WithdrawalWallet = Extract<WalletType, "SPOT" | "AI">;
 type NowPaymentsPayload = Record<string, unknown>;
 type AiWithdrawalBreakdown = {
   requiresConfirmation: boolean;
@@ -238,7 +238,7 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
   if (!input.idempotencyKey.trim()) throw new Error("Idempotency key is required");
   if (!input.address.trim()) throw new Error("External wallet address is required");
   if (input.amount.lte(0)) throw new Error("Withdrawal amount must be positive");
-  if (input.walletType !== "SPOT" && input.walletType !== "BITEX") throw new Error("Only Spot and AI withdrawals are supported");
+  if (input.walletType !== "SPOT" && input.walletType !== "AI") throw new Error("Only Spot and AI withdrawals are supported");
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.withdrawal.findUnique({
@@ -251,17 +251,17 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
     const network = await ensureNetwork(tx, input.network);
     const user = await tx.user.findUniqueOrThrow({
       where: { id: input.userId },
-      select: { spotBalance: true, bitexBalance: true, bitexPrincipal: true },
+      select: { spotBalance: true, aiWalletBalance: true, aiTradePrincipal: true },
     });
-    const earnedProfit = input.walletType === "BITEX" ? await calculateAiEarnedProfit(tx, input.userId) : new Prisma.Decimal(0);
-    const feeBreakdown = input.walletType === "BITEX"
-      ? calculateAiWithdrawalBreakdown({ capitalAmount: user.bitexPrincipal, earnedProfit, withdrawalAmount: input.amount })
+    const earnedProfit = input.walletType === "AI" ? await calculateAiEarnedProfit(tx, input.userId) : new Prisma.Decimal(0);
+    const feeBreakdown = input.walletType === "AI"
+      ? calculateAiWithdrawalBreakdown({ capitalAmount: user.aiTradePrincipal, earnedProfit, withdrawalAmount: input.amount })
       : calculateSpotWithdrawalBreakdown(input.amount);
     if (feeBreakdown.receivableAmount.lte(0)) throw new Error("Withdrawal amount must exceed the total fee");
 
     if (input.walletType === "SPOT" && user.spotBalance.lt(input.amount)) throw new Error("Insufficient Spot wallet balance");
-    if (input.walletType === "BITEX") {
-      if (user.bitexBalance.lt(input.amount)) throw new Error("Insufficient AI Wallet balance");
+    if (input.walletType === "AI") {
+      if (user.aiWalletBalance.lt(input.amount)) throw new Error("Insufficient AI Wallet balance");
       if (!feeBreakdown.eligible && !input.acceptEarlyWithdrawalCharge) {
         throw new AiWithdrawalConfirmationRequiredError(formatAiWithdrawalBreakdown(feeBreakdown, true));
       }
@@ -277,18 +277,18 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
         amount: input.amount,
         feeAmount: feeBreakdown.totalFees,
         receivableAmount: feeBreakdown.receivableAmount,
-        eligibilityStatus: input.walletType === "BITEX" ? feeBreakdown.eligible ? "ELIGIBLE_WITHDRAWAL" : "EARLY_WITHDRAWAL" : "SPOT_WITHDRAWAL",
+        eligibilityStatus: input.walletType === "AI" ? feeBreakdown.eligible ? "ELIGIBLE_WITHDRAWAL" : "EARLY_WITHDRAWAL" : "SPOT_WITHDRAWAL",
         capitalAmount: feeBreakdown.capitalAmount,
         earnedProfit: feeBreakdown.earnedProfit,
         requiredProfit: feeBreakdown.requiredProfit,
         completedPercentage: feeBreakdown.completedPercentage,
-        earlyWithdrawal: input.walletType === "BITEX" && !feeBreakdown.eligible,
+        earlyWithdrawal: input.walletType === "AI" && !feeBreakdown.eligible,
         earlyWithdrawalCharge: feeBreakdown.earlyWithdrawalCharge,
         percentageFee: feeBreakdown.percentageFee,
         fixedFee: feeBreakdown.fixedFee,
         totalCharges: feeBreakdown.totalFees,
         netWithdrawalAmount: feeBreakdown.receivableAmount,
-        earlyWithdrawalConfirmedAt: input.walletType === "BITEX" && !feeBreakdown.eligible ? new Date() : null,
+        earlyWithdrawalConfirmedAt: input.walletType === "AI" && !feeBreakdown.eligible ? new Date() : null,
         idempotencyKey: input.idempotencyKey,
         status: "PENDING",
       },
@@ -458,13 +458,13 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
   return prisma.$transaction(async (tx) => {
     const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: input.withdrawalId }, include: { asset: true, network: true } });
     if (withdrawal.status !== "PENDING") throw new Error("Withdrawal has already been actioned");
-    if (withdrawal.walletType !== "SPOT" && withdrawal.walletType !== "BITEX") throw new Error("Only Spot and AI withdrawals are supported");
+    if (withdrawal.walletType !== "SPOT" && withdrawal.walletType !== "AI") throw new Error("Only Spot and AI withdrawals are supported");
     const feeAmount = withdrawal.feeAmount;
     const receivableAmount = withdrawal.receivableAmount;
     if (receivableAmount.lte(0)) throw new Error("Withdrawal amount must exceed the total fee");
 
-    const debit = withdrawal.walletType === "BITEX"
-      ? await tx.user.updateMany({ where: { id: withdrawal.userId, bitexBalance: { gte: withdrawal.amount } }, data: { bitexBalance: { decrement: withdrawal.amount } } })
+    const debit = withdrawal.walletType === "AI"
+      ? await tx.user.updateMany({ where: { id: withdrawal.userId, aiWalletBalance: { gte: withdrawal.amount } }, data: { aiWalletBalance: { decrement: withdrawal.amount } } })
       : await tx.user.updateMany({ where: { id: withdrawal.userId, spotBalance: { gte: withdrawal.amount } }, data: { spotBalance: { decrement: withdrawal.amount } } });
     if (debit.count !== 1) throw new Error(`Insufficient ${displayWalletName(withdrawal.walletType)} balance`);
 

@@ -5,7 +5,7 @@ import { displayWalletName } from "@/lib/wallet-labels";
 
 type AssetClient = Pick<PrismaClient, "asset" | "walletAccount" | "ledgerEntry" | "copyTrade" | "user"> | Prisma.TransactionClient;
 
-const userWalletTypes: WalletType[] = ["SPOT", "FUTURES", "BITEX"];
+const userWalletTypes: WalletType[] = ["SPOT", "FUTURES", "AI"];
 
 export async function getUserAssetsAndTotals(client: AssetClient, userId: string) {
   await ensureUserWalletAccounts(client, userId);
@@ -21,7 +21,7 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
     }),
     client.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { spotBalance: true, futuresBalance: true, bitexBalance: true, bitexPrincipal: true, bitexIncomeEarned: true, bitexTargetAmount: true, bitexUnlocked: true },
+      select: { spotBalance: true, futuresBalance: true, aiWalletBalance: true, aiTradePrincipal: true, aiTradeProfitEarned: true, aiTradeTargetAmount: true, aiTradeWithdrawalUnlocked: true },
     }),
   ]);
 
@@ -38,18 +38,18 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
   }
 
   const totals = {
-    available: { spot: decimalToNumber(user.spotBalance), futures: decimalToNumber(user.futuresBalance), bitex: decimalToNumber(user.bitexBalance) },
-    locked: { spot: 0, futures: 0, bitex: decimalToNumber(activeTrades._sum.principalAmount ?? 0) },
-    total: { spot: decimalToNumber(user.spotBalance), futures: decimalToNumber(user.futuresBalance), bitex: decimalToNumber(user.bitexBalance) },
+    available: { spot: decimalToNumber(user.spotBalance), futures: decimalToNumber(user.futuresBalance), aiWallet: decimalToNumber(user.aiWalletBalance) },
+    locked: { spot: 0, futures: 0, aiWallet: decimalToNumber(activeTrades._sum.principalAmount ?? 0) },
+    total: { spot: decimalToNumber(user.spotBalance), futures: decimalToNumber(user.futuresBalance), aiWallet: decimalToNumber(user.aiWalletBalance) },
     portfolio: 0,
-    bitex: {
-      principal: decimalToNumber(user.bitexPrincipal),
-      incomeEarned: decimalToNumber(user.bitexIncomeEarned),
-      targetAmount: decimalToNumber(user.bitexPrincipal.mul("0.60")),
-      unlocked: user.bitexPrincipal.eq(0) || user.bitexIncomeEarned.gte(user.bitexPrincipal.mul("0.60")),
+    aiWallet: {
+      principal: decimalToNumber(user.aiTradePrincipal),
+      incomeEarned: decimalToNumber(user.aiTradeProfitEarned),
+      targetAmount: decimalToNumber(user.aiTradePrincipal.mul("0.60")),
+      unlocked: user.aiTradePrincipal.eq(0) || user.aiTradeProfitEarned.gte(user.aiTradePrincipal.mul("0.60")),
     },
   };
-  totals.portfolio = totals.total.spot + totals.total.futures + totals.total.bitex;
+  totals.portfolio = totals.total.spot + totals.total.futures + totals.total.aiWallet;
 
   const assets = accounts
     .map(account => {
@@ -118,8 +118,8 @@ function decimalToNumber(value: Prisma.Decimal | number) {
   return Number(value.toString());
 }
 
-function walletBalanceForType(user: { spotBalance: Prisma.Decimal; futuresBalance: Prisma.Decimal; bitexBalance: Prisma.Decimal }, type: WalletType) {
+function walletBalanceForType(user: { spotBalance: Prisma.Decimal; futuresBalance: Prisma.Decimal; aiWalletBalance: Prisma.Decimal }, type: WalletType) {
   if (type === "FUTURES") return user.futuresBalance;
-  if (type === "BITEX") return user.bitexBalance;
+  if (type === "AI") return user.aiWalletBalance;
   return user.spotBalance;
 }

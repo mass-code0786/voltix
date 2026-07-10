@@ -9,12 +9,12 @@ type VipRankClient = Pick<PrismaClient, "user" | "deposit"> | Prisma.Transaction
 export async function refreshUserVipRank(userId: string, client: VipRankClient = prisma) {
   const user = await client.user.findUnique({
     where: { id: userId },
-    select: { id: true, vipRank: true, bitexPrincipal: true },
+    select: { id: true, vipRank: true, aiTradePrincipal: true },
   });
   if (!user) return null;
 
   const hasCreditedDeposit = await userHasCreditedDeposit(client, userId);
-  const nextRank = resolveVipRank(user.vipRank, hasCreditedDeposit || user.bitexPrincipal.gte(AI_ACTIVE_PRINCIPAL_THRESHOLD));
+  const nextRank = resolveVipRank(user.vipRank, hasCreditedDeposit || user.aiTradePrincipal.gte(AI_ACTIVE_PRINCIPAL_THRESHOLD));
   if (nextRank === user.vipRank) return user;
 
   return client.user.update({
@@ -31,7 +31,7 @@ export async function backfillVipZeroForDepositedUsers(client: VipRankClient = p
     select: { userId: true },
   });
   const activeAiUsers = await client.user.findMany({
-    where: { bitexPrincipal: { gte: AI_ACTIVE_PRINCIPAL_THRESHOLD } },
+    where: { aiTradePrincipal: { gte: AI_ACTIVE_PRINCIPAL_THRESHOLD } },
     select: { id: true },
   });
   const qualifiedUserIds = Array.from(new Set([...depositedUsers.map(deposit => deposit.userId), ...activeAiUsers.map(user => user.id)]));
@@ -52,8 +52,8 @@ export async function backfillVipZeroForDepositedUsers(client: VipRankClient = p
   return { scanned: qualifiedUserIds.length, updated: result.count };
 }
 
-export function displayVipRank(input: { vipRank?: string | null; bitexPrincipal?: Prisma.Decimal | number | string }, hasCreditedDeposit = false) {
-  const principal = decimalFrom(input.bitexPrincipal ?? 0);
+export function displayVipRank(input: { vipRank?: string | null; aiTradePrincipal?: Prisma.Decimal | number | string }, hasCreditedDeposit = false) {
+  const principal = decimalFrom(input.aiTradePrincipal ?? 0);
   return resolveVipRank(input.vipRank, hasCreditedDeposit || principal.gte(AI_ACTIVE_PRINCIPAL_THRESHOLD));
 }
 

@@ -32,7 +32,7 @@ async function main() {
     select: { userId: true },
   });
   const activeAiUsers = await prisma.user.findMany({
-    where: { bitexPrincipal: { gte: aiActivePrincipalThreshold } },
+    where: { aiTradePrincipal: { gte: aiActivePrincipalThreshold } },
     select: { id: true },
   });
   const qualifiedUserIds = Array.from(new Set([...depositedUsers.map(deposit => deposit.userId), ...activeAiUsers.map(user => user.id)]));

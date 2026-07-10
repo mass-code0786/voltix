@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient, WalletType } from "@prisma/client";
 
-const userWalletTypes = ["SPOT", "FUTURES", "BITEX"] as const satisfies readonly WalletType[];
+const userWalletTypes = ["SPOT", "FUTURES", "AI"] as const satisfies readonly WalletType[];
 
 type WalletClient = Pick<PrismaClient, "asset" | "walletAccount" | "user"> | Prisma.TransactionClient;
 
@@ -26,11 +26,11 @@ export async function getUserWalletSnapshot(client: WalletClient, userId: string
     select: {
       spotBalance: true,
       futuresBalance: true,
-      bitexBalance: true,
-      bitexPrincipal: true,
-      bitexIncomeEarned: true,
-      bitexTargetAmount: true,
-      bitexUnlocked: true,
+      aiWalletBalance: true,
+      aiTradePrincipal: true,
+      aiTradeProfitEarned: true,
+      aiTradeTargetAmount: true,
+      aiTradeWithdrawalUnlocked: true,
       wallets: {
         select: {
           id: true,
@@ -47,13 +47,13 @@ export async function getUserWalletSnapshot(client: WalletClient, userId: string
       spot: decimalToNumber(user.spotBalance),
       funding: decimalToNumber(user.futuresBalance),
       futures: decimalToNumber(user.futuresBalance),
-      bitex: decimalToNumber(user.bitexBalance),
+      aiWallet: decimalToNumber(user.aiWalletBalance),
     },
-    bitex: {
-      principal: decimalToNumber(user.bitexPrincipal),
-      incomeEarned: decimalToNumber(user.bitexIncomeEarned),
-      targetAmount: decimalToNumber(user.bitexPrincipal.mul("0.60")),
-      unlocked: user.bitexPrincipal.eq(0) || user.bitexIncomeEarned.gte(user.bitexPrincipal.mul("0.60")),
+    aiWallet: {
+      principal: decimalToNumber(user.aiTradePrincipal),
+      incomeEarned: decimalToNumber(user.aiTradeProfitEarned),
+      targetAmount: decimalToNumber(user.aiTradePrincipal.mul("0.60")),
+      unlocked: user.aiTradePrincipal.eq(0) || user.aiTradeProfitEarned.gte(user.aiTradePrincipal.mul("0.60")),
     },
     accounts: user.wallets.map(account => ({
       id: account.id,

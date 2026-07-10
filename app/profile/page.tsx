@@ -81,7 +81,7 @@ type IncomeHistory = {
   }[];
 };
 
-type MobileNavTab = "home" | "markets" | "bitex" | "wallet" | "profile";
+type MobileNavTab = "home" | "markets" | "aiTrade" | "wallet" | "profile";
 type Panel = "account" | "security" | "settings" | null;
 type IconType = ComponentType<LucideProps>;
 type NativePhoto = {
@@ -95,7 +95,7 @@ type NativePhoto = {
 const mobileTabs: { id: MobileNavTab; label: string; icon: IconType; section?: string }[] = [
   { id: "home", label: "Home", icon: Home },
   { id: "markets", label: "Markets", icon: LineChart },
-  { id: "bitex", label: "AI Trade", icon: Zap },
+  { id: "aiTrade", label: "AI Trade", icon: Zap },
   { id: "wallet", label: "Wallet", icon: Wallet, section: "overview" },
   { id: "profile", label: "Profile", icon: Settings },
 ];

@@ -8,10 +8,10 @@ import { TransactionPinInput } from "@/components/transaction-pin-input";
 import { hapticNotification, requestMobileTransactionToken } from "@/lib/mobile-native";
 import { displayWalletName } from "@/lib/wallet-labels";
 
-type WalletType = "SPOT" | "BITEX";
+type WalletType = "SPOT" | "AI";
 type AssetTotals = {
-  total?: { spot?: number; bitex?: number };
-  bitex?: { principal?: number; incomeEarned?: number };
+  total?: { spot?: number; aiWallet?: number };
+  aiWallet?: { principal?: number; incomeEarned?: number };
 };
 type EarlyWithdrawalBreakdown = { requiresConfirmation: boolean; eligible: boolean; capitalAmount: number; earnedProfit: number; requiredProfit: number; completedPercentage: number; remainingPercentage: number; withdrawalAmount: number; earlyWithdrawalCharge: number; percentageFee: number; fixedFee: number; totalFees: number; netAmount: number };
 
@@ -46,7 +46,7 @@ export default function WalletWithdrawPage() {
   },[router]);
 
   const value=Number(amount)||0;
-  const balances=useMemo(()=>({SPOT:Number(totals.total?.spot??0),BITEX:Number(totals.total?.bitex??0)}),[totals]);
+  const balances=useMemo(()=>({SPOT:Number(totals.total?.spot??0),AI:Number(totals.total?.aiWallet??0)}),[totals]);
   const available=balances[walletType];
   const fixedFee=value>0?fixedSpotFee:0;
   const percentageFee=value*spotFeeRate;
@@ -129,7 +129,7 @@ export default function WalletWithdrawPage() {
         </div>
       </section>:<section className="profile-glass mt-2 rounded-[22px] p-4">
         {success&&<div className="mb-4 flex items-center gap-3 rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 p-3 text-sm font-bold text-[#18ff8a]"><CheckCircle2 size={18}/>{success}</div>}
-        <label className="block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={event=>{setWalletType(event.target.value as WalletType);resetError();}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="SPOT">Spot Wallet</option><option value="BITEX">AI Wallet</option></select></label>
+        <label className="block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={event=>{setWalletType(event.target.value as WalletType);resetError();}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="SPOT">Spot Wallet</option><option value="AI">AI Wallet</option></select></label>
         <label className="mt-4 block text-xs font-bold text-slate-400">Amount</label>
         <div className={`mt-2 flex items-center rounded-2xl border bg-black/25 ${error?"border-[#ff4f6d]/60":"border-white/[.08] focus-within:border-[#18ff8a]/50"}`}>
           <input inputMode="decimal" value={amount} onChange={event=>{setAmount(event.target.value);resetError();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3.5 text-white outline-none"/>

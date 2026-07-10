@@ -36,9 +36,9 @@ export function calculateTradeIncome(principal: number, returnPercent: number) {
   return Number(((principal * returnPercent) / 100).toFixed(8));
 }
 
-export function calculateCopyTradeStake(bitexBalance: number) {
-  if (bitexBalance <= 0) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
-  const stake = bitexBalance * COPY_TRADE_STAKE_RATE;
+export function calculateCopyTradeStake(aiWalletBalance: number) {
+  if (aiWalletBalance <= 0) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
+  const stake = aiWalletBalance * COPY_TRADE_STAKE_RATE;
   if (stake < MIN_COPY_TRADE_STAKE_USD) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE_USD.toFixed(2)}.`);
   return Number(stake.toFixed(8));
 }

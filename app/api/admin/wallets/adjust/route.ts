@@ -9,7 +9,7 @@ import { rateLimitByUser } from "@/lib/security";
 
 const adjustSchema = z.object({
   userId: z.string().min(1, "User is required"),
-  walletType: z.enum(["SPOT", "FUTURES", "BITEX"]),
+  walletType: z.enum(["SPOT", "FUTURES", "AI"]),
   action: z.enum(["CREDIT", "DEBIT"]),
   amount: z.coerce.number().positive("Amount must be positive"),
   asset: z.literal("USDT").default("USDT"),

@@ -12,7 +12,7 @@ type ReferralUser = {
   uid: string;
   name: string;
   vipRank: string;
-  bitexPrincipal: Prisma.Decimal;
+  aiTradePrincipal: Prisma.Decimal;
   referredById: string | null;
   joinedAt: Date;
 };
@@ -31,7 +31,7 @@ export async function getTeamSnapshot(client: TeamSnapshotClient, userId: string
       uid: true,
       name: true,
       vipRank: true,
-      bitexPrincipal: true,
+      aiTradePrincipal: true,
       referredById: true,
       joinedAt: true,
     },
@@ -138,7 +138,7 @@ export async function getTeamTreeMembers(
       uid: true,
       name: true,
       vipRank: true,
-      bitexPrincipal: true,
+      aiTradePrincipal: true,
       referredById: true,
       joinedAt: true,
     },
@@ -226,7 +226,7 @@ async function getReferralNetwork(client: TopUpTeamClient, userId: string) {
       uid: true,
       name: true,
       vipRank: true,
-      bitexPrincipal: true,
+      aiTradePrincipal: true,
       referredById: true,
       joinedAt: true,
     },

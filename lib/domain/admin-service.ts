@@ -21,7 +21,7 @@ export async function getAdminOverview() {
     recentAudit,
   ] = await Promise.all([
     prisma.user.count(),
-    prisma.user.count({ where: { bitexPrincipal: { gte: AI_ACTIVE_PRINCIPAL_THRESHOLD } } }),
+    prisma.user.count({ where: { aiTradePrincipal: { gte: AI_ACTIVE_PRINCIPAL_THRESHOLD } } }),
     prisma.deposit.count(),
     prisma.withdrawal.count(),
     prisma.deposit.aggregate({ _sum: { amount: true } }),
@@ -70,8 +70,8 @@ export async function getAdminUsers() {
       displayVipRank(user, depositedUserIds.has(user.id)),
       money(user.spotBalance),
       money(user.futuresBalance),
-      money(user.bitexBalance),
-      `${money(user.bitexIncomeEarned)} / ${money(user.bitexPrincipal.mul("0.60"))}`,
+      money(user.aiWalletBalance),
+      `${money(user.aiTradeProfitEarned)} / ${money(user.aiTradePrincipal.mul("0.60"))}`,
       isAiWalletActive(user) ? "AI Active" : "Inactive",
     ]),
   };
@@ -97,10 +97,10 @@ export async function getAdminWallets() {
       displayVipRank(user, depositedUserIds.has(user.id)),
       money(user.spotBalance),
       money(user.futuresBalance),
-      money(user.bitexBalance),
-      money(user.bitexPrincipal),
-      `${money(user.bitexIncomeEarned)} / ${money(user.bitexPrincipal.mul("0.60"))}`,
-      user.bitexPrincipal.eq(0) || user.bitexIncomeEarned.gte(user.bitexPrincipal.mul("0.60")) ? "Eligible" : "Early fee applies",
+      money(user.aiWalletBalance),
+      money(user.aiTradePrincipal),
+      `${money(user.aiTradeProfitEarned)} / ${money(user.aiTradePrincipal.mul("0.60"))}`,
+      user.aiTradePrincipal.eq(0) || user.aiTradeProfitEarned.gte(user.aiTradePrincipal.mul("0.60")) ? "Eligible" : "Early fee applies",
     ]),
     users: users.map(user => ({
       id: user.id,
@@ -110,11 +110,11 @@ export async function getAdminWallets() {
       vipRank: displayVipRank(user, depositedUserIds.has(user.id)),
       spot: decimalToNumber(user.spotBalance),
       futures: decimalToNumber(user.futuresBalance),
-      bitex: decimalToNumber(user.bitexBalance),
-      bitexPrincipal: decimalToNumber(user.bitexPrincipal),
-      bitexIncomeEarned: decimalToNumber(user.bitexIncomeEarned),
-      bitexTargetAmount: decimalToNumber(user.bitexTargetAmount),
-      bitexUnlocked: user.bitexUnlocked,
+      aiWallet: decimalToNumber(user.aiWalletBalance),
+      aiTradePrincipal: decimalToNumber(user.aiTradePrincipal),
+      aiTradeProfitEarned: decimalToNumber(user.aiTradeProfitEarned),
+      aiTradeTargetAmount: decimalToNumber(user.aiTradeTargetAmount),
+      aiTradeWithdrawalUnlocked: user.aiTradeWithdrawalUnlocked,
     })),
     adjustments: adjustments.map(adjustment => ({
       id: adjustment.id,
@@ -168,7 +168,7 @@ export async function getAdminWithdrawals() {
     money(withdrawal.amount),
     withdrawal.address,
     withdrawal.network.name,
-    withdrawal.earlyWithdrawal ? "Early Withdrawal" : withdrawal.walletType === "BITEX" ? "Eligible Withdrawal" : "Spot Withdrawal",
+    withdrawal.earlyWithdrawal ? "Early Withdrawal" : withdrawal.walletType === "AI" ? "Eligible Withdrawal" : "Spot Withdrawal",
     `${money(withdrawal.totalCharges)} (${money(withdrawal.earlyWithdrawalCharge)} early, ${money(withdrawal.percentageFee)} 5%, ${money(withdrawal.fixedFee)} fixed)`,
     money(withdrawal.netWithdrawalAmount.gt(0) ? withdrawal.netWithdrawalAmount : withdrawal.receivableAmount),
     withdrawal.status,
@@ -177,7 +177,7 @@ export async function getAdminWithdrawals() {
   ]);
   return {
     spotRows: rows.filter(row => row[1] === "Spot Wallet"),
-    bitexRows: rows.filter(row => row[1] === "AI Wallet"),
+    aiWalletRows: rows.filter(row => row[1] === "AI Wallet"),
   };
 }
 
@@ -381,11 +381,11 @@ export async function getAdminSlots() {
 export const emptyRows = { rows: [] as string[][] };
 
 function accountLabel(entry: { account: { type: string; asset: { symbol: string } } } | undefined) {
-  return entry ? `${displayWalletName(entry.account.type as "SPOT" | "FUTURES" | "BITEX" | "FEE")} ${entry.account.asset.symbol}` : "";
+  return entry ? `${displayWalletName(entry.account.type as "SPOT" | "FUTURES" | "AI" | "FEE")} ${entry.account.asset.symbol}` : "";
 }
 
 function journalTypeLabel(referenceType: string) {
-  if (referenceType === "BITEX_WITHDRAWAL") return "AI Wallet Withdrawal";
+  if (referenceType === "AI_WALLET_WITHDRAWAL") return "AI Wallet Withdrawal";
   if (referenceType === "COPY_TRADE_PRINCIPAL_RETURN") return "AI Trade Principal Return";
   if (referenceType === "COPY_TRADE_INCOME") return "AI Trade Profit";
   return referenceType.replaceAll("_", " ");

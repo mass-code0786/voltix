@@ -22,9 +22,9 @@ const emptyDashboard = {
       spot: 0,
       funding: 0,
       futures: 0,
-      bitex: 0,
+      aiWallet: 0,
     },
-    bitex: {
+    aiWallet: {
       principal: 0,
       incomeEarned: 0,
       targetAmount: 0,

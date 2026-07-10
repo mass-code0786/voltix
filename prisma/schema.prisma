@@ -22,7 +22,7 @@ enum UserStatus {
 enum WalletType {
   SPOT
   FUTURES
-  BITEX
+  AI @map("BITEX")
   FEE
 }
 
@@ -161,11 +161,11 @@ model User {
   permanentExtraTrade   Boolean          @default(false)
   spotBalance           Decimal          @default(0) @db.Decimal(36, 18)
   futuresBalance        Decimal          @default(0) @db.Decimal(36, 18)
-  bitexBalance          Decimal          @default(0) @db.Decimal(36, 18)
-  bitexPrincipal        Decimal          @default(0) @db.Decimal(36, 18)
-  bitexIncomeEarned     Decimal          @default(0) @db.Decimal(36, 18)
-  bitexTargetAmount     Decimal          @default(0) @db.Decimal(36, 18)
-  bitexUnlocked         Boolean          @default(false)
+  aiWalletBalance       Decimal          @default(0) @map("bitexBalance") @db.Decimal(36, 18)
+  aiTradePrincipal      Decimal          @default(0) @map("bitexPrincipal") @db.Decimal(36, 18)
+  aiTradeProfitEarned   Decimal          @default(0) @map("bitexIncomeEarned") @db.Decimal(36, 18)
+  aiTradeTargetAmount   Decimal          @default(0) @map("bitexTargetAmount") @db.Decimal(36, 18)
+  aiTradeWithdrawalUnlocked Boolean      @default(false) @map("bitexUnlocked")
   wallets               WalletAccount[]
   externalWallets       ExternalWalletBinding[]
   walletTransfers       WalletTransfer[]

@@ -9,7 +9,7 @@ import { verifyTransactionPinForUser } from "@/lib/domain/transaction-pin-servic
 import { verifyMobileTransactionToken } from "@/lib/mobile-transaction-token";
 
 const withdrawalSchema = z.object({
-  walletType: z.enum(["SPOT", "BITEX"]),
+  walletType: z.enum(["SPOT", "AI"]),
   amount: z.coerce.number().positive(),
   address: z.string().trim().min(1),
   network: z.string().trim().min(1).default("BSC"),

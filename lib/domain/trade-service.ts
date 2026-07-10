@@ -114,7 +114,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   await settleDueCopyTrades(userId, now);
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { vipRank: true, bitexBalance: true, bitexPrincipal: true },
+    select: { vipRank: true, aiWalletBalance: true, aiTradePrincipal: true },
   });
   const dayStart = new Date(now);
   dayStart.setUTCHours(0, 0, 0, 0);
@@ -138,7 +138,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   const active = activeTrade ? serializeTrade(activeTrade, now) : null;
   const tradeWindow = await getCurrentTradeWindow(now);
   const normalizedVipRank = normalizeVipRank(user.vipRank);
-  const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
+  const tradeAmount = user.aiWalletBalance.mul(COPY_TRADE_STAKE_RATE);
   const aiActive = isAiWalletActive(user);
   const aiWalletActiveAmount = Number(aiWalletBusinessAmount(user).toString());
   const rows = VIP_TRADE_ROWS.map(row => {
@@ -225,7 +225,7 @@ export async function startVipCopyTrade(input: { userId: string; rowId: string; 
 export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Date; idempotencyKey?: string }) {
   const now = input.now ?? new Date();
   const [user, activeSubscription, slot] = await Promise.all([
-    prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { uid: true, email: true, vipRank: true, status: true, bitexBalance: true, bitexPrincipal: true } }),
+    prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { uid: true, email: true, vipRank: true, status: true, aiWalletBalance: true, aiTradePrincipal: true } }),
     prisma.aiSubscription.findFirst({ where: { userId: input.userId, active: true, startsAt: { lte: now }, expiresAt: { gt: now } }, select: { id: true, expiresAt: true } }),
     findOpenTradeSlot(now),
   ]);
@@ -240,7 +240,7 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
     currentTime: now.toISOString(),
     tradeCodeFound: null,
     tradeCodeStatus: null,
-    walletBalance: user.bitexBalance.toString(),
+    walletBalance: user.aiWalletBalance.toString(),
     reasonIfSkipped: null,
     tradeExecuted: "No",
   };
@@ -267,7 +267,7 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
       tradeStatus: slot ? "LIVE" : "NOT_LIVE",
       tradeCode: null,
       selectedVipRow: row.label,
-      balance: user.bitexBalance.toString(),
+      balance: user.aiWalletBalance.toString(),
     });
     await logAiAutoTradeEvent("Executing Trade...", {
       userId: input.userId,
@@ -277,10 +277,10 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
       subscriptionExpiry: activeSubscription.expiresAt.toISOString(),
       selectedVipRow: row.label,
       tradeCode: null,
-      balance: user.bitexBalance.toString(),
+      balance: user.aiWalletBalance.toString(),
     });
     const trade = await executeVipCopyTrade({ userId: input.userId, rowId: row.id, now, actorType: "SYSTEM", source: "AI_SUBSCRIPTION_AUTO", idempotencyKey: input.idempotencyKey });
-    const updatedUser = await prisma.user.findUnique({ where: { id: input.userId }, select: { bitexBalance: true } });
+    const updatedUser = await prisma.user.findUnique({ where: { id: input.userId }, select: { aiWalletBalance: true } });
     await logAiAutoTradeEvent("Completed Successfully", {
       tradeExecuted: true,
       walletUpdated: true,
@@ -292,7 +292,7 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
       tradeId: trade.id,
       tradeCode: null,
       principalDeducted: trade.principalAmount.toString(),
-      walletBalanceAfter: updatedUser?.bitexBalance.toString() ?? null,
+      walletBalanceAfter: updatedUser?.aiWalletBalance.toString() ?? null,
       status: trade.status,
       completesAt: trade.completesAt.toISOString(),
       creditDueAt: trade.creditDueAt.toISOString(),
@@ -474,13 +474,13 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
     const tradesToday = await tx.copyTrade.count({ where: { userId: input.userId, startedAt: { gte: dayStart } } });
     const limit = dailyTradeLimit();
     if (tradesToday >= limit) throw new Error("Daily trade limit reached");
-    if (user.bitexBalance.lte(0)) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
-    const tradeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
+    if (user.aiWalletBalance.lte(0)) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
+    const tradeAmount = user.aiWalletBalance.mul(COPY_TRADE_STAKE_RATE);
     if (tradeAmount.lt(MIN_COPY_TRADE_STAKE)) throw new Error(`Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.`);
 
     const locked = await tx.user.updateMany({
-      where: { id: input.userId, bitexBalance: { gte: tradeAmount } },
-      data: { bitexBalance: { decrement: tradeAmount } },
+      where: { id: input.userId, aiWalletBalance: { gte: tradeAmount } },
+      data: { aiWalletBalance: { decrement: tradeAmount } },
     });
     if (locked.count !== 1) throw new Error("Insufficient AI Wallet balance");
 
@@ -549,7 +549,7 @@ async function logActiveSubscriptionsSkippedOutsideLiveWindow(now: Date) {
     where: { active: true, startsAt: { lte: now }, expiresAt: { gt: now } },
     select: {
       userId: true,
-      user: { select: { vipRank: true, bitexBalance: true } },
+      user: { select: { vipRank: true, aiWalletBalance: true } },
     },
     distinct: ["userId"],
     take: 500,
@@ -566,7 +566,7 @@ async function logActiveSubscriptionsSkippedOutsideLiveWindow(now: Date) {
       currentTime: now.toISOString(),
       tradeCodeFound: null,
       tradeCodeStatus: null,
-      walletBalance: subscription.user.bitexBalance.toString(),
+      walletBalance: subscription.user.aiWalletBalance.toString(),
       reasonIfSkipped: "No live trade window",
       tradeExecuted: "No",
     });
@@ -588,8 +588,8 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
       email: true,
       vipRank: true,
       status: true,
-      bitexBalance: true,
-      bitexPrincipal: true,
+      aiWalletBalance: true,
+      aiTradePrincipal: true,
     },
   });
   const [subscription, slot, tradeWindow] = await Promise.all([
@@ -612,7 +612,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
   const limit = dailyTradeLimit();
   const aiWalletActive = isAiWalletActive(user);
   const aiWalletActiveAmount = aiWalletBusinessAmount(user);
-  const stakeAmount = user.bitexBalance.mul(COPY_TRADE_STAKE_RATE);
+  const stakeAmount = user.aiWalletBalance.mul(COPY_TRADE_STAKE_RATE);
   const checks = [
     { pass: Boolean(subscription), reason: "AI Subscription is not active" },
     { pass: user.status === UserStatus.ACTIVE, reason: "User account is not active" },
@@ -622,7 +622,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
     { pass: Boolean(selectedRow), reason: INELIGIBLE_TRADE_MESSAGE },
     { pass: aiWalletActive, reason: "AI Wallet activation required" },
     { pass: stakeAmount.gte(MIN_COPY_TRADE_STAKE), reason: `Copy trade stake must be at least $${MIN_COPY_TRADE_STAKE.toFixed(2)}.` },
-    { pass: user.bitexBalance.gte(stakeAmount) && user.bitexBalance.gt(0), reason: "Insufficient AI Wallet balance" },
+    { pass: user.aiWalletBalance.gte(stakeAmount) && user.aiWalletBalance.gt(0), reason: "Insufficient AI Wallet balance" },
   ];
   const skippedReason = checks.find(check => !check.pass)?.reason ?? null;
   const baseResult: AiAutoTradeDebugResult = {
@@ -644,7 +644,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
     userVipRank: normalizedVipRank,
     selectedVipRow: selectedRow?.label ?? null,
     selectedVipRowId: selectedRow?.id ?? null,
-    aiWalletBalance: user.bitexBalance.toString(),
+    aiWalletBalance: user.aiWalletBalance.toString(),
     aiWalletActiveAmount: aiWalletActiveAmount.toString(),
     dailyTradesUsed,
     dailyTradeLimit: limit,
@@ -654,7 +654,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
     tradeCodeStatus: null,
     stakeAmount: stakeAmount.toString(),
     minimumStakeAmount: MIN_COPY_TRADE_STAKE.toString(),
-    balanceSufficient: user.bitexBalance.gte(stakeAmount) && user.bitexBalance.gt(0),
+    balanceSufficient: user.aiWalletBalance.gte(stakeAmount) && user.aiWalletBalance.gt(0),
     canAutoTrade: !skippedReason,
     skippedReason,
     wouldExecute: !skippedReason,
@@ -714,11 +714,11 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
     if (claimed.count !== 1) return tx.copyTrade.findUniqueOrThrow({ where: { id: trade.id } });
     const incomeBase = trade.principalAmount.div(COPY_TRADE_STAKE_RATE);
     const profitAmount = incomeBase.mul(trade.returnPercent).div(100);
-    const bitexCredit = trade.principalAmount.add(profitAmount);
+    const aiWalletCredit = trade.principalAmount.add(profitAmount);
     await ensureUserWalletAccounts(tx, trade.userId);
     const asset = await tx.asset.findUniqueOrThrow({ where: { symbol: "USDT" } });
-    const [bitexAccount, revenueAccount] = await Promise.all([
-      tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: trade.userId, assetId: asset.id, type: "BITEX" } } }),
+    const [aiWalletAccount, revenueAccount] = await Promise.all([
+      tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: trade.userId, assetId: asset.id, type: "AI" } } }),
       tx.walletAccount.findFirstOrThrow({ where: { userId: null, assetId: asset.id, type: "FEE" } }),
     ]);
     const principalJournal = await postBalancedJournal(tx, {
@@ -726,14 +726,14 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       referenceId: trade.id,
       idempotencyKey: `copy-trade-principal-return:${trade.id}`,
       memo: "AI Trade Principal Return",
-      lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: trade.principalAmount }, { accountId: bitexAccount.id, direction: "CREDIT", amount: trade.principalAmount }],
+      lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: trade.principalAmount }, { accountId: aiWalletAccount.id, direction: "CREDIT", amount: trade.principalAmount }],
     });
     const profitJournal = await postBalancedJournal(tx, {
       referenceType: "COPY_TRADE_INCOME",
       referenceId: trade.id,
       idempotencyKey: `copy-trade-profit:${trade.id}`,
       memo: "AI Trade Profit",
-      lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: profitAmount }, { accountId: bitexAccount.id, direction: "CREDIT", amount: profitAmount }],
+      lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: profitAmount }, { accountId: aiWalletAccount.id, direction: "CREDIT", amount: profitAmount }],
     });
     await tx.income.create({ data: { userId: trade.userId, type: "COPY_TRADE", sourceType: "COPY_TRADE", sourceId: trade.id, amount: profitAmount, copyTradeId: trade.id, ledgerJournalId: profitJournal.id } });
     await createNotification(tx, {
@@ -741,16 +741,16 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       type: "COPY_TRADE_INCOME",
       title: "AI trade settled",
       message: "AI trade settled: principal returned and profit credited.",
-      metadata: { tradeId: trade.id, principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id },
+      metadata: { tradeId: trade.id, principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: aiWalletCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id },
     });
     const progress = await tx.user.update({
       where: { id: trade.userId },
-      data: { bitexBalance: { increment: bitexCredit }, bitexIncomeEarned: { increment: profitAmount } },
-      select: { bitexIncomeEarned: true, bitexPrincipal: true },
+      data: { aiWalletBalance: { increment: aiWalletCredit }, aiTradeProfitEarned: { increment: profitAmount } },
+      select: { aiTradeProfitEarned: true, aiTradePrincipal: true },
     });
-    const requiredProfit = progress.bitexPrincipal.mul("0.60");
-    if (requiredProfit.eq(0) || progress.bitexIncomeEarned.gte(requiredProfit)) {
-      await tx.user.update({ where: { id: trade.userId }, data: { bitexUnlocked: true } });
+    const requiredProfit = progress.aiTradePrincipal.mul("0.60");
+    if (requiredProfit.eq(0) || progress.aiTradeProfitEarned.gte(requiredProfit)) {
+      await tx.user.update({ where: { id: trade.userId }, data: { aiTradeWithdrawalUnlocked: true } });
     }
     await tx.auditLog.create({
       data: {
@@ -759,7 +759,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
         action: "COPY_TRADE_INCOME_POSTED",
         entityType: "CopyTrade",
         entityId: trade.id,
-        metadata: { tradeId: trade.id, principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id, creditedAt: now.toISOString() },
+        metadata: { tradeId: trade.id, principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: aiWalletCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id, creditedAt: now.toISOString() },
       },
     });
     return tx.copyTrade.update({ where: { id: trade.id }, data: { incomeAmount: profitAmount, incomeCreditedAt: now } });

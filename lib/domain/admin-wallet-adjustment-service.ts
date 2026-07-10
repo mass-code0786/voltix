@@ -6,7 +6,7 @@ import { ensureUserWalletAccounts } from "./user-wallets";
 import { displayWalletName } from "@/lib/wallet-labels";
 import { refreshUserVipRank } from "./vip-rank-service";
 
-type UserWallet = Extract<WalletType, "SPOT" | "FUTURES" | "BITEX">;
+type UserWallet = Extract<WalletType, "SPOT" | "FUTURES" | "AI">;
 type AdjustmentAction = "CREDIT" | "DEBIT";
 
 export async function adjustAdminWallet(input: {
@@ -23,7 +23,7 @@ export async function adjustAdminWallet(input: {
   if (!input.reason.trim()) throw new Error("Reason is required");
   if (input.amount.lte(0)) throw new Error("Amount must be positive");
   if (input.asset !== "USDT") throw new Error("Only USDT adjustments are supported");
-  if (!["SPOT", "FUTURES", "BITEX"].includes(input.walletType)) throw new Error("Wallet type is not supported");
+  if (!["SPOT", "FUTURES", "AI"].includes(input.walletType)) throw new Error("Wallet type is not supported");
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.adminWalletAdjustment.findUnique({
@@ -66,7 +66,7 @@ export async function adjustAdminWallet(input: {
 
     if (input.action === "CREDIT") {
       await creditWalletBalance(tx, user.id, input.walletType, input.amount);
-      if ((input.walletType === "SPOT" && depositId) || input.walletType === "BITEX") await refreshUserVipRank(user.id, tx);
+      if ((input.walletType === "SPOT" && depositId) || input.walletType === "AI") await refreshUserVipRank(user.id, tx);
     } else {
       await debitWalletBalance(tx, user.id, input.walletType, input.amount);
     }
@@ -153,10 +153,10 @@ async function creditWalletBalance(tx: Prisma.TransactionClient, userId: string,
   await tx.user.update({
     where: { id: userId },
     data: {
-      bitexBalance: { increment: amount },
-      bitexPrincipal: { increment: amount },
-      bitexTargetAmount: { increment: amount.mul("0.60") },
-      bitexUnlocked: false,
+      aiWalletBalance: { increment: amount },
+      aiTradePrincipal: { increment: amount },
+      aiTradeTargetAmount: { increment: amount.mul("0.60") },
+      aiTradeWithdrawalUnlocked: false,
     },
   });
 }
@@ -187,7 +187,7 @@ async function ensureAdminNetwork(tx: Prisma.TransactionClient) {
 function balanceField(walletType: UserWallet) {
   if (walletType === "SPOT") return "spotBalance";
   if (walletType === "FUTURES") return "futuresBalance";
-  return "bitexBalance";
+  return "aiWalletBalance";
 }
 
 function formatAdjustment(adjustment: {

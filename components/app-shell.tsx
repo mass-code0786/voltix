@@ -37,15 +37,15 @@ import { displayWalletName } from "@/lib/wallet-labels";
 import { TransactionPinInput } from "./transaction-pin-input";
 import { clearMobileNativeSession, hapticNotification, nativeShareReferral, requestMobileTransactionToken } from "@/lib/mobile-native";
 
-type Tab = "home" | "markets" | "trade" | "bitex" | "team" | "wallet";
+type Tab = "home" | "markets" | "trade" | "aiTrade" | "team" | "wallet";
 type MobileNavTab = Tab | "profile";
 type TradeCategory = "spot" | "futures" | "grid" | "margin" | "copy";
 type WalletSection = "overview" | "assets" | "ledger";
 type WalletAction = "deposit" | null;
-type UserWallet = "SPOT" | "FUTURES" | "BITEX";
+type UserWallet = "SPOT" | "FUTURES" | "AI";
 type WalletActivity = readonly [typeof ArrowDownLeft, string, string, string];
 type EarlyWithdrawalBreakdown = { requiresConfirmation: boolean; eligible: boolean; capitalAmount: number; earnedProfit: number; requiredProfit: number; completedPercentage: number; remainingPercentage: number; withdrawalAmount: number; earlyWithdrawalCharge: number; percentageFee: number; fixedFee: number; totalFees: number; netAmount: number };
-type WithdrawalInput = { walletType: "SPOT" | "BITEX"; amount: number; address: string; network: string; transactionPin: string; mobileVerificationToken?: string; acceptEarlyWithdrawalCharge?: boolean };
+type WithdrawalInput = { walletType: "SPOT" | "AI"; amount: number; address: string; network: string; transactionPin: string; mobileVerificationToken?: string; acceptEarlyWithdrawalCharge?: boolean };
 type WithdrawalResult = { ok: boolean; message: string; requiresConfirmation?: boolean; breakdown?: EarlyWithdrawalBreakdown };
 type DepositInput = { amount: number; network: string; payCurrency: string };
 type DepositResult = { id: string; amount: number; asset: string; network: string; networkName: string; providerPaymentId: string | null; providerInvoiceId: string | null; providerPaymentUrl: string | null; payCurrency: string | null; payAddress: string | null; paymentStatus: string | null; actuallyPaid: number | null; outcomeAmount: number | null; status: string; createdAt: string };
@@ -64,9 +64,9 @@ type WalletSnapshot = {
     spot?: number;
     funding?: number;
     futures?: number;
-    bitex?: number;
+    aiWallet?: number;
   };
-  bitex?: {
+  aiWallet?: {
     principal?: number;
     incomeEarned?: number;
     targetAmount?: number;
@@ -77,20 +77,20 @@ type AssetTotals = {
   available?: {
     spot?: number;
     futures?: number;
-    bitex?: number;
+    aiWallet?: number;
   };
   locked?: {
     spot?: number;
     futures?: number;
-    bitex?: number;
+    aiWallet?: number;
   };
   total?: {
     spot?: number;
     futures?: number;
-    bitex?: number;
+    aiWallet?: number;
   };
   portfolio?: number;
-  bitex?: {
+  aiWallet?: {
     principal?: number;
     incomeEarned?: number;
     targetAmount?: number;
@@ -210,21 +210,21 @@ const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
   { id: "markets", label: "Markets", icon: BarChart3 },
   { id: "trade", label: "Trade", icon: LineChart },
-  { id: "bitex", label: "AI", icon: Zap },
+  { id: "aiTrade", label: "AI", icon: Zap },
   { id: "wallet", label: "Asset", icon: Wallet },
 ];
 
 const mobileTabs: { id: MobileNavTab; label: string; icon: typeof Home; section?: WalletSection }[] = [
   { id: "home", label: "Home", icon: Home },
   { id: "markets", label: "Markets", icon: BarChart3 },
-  { id: "bitex", label: "AI Trade", icon: Zap },
+  { id: "aiTrade", label: "AI Trade", icon: Zap },
   { id: "wallet", label: "Asset", icon: Wallet, section: "overview" },
   { id: "profile", label: "Profile", icon: Settings },
 ];
 
 const card = "premium-card";
 const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA","TRX","AVAX","DOT","LINK","TON","SHIB","LTC","BCH","ATOM","APT","ARB","OP","PEPE","NEAR","INJ","SEI","FIL"];
-const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, bitex: 0 }, locked: { spot: 0, futures: 0, bitex: 0 }, total: { spot: 0, futures: 0, bitex: 0 }, portfolio: 0, bitex: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
+const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, aiWallet: 0 }, locked: { spot: 0, futures: 0, aiWallet: 0 }, total: { spot: 0, futures: 0, aiWallet: 0 }, portfolio: 0, aiWallet: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
 const defaultCopyTradeCounts: CopyTradeCounts = { todaysTradeCount: 0, dailyTradeLimit: 3 };
 const activeAiSubscriptionMessage = "You already have an active AI Subscription. You can buy again after it expires.";
 const duplicateTradeWindowMessages = new Set([
@@ -334,10 +334,10 @@ export default function AppShell() {
   const [p2pAssets, setP2PAssets] = useState<P2PAsset[]>([]);
   const [assetTotals, setAssetTotals] = useState<AssetTotals>(emptyAssetTotals);
   const [futuresBalance, setFuturesBalance] = useState(0);
-  const [bitexBalance, setBitexBalance] = useState(0);
-  const [bitexTransferred, setBitexTransferred] = useState(0);
-  const [bitexPrincipalLocked, setBitexPrincipalLocked] = useState(0);
-  const [bitexIncomeEarned, setBitexIncomeEarned] = useState(0);
+  const [aiWalletBalance, setAiWalletBalance] = useState(0);
+  const [aiTradeTransferred, setAiTradeTransferred] = useState(0);
+  const [aiTradePrincipalLocked, setAiTradePrincipalLocked] = useState(0);
+  const [aiTradeProfitEarned, setAiTradeProfitEarned] = useState(0);
   const [transferOpen, setTransferOpen] = useState<{ from: UserWallet; to: UserWallet } | null>(null);
   const [p2pOpen, setP2POpen] = useState(false);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
@@ -371,7 +371,7 @@ export default function AppShell() {
       window.localStorage.setItem(BALANCE_VISIBILITY_STORAGE_KEY, visible ? "visible" : "hidden");
     } catch {}
   }, []);
-  const tabLabel = useCallback((id: Tab) => t(id === "bitex" ? "ai" : id === "wallet" ? "asset" : id), [t]);
+  const tabLabel = useCallback((id: Tab) => t(id === "aiTrade" ? "ai" : id === "wallet" ? "asset" : id), [t]);
   const isAdminUser = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
 
   const notify = (message: string) => {
@@ -407,25 +407,25 @@ export default function AppShell() {
   const applyWalletSnapshot = useCallback((wallet: WalletSnapshot | null) => {
     if (!wallet) {
       setFuturesBalance(0);
-      setBitexBalance(0);
-      setBitexTransferred(0);
-      setBitexPrincipalLocked(0);
-      setBitexIncomeEarned(0);
+      setAiWalletBalance(0);
+      setAiTradeTransferred(0);
+      setAiTradePrincipalLocked(0);
+      setAiTradeProfitEarned(0);
       return;
     }
 
     const balances = wallet.balances ?? {};
     const spotBalance = Number(balances.spot ?? 0);
     const fundingBalance = Number(balances.funding ?? balances.futures ?? 0);
-    const realBitexBalance = Number(balances.bitex ?? 0);
-    const bitexPrincipal = Number(wallet.bitex?.principal ?? 0);
-    const bitexIncome = Number(wallet.bitex?.incomeEarned ?? 0);
+    const realAiWalletBalance = Number(balances.aiWallet ?? 0);
+    const aiTradePrincipal = Number(wallet.aiWallet?.principal ?? 0);
+    const aiTradeProfit = Number(wallet.aiWallet?.incomeEarned ?? 0);
 
     setFuturesBalance(fundingBalance);
-    setBitexBalance(realBitexBalance);
-    setBitexTransferred(bitexPrincipal);
-    setBitexPrincipalLocked(bitexPrincipal);
-    setBitexIncomeEarned(bitexIncome);
+    setAiWalletBalance(realAiWalletBalance);
+    setAiTradeTransferred(aiTradePrincipal);
+    setAiTradePrincipalLocked(aiTradePrincipal);
+    setAiTradeProfitEarned(aiTradeProfit);
   }, []);
 
   const refreshWallet = useCallback(async (user: CurrentUser | null) => {
@@ -504,10 +504,10 @@ export default function AppShell() {
     setP2PAssets(assets.filter(asset => asset.walletType === "SPOT" && asset.enabled && Number(asset.balance ?? 0) > 0).map(asset => ({ symbol: asset.symbol, name: asset.name, balance: Number(asset.balance ?? 0), enabled: asset.enabled })));
     setAssetTotals(totals ?? emptyAssetTotals);
     setFuturesBalance(Number(totals?.total?.futures ?? 0));
-    setBitexBalance(Number(totals?.total?.bitex ?? 0));
-    setBitexTransferred(Number(totals?.bitex?.principal ?? 0));
-    setBitexPrincipalLocked(Number(totals?.bitex?.principal ?? 0));
-    setBitexIncomeEarned(Number(totals?.bitex?.incomeEarned ?? 0));
+    setAiWalletBalance(Number(totals?.total?.aiWallet ?? 0));
+    setAiTradeTransferred(Number(totals?.aiWallet?.principal ?? 0));
+    setAiTradePrincipalLocked(Number(totals?.aiWallet?.principal ?? 0));
+    setAiTradeProfitEarned(Number(totals?.aiWallet?.incomeEarned ?? 0));
     setWalletActivity(mapLedgerHistory(history));
   }, [marketCoins]);
 
@@ -692,7 +692,7 @@ export default function AppShell() {
     const requestedTab = params.get("view");
     const requestedTrade = params.get("trade");
     const requestedSection = params.get("wallet");
-    if(requestedTab==="copy"||requestedTab==="bitex"||requestedTrade==="copy"){setTab("bitex");setTradeCategory("copy");}
+    if(requestedTab==="copy"||requestedTab==="aiTrade"||requestedTrade==="copy"){setTab("aiTrade");setTradeCategory("copy");}
     else setTab([...tabs,{id:"team" as Tab,label:"Team",icon:Network}].some(({ id }) => id === requestedTab) ? requestedTab as Tab : "home");
     if(["spot","futures","grid","margin","copy"].includes(requestedTrade??""))setTradeCategory(requestedTrade as TradeCategory);
     setWalletSection(
@@ -754,8 +754,8 @@ export default function AppShell() {
   const openTrade = useCallback((category: TradeCategory) => {
     if(category==="copy"){
       setTradeMenuOpen(false);
-      setTab("bitex");
-      updateUrl("bitex");
+      setTab("aiTrade");
+      updateUrl("aiTrade");
       window.scrollTo({top:0,behavior:"smooth"});
       return;
     }
@@ -780,8 +780,8 @@ export default function AppShell() {
 
   const transferWallet = useCallback(async (from: UserWallet, to: UserWallet, amount: number) => {
     const spotBalance = Number(assetTotals.total?.spot ?? 0);
-    const balances = { SPOT: spotBalance, FUTURES: futuresBalance, BITEX: bitexBalance };
-    if (from === "BITEX" || amount <= 0 || amount > balances[from]) return false;
+    const balances = { SPOT: spotBalance, FUTURES: futuresBalance, AI: aiWalletBalance };
+    if (from === "AI" || amount <= 0 || amount > balances[from]) return false;
     const response = await fetch("/api/wallet", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromWallet: from, toWallet: to, amount }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -792,7 +792,7 @@ export default function AppShell() {
     setTransferOpen(null);
     notify(`Successfully transferred to ${displayWalletName(to)}`);
     return true;
-  }, [assetTotals, bitexBalance, currentUser, futuresBalance, notify, refreshAssets, refreshDashboard, refreshWallet]);
+  }, [assetTotals, aiWalletBalance, currentUser, futuresBalance, notify, refreshAssets, refreshDashboard, refreshWallet]);
 
   const createDeposit = useCallback(async ({ amount, network, payCurrency }: DepositInput) => {
     const response = await fetch("/api/deposits/nowpayments/create", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, network, payCurrency }) });
@@ -806,9 +806,9 @@ export default function AppShell() {
   const createWithdrawal = useCallback(async ({ walletType, amount, address, network, transactionPin, mobileVerificationToken, acceptEarlyWithdrawalCharge }: WithdrawalInput): Promise<WithdrawalResult> => {
     const spotBalance = Number(assetTotals.total?.spot ?? 0);
     if (walletType === "SPOT" && (amount <= 0 || amount > spotBalance)) return { ok: false, message: "Insufficient Spot Wallet balance" };
-    if (walletType === "BITEX" && (amount <= 0 || amount > bitexBalance)) return { ok: false, message: "Insufficient AI Wallet balance" };
-    const requiredProfit = bitexPrincipalLocked * .6;
-    const eligible = walletType !== "BITEX" || requiredProfit <= 0 || bitexIncomeEarned >= requiredProfit;
+    if (walletType === "AI" && (amount <= 0 || amount > aiWalletBalance)) return { ok: false, message: "Insufficient AI Wallet balance" };
+    const requiredProfit = aiTradePrincipalLocked * .6;
+    const eligible = walletType !== "AI" || requiredProfit <= 0 || aiTradeProfitEarned >= requiredProfit;
     const fee = walletType === "SPOT" ? 2 + amount * .05 : 2 + amount * .05 + (eligible ? 0 : amount * .2);
     const received = amount - fee;
     if (received <= 0) return { ok: false, message: "Withdrawal amount must exceed the total fee" };
@@ -826,7 +826,7 @@ export default function AppShell() {
     hapticNotification("success").catch(() => null);
     setWithdrawalOpen(false);
     return { ok: true, message: "" };
-  }, [assetTotals, bitexBalance, bitexIncomeEarned, bitexPrincipalLocked, currentUser, notify, refreshAssets]);
+  }, [assetTotals, aiWalletBalance, aiTradeProfitEarned, aiTradePrincipalLocked, currentUser, notify, refreshAssets]);
 
   const sendP2PTransfer = useCallback(async (input: P2PTransferInput) => {
     const response = await fetch("/api/p2p/transfer", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
@@ -920,12 +920,12 @@ export default function AppShell() {
   }, [currentUser]);
 
   const screen = {
-    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("bitex")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} bitexBalance={bitexBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
+    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("aiTrade")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} aiWalletBalance={aiWalletBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} loading={marketCoinsLoading} error={marketCoinsError} />,
     trade: <TradeWorkspace category={tradeCategory} coins={marketCoins} loading={marketCoinsLoading} error={marketCoinsError} />,
-    bitex: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} bitexBalance={bitexBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
+    aiTrade: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} aiWalletBalance={aiWalletBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
-    wallet: <WalletScreen notify={notify} assets={walletAssets} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} bitexBalance={bitexBalance} bitexIncomeEarned={bitexIncomeEarned} bitexTarget={bitexPrincipalLocked*.6} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
+    wallet: <WalletScreen notify={notify} assets={walletAssets} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} aiWalletBalance={aiWalletBalance} aiTradeProfitEarned={aiTradeProfitEarned} aiTradeTarget={aiTradePrincipalLocked*.6} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
 
   return (
@@ -961,13 +961,13 @@ export default function AppShell() {
           />
           {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} deleteNotification={deleteNotification} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={logout} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
-          <div className={`mx-auto ${tab === "wallet" ? "max-w-[430px] px-0" : "max-w-[420px] px-4"} lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "bitex" || tab === "markets" ? "pb-36 pt-1 lg:py-8" : tab === "wallet" ? "pb-44 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
+          <div className={`mx-auto ${tab === "wallet" ? "max-w-[430px] px-0" : "max-w-[420px] px-4"} lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "aiTrade" || tab === "markets" ? "pb-36 pt-1 lg:py-8" : tab === "wallet" ? "pb-44 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
         </main>
       </div>
 
-      <BottomNav items={mobileTabs} activeId={tab} activeSection={walletSection} labelFor={(id) => id === "profile" ? "Profile" : id === "bitex" ? "AI Trade" : id === "wallet" ? "Wallet" : tabLabel(id)} onSelect={(id, section) => { if (id === "profile") { window.location.href = "/profile"; return; } selectTab(id, section as WalletSection | undefined); }} />
+      <BottomNav items={mobileTabs} activeId={tab} activeSection={walletSection} labelFor={(id) => id === "profile" ? "Profile" : id === "aiTrade" ? "AI Trade" : id === "wallet" ? "Wallet" : tabLabel(id)} onSelect={(id, section) => { if (id === "profile") { window.location.href = "/profile"; return; } selectTab(id, section as WalletSection | undefined); }} />
       {tradeMenuOpen&&<TradeMenu close={()=>setTradeMenuOpen(false)} select={openTrade}/>} 
-      {transferOpen&&<WalletTransferModal initialFrom={transferOpen.from} initialTo={transferOpen.to} balances={{SPOT:Number(assetTotals.total?.spot??0),FUTURES:futuresBalance,BITEX:bitexBalance}} close={()=>setTransferOpen(null)} transfer={transferWallet}/>} 
+      {transferOpen&&<WalletTransferModal initialFrom={transferOpen.from} initialTo={transferOpen.to} balances={{SPOT:Number(assetTotals.total?.spot??0),FUTURES:futuresBalance,AI:aiWalletBalance}} close={()=>setTransferOpen(null)} transfer={transferWallet}/>}
       {p2pOpen&&<P2PTransferModal assets={p2pAssets} close={()=>setP2POpen(false)} sendTransfer={sendP2PTransfer}/>}
       {verificationOpen&&<VerificationRequestModal close={()=>setVerificationOpen(false)} notify={notify} user={currentUser}/>} 
       {helpOpen&&<HelpCenterModal close={()=>setHelpOpen(false)} notify={notify}/>} 
@@ -1028,7 +1028,7 @@ function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerif
   return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">{user?.name?.trim() || "Account"}</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>{uid?`UID ${uid}`:"Not logged in"}</span>{uid&&<button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button>}<span>· {user?.vipRank || "Pro"} member</span></div></div>{user?<><Link href="/profile" onClick={close} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Settings size={17}/> Profile & Settings</Link><button onClick={logout} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Logout</button></>:<><button onClick={openLogin} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Login</button><button onClick={openRegister} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Users size={17}/> Register</button></>}<button onClick={openVerification} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button>{isAdminUser && <Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link>}</div></>;
 }
 
-function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, onOpenP2P, assets, dashboard, balanceVisible, setBalanceVisible, copyTradeHistory, bitexBalance, userCountry, aiSubscription, vipTradeRows, startTrade, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; bitexBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
+function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, onOpenP2P, assets, dashboard, balanceVisible, setBalanceVisible, copyTradeHistory, aiWalletBalance, userCountry, aiSubscription, vipTradeRows, startTrade, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; aiWalletBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
   const total = dashboard?.summary?.totalPortfolio ?? 0;
   const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
   const aiCopyTradingIncome = dashboard?.summary?.aiCopyTradingIncome ?? 0;
@@ -1777,7 +1777,7 @@ function TradeWorkspace({category,coins,loading,error}:{category:TradeCategory;c
   return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category} coins={coins} loading={loading} error={error}/></div>;
 }
 
-function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,bitexBalance,tradeRows,copyTradeCounts,copyTradeHistory,startTrade,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];copyTradeCounts:CopyTradeCounts;copyTradeHistory:CopyTradeHistory[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
+function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,aiWalletBalance,tradeRows,copyTradeCounts,copyTradeHistory,startTrade,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;aiWalletBalance:number;tradeRows:VipTradeRow[];copyTradeCounts:CopyTradeCounts;copyTradeHistory:CopyTradeHistory[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
   const active=Boolean(subscription?.subscription?.active);
   const today=new Date().toDateString();
   const creditedHistory=useMemo(()=>copyTradeHistory.filter(isCreditedCopyTrade),[copyTradeHistory]);
@@ -1795,7 +1795,7 @@ function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,bit
       </div>
       <AiTradeHeroVisual/>
     </section>
-    <AiTopStats balance={bitexBalance} todayIncome={todayIncome} currentTrades={currentTrades} allowedTrades={allowedTrades} active={active}/>
+    <AiTopStats balance={aiWalletBalance} todayIncome={todayIncome} currentTrades={currentTrades} allowedTrades={allowedTrades} active={active}/>
     <AiTradeOverviewCard history={creditedHistory} todayIncome={todayIncome}/>
     <TopCopyTraders/>
     <VipTradeRowsCard rows={tradeRows.slice(0,5)} startTrade={startTrade} notify={notify}/>
@@ -2066,7 +2066,7 @@ function TradingCategoryPage({category: _category,coins,loading,error}:{category
   return <div className="space-y-5"><label className="flex w-fit items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Pair<select value={symbol} onChange={event=>setSymbol(event.target.value)} className="bg-transparent text-xs font-black text-white outline-none">{pairOptions.map(pair=><option key={pair} value={pair} className="bg-ink">{pair.replace("USDT","/USDT")}</option>)}</select></label><CandlestickChart symbol={symbol}/><OrderBookPanel symbol={symbol}/><section className={`${card} p-5`}><div className="flex items-center justify-between"><h3 className="font-bold">Order entry</h3><span className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold text-slate-400">{symbol.replace("USDT","/USDT")}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><button disabled className="rounded-xl bg-mint/40 py-3 text-xs font-black text-ink/70">Buy Coming Soon</button><button disabled className="rounded-xl bg-danger/40 py-3 text-xs font-black text-white/70">Sell Coming Soon</button></div></section></div>;
 }
 
-function CopyTradeScreen({activeTrade,bitexBalance,tradeRows,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;bitexBalance:number;tradeRows:VipTradeRow[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void}) {
+function CopyTradeScreen({activeTrade,aiWalletBalance,tradeRows,startTrade,completeTrade}:{activeTrade:ActiveCopyTrade|null;aiWalletBalance:number;tradeRows:VipTradeRow[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void}) {
   const [error,setError]=useState("");
   const [loadingRow,setLoadingRow]=useState("");
   const [nowTick,setNowTick]=useState(0);
@@ -2087,14 +2087,14 @@ function CopyTradeScreen({activeTrade,bitexBalance,tradeRows,startTrade,complete
     if(!result.ok){setError(result.message);return;}
     setError("");
   };
-  return <div className="space-y-5"><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="font-bold">Copy Trade Income</h3><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="p-4 sm:p-5"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="divide-y divide-line/70">{rows.map(row=>{const status=localTradeStatus(row,nowTick);const countdown=tradeCountdownLabel(row,nowTick);const tradeEnabled=isTradeButtonEnabled(row,nowTick);const actionLabel=tradeButtonLabel(row,status,tradeEnabled);return <div key={row.id} className="flex items-center gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black">{displayVipLabel(row.vipRange??row.label)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${status==="LIVE"?"bg-lime/10 text-lime":status==="UPCOMING"?"bg-[#f6c85f]/10 text-[#f6c85f]":"bg-white/5 text-slate-500"}`}>{status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade time: {readableTradeTime(row)}{countdown?` | ${countdown}`:""}</p><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${Number(row.tradeAmount ?? bitexBalance*.01).toFixed(2)} | Daily {row.dailyReturnMin??row.dailyPercentMin}% - {row.dailyReturnMax??row.dailyPercentMax}%</p>{!tradeEnabled&&status==="LIVE"&&<p className="mt-1 text-[10px] text-danger">{actionLabel}</p>}</div><button onClick={()=>start(row)} disabled={loadingRow===row.id||!tradeEnabled} className="w-[112px] shrink-0 rounded-lg bg-lime px-3 py-2 text-[10px] font-black leading-tight text-ink disabled:opacity-50">{loadingRow===row.id?"Wait":actionLabel}</button></div>})}</div>}{error&&<p className="border-t border-line px-5 py-3 text-xs text-danger">{error}</p>}</section></div>;
+  return <div className="space-y-5"><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="font-bold">Copy Trade Income</h3><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="p-4 sm:p-5"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="divide-y divide-line/70">{rows.map(row=>{const status=localTradeStatus(row,nowTick);const countdown=tradeCountdownLabel(row,nowTick);const tradeEnabled=isTradeButtonEnabled(row,nowTick);const actionLabel=tradeButtonLabel(row,status,tradeEnabled);return <div key={row.id} className="flex items-center gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black">{displayVipLabel(row.vipRange??row.label)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${status==="LIVE"?"bg-lime/10 text-lime":status==="UPCOMING"?"bg-[#f6c85f]/10 text-[#f6c85f]":"bg-white/5 text-slate-500"}`}>{status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade time: {readableTradeTime(row)}{countdown?` | ${countdown}`:""}</p><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${Number(row.tradeAmount ?? aiWalletBalance*.01).toFixed(2)} | Daily {row.dailyReturnMin??row.dailyPercentMin}% - {row.dailyReturnMax??row.dailyPercentMax}%</p>{!tradeEnabled&&status==="LIVE"&&<p className="mt-1 text-[10px] text-danger">{actionLabel}</p>}</div><button onClick={()=>start(row)} disabled={loadingRow===row.id||!tradeEnabled} className="w-[112px] shrink-0 rounded-lg bg-lime px-3 py-2 text-[10px] font-black leading-tight text-ink disabled:opacity-50">{loadingRow===row.id?"Wait":actionLabel}</button></div>})}</div>}{error&&<p className="border-t border-line px-5 py-3 text-xs text-danger">{error}</p>}</section></div>;
 }
-function WalletScreen({notify,assets,spotBalance,futuresBalance,bitexBalance,bitexIncomeEarned,bitexTarget,activity,section,action,balanceVisible,setBalanceVisible,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];spotBalance:number;futuresBalance:number;bitexBalance:number;bitexIncomeEarned:number;bitexTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
- const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+bitexBalance;
+function WalletScreen({notify,assets,spotBalance,futuresBalance,aiWalletBalance,aiTradeProfitEarned,aiTradeTarget,activity,section,action,balanceVisible,setBalanceVisible,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];spotBalance:number;futuresBalance:number;aiWalletBalance:number;aiTradeProfitEarned:number;aiTradeTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
+ const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+aiWalletBalance;
 return <div className="wallet-page -mt-1 min-h-screen">
   <WalletHero/>
   <WalletTotalCard total={total} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
-  <WalletTypeCards spot={spotBalance} ai={bitexBalance} futures={futuresBalance} balanceVisible={balanceVisible}/>
+  <WalletTypeCards spot={spotBalance} ai={aiWalletBalance} futures={futuresBalance} balanceVisible={balanceVisible}/>
   <WalletQuickActions onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal} onOpenTransfer={onOpenTransfer} onHistory={()=>onSectionChange("ledger")} onAddressBook={()=>notify("Address book unavailable")}/>
   <WalletBalancesCard assets={activeAssets} balanceVisible={balanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
   {section==="ledger"&&<section className="wallet-glass wallet-ledger-card"><div className="flex justify-between gap-3"><div><h3>Wallet ledger</h3><p>All balance movements and AI income credits</p></div><button onClick={()=>notify("Ledger export prepared")}>Export</button></div><ActivityRows rows={activity}/></section>}
@@ -2226,9 +2226,9 @@ function P2PTransferModal({assets,close,sendTransfer}:{assets:P2PAsset[];close:(
 
 function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{initialFrom:UserWallet;initialTo:UserWallet;balances:Record<UserWallet,number>;close:()=>void;transfer:(from:UserWallet,to:UserWallet,amount:number)=>Promise<boolean>}) {
   const sourceWallets:UserWallet[]=["SPOT","FUTURES"];
-  const transferWallets:UserWallet[]=["SPOT","FUTURES","BITEX"];
+  const transferWallets:UserWallet[]=["SPOT","FUTURES","AI"];
   const [from,setFrom]=useState<UserWallet>(sourceWallets.includes(initialFrom)?initialFrom:"SPOT");
-  const [to,setTo]=useState<UserWallet>(initialTo==="BITEX"||initialTo!==from?initialTo:"FUTURES");
+  const [to,setTo]=useState<UserWallet>(initialTo==="AI"||initialTo!==from?initialTo:"FUTURES");
   const [amount,setAmount]=useState("");
   const [error,setError]=useState("");
   const [confirming,setConfirming]=useState(false);
@@ -2238,14 +2238,14 @@ function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{in
   const resetReview=()=>{setConfirming(false);setError("");};
   const changeFrom=(wallet:UserWallet)=>{setFrom(wallet);if(wallet===to)setTo(transferWallets.find(item=>item!==wallet)!);resetReview();};
   const changeTo=(wallet:UserWallet)=>{setTo(wallet);resetReview();};
-  const swap=()=>{if(to==="BITEX")return;const nextFrom=to;setTo(from);setFrom(nextFrom);resetReview();};
+  const swap=()=>{if(to==="AI")return;const nextFrom=to;setTo(from);setFrom(nextFrom);resetReview();};
   const review=()=>{if(value<=0){setError("Enter a valid amount");return;}if(value>balances[from]){setError(`Insufficient ${displayWalletName(from)} balance`);return;}setConfirming(true);};
   const continueTransfer=async()=>{if(!await transfer(from,to,value)){setConfirming(false);setError("Transfer could not be completed");}};
-  return <div className="fixed inset-0 z-[70] bg-[#0a120f] sm:grid sm:place-items-center sm:bg-black/70 sm:p-4 sm:backdrop-blur-sm"><div className="flex min-h-full w-full flex-col bg-[#111c18] sm:min-h-0 sm:max-w-md sm:rounded-3xl sm:border sm:border-line"><header className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="text-xl font-black">Transfer</h3><button onClick={close} aria-label="Close transfer"><X/></button></header>{confirming?<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="rounded-xl border border-line bg-ink/60 p-4 text-xs leading-5 text-slate-400"><p>Review this transfer before continuing. AI funds cannot be transferred back to Spot or Futures.</p></section><div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Transfer amount" value={`${value.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${value.toFixed(2)} USDT`}/></div></div><div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={()=>setConfirming(false)} className="rounded-xl border border-line py-4 text-sm font-black text-slate-300">Cancel</button><button onClick={continueTransfer} className="rounded-xl bg-lime py-4 text-sm font-black text-ink">Continue</button></div></>:<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="relative rounded-2xl border border-line bg-ink/60 p-4"><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">From<select value={from} onChange={e=>changeFrom(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{sourceWallets.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><div className="my-4 border-t border-line"/><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">To<select value={to} onChange={e=>changeTo(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{destinations.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><button onClick={swap} disabled={to==="BITEX"} className="absolute right-5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-panel text-lime disabled:opacity-30" aria-label="Swap wallets"><ArrowLeftRight size={18} className="rotate-90"/></button></section><label className="block text-xs font-bold text-slate-400">Coin<select className="mt-2 w-full rounded-xl border border-line bg-ink p-4 text-sm font-bold text-white"><option>USDT</option></select></label><div><div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400">Amount</label><span className="text-[11px] text-slate-500">Available {balances[from].toFixed(2)} USDT</span></div><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);resetReview();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-4 text-lg font-bold outline-none"/><button onClick={()=>{setAmount(balances[from].toFixed(2));resetReview();}} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}</div></div><div className="fixed inset-x-0 bottom-0 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={review} className="w-full rounded-xl bg-lime py-4 text-sm font-black text-ink">Confirm Transfer</button></div></>}</div></div>
+  return <div className="fixed inset-0 z-[70] bg-[#0a120f] sm:grid sm:place-items-center sm:bg-black/70 sm:p-4 sm:backdrop-blur-sm"><div className="flex min-h-full w-full flex-col bg-[#111c18] sm:min-h-0 sm:max-w-md sm:rounded-3xl sm:border sm:border-line"><header className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="text-xl font-black">Transfer</h3><button onClick={close} aria-label="Close transfer"><X/></button></header>{confirming?<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="rounded-xl border border-line bg-ink/60 p-4 text-xs leading-5 text-slate-400"><p>Review this transfer before continuing. AI funds cannot be transferred back to Spot or Futures.</p></section><div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Transfer amount" value={`${value.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${value.toFixed(2)} USDT`}/></div></div><div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={()=>setConfirming(false)} className="rounded-xl border border-line py-4 text-sm font-black text-slate-300">Cancel</button><button onClick={continueTransfer} className="rounded-xl bg-lime py-4 text-sm font-black text-ink">Continue</button></div></>:<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="relative rounded-2xl border border-line bg-ink/60 p-4"><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">From<select value={from} onChange={e=>changeFrom(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{sourceWallets.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><div className="my-4 border-t border-line"/><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">To<select value={to} onChange={e=>changeTo(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{destinations.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><button onClick={swap} disabled={to==="AI"} className="absolute right-5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-panel text-lime disabled:opacity-30" aria-label="Swap wallets"><ArrowLeftRight size={18} className="rotate-90"/></button></section><label className="block text-xs font-bold text-slate-400">Coin<select className="mt-2 w-full rounded-xl border border-line bg-ink p-4 text-sm font-bold text-white"><option>USDT</option></select></label><div><div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400">Amount</label><span className="text-[11px] text-slate-500">Available {balances[from].toFixed(2)} USDT</span></div><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);resetReview();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-4 text-lg font-bold outline-none"/><button onClick={()=>{setAmount(balances[from].toFixed(2));resetReview();}} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}</div></div><div className="fixed inset-x-0 bottom-0 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={review} className="w-full rounded-xl bg-lime py-4 text-sm font-black text-ink">Confirm Transfer</button></div></>}</div></div>
 }
 
-function WithdrawalModal({balances,bitexUnlocked:_bitexUnlocked,close,withdraw}:{balances:Record<"SPOT"|"BITEX",number>;bitexUnlocked:boolean;close:()=>void;withdraw:(input:WithdrawalInput)=>Promise<WithdrawalResult>}) {
-  const [walletType,setWalletType]=useState<"SPOT"|"BITEX">("SPOT");
+function WithdrawalModal({balances,aiTradeWithdrawalUnlocked:_aiTradeWithdrawalUnlocked,close,withdraw}:{balances:Record<"SPOT"|"AI",number>;aiTradeWithdrawalUnlocked:boolean;close:()=>void;withdraw:(input:WithdrawalInput)=>Promise<WithdrawalResult>}) {
+  const [walletType,setWalletType]=useState<"SPOT"|"AI">("SPOT");
   const [address,setAddress]=useState("");
   const [network,setNetwork]=useState("BSC");
   const [amount,setAmount]=useState("");
@@ -2260,11 +2260,11 @@ function WithdrawalModal({balances,bitexUnlocked:_bitexUnlocked,close,withdraw}:
   const percentageFee=value*.05;
   const totalFee=fixedFee+percentageFee;
   const received=Math.max(0,value-totalFee);
-  const label=(wallet:"SPOT"|"BITEX")=>displayWalletName(wallet).replace(" Wallet","");
+  const label=(wallet:"SPOT"|"AI")=>displayWalletName(wallet).replace(" Wallet","");
   const useBiometric=async()=>{setError("");const token=await requestMobileTransactionToken("withdrawal").catch(()=>null);if(!token){setError("Biometric unavailable. Use Transaction PIN.");return;}setMobileVerificationToken(token);};
   const submit=async(acceptEarlyWithdrawalCharge=false)=>{setError("");if(!address.trim()){setError("Enter an external wallet or exchange address");return;}if(value<=0){setError("Enter a valid withdrawal amount");return;}if(value>available){setError(`Insufficient ${displayWalletName(walletType)} balance`);return;}if(received<=0){setError("Withdrawal amount must exceed the total fee");return;}if(!mobileVerificationToken&&!transactionPin){setError("Transaction PIN required.");return;}if(!mobileVerificationToken&&transactionPin.length<6){setError("Enter a valid 6-digit Transaction PIN.");return;}setSubmitting(true);const result=await withdraw({walletType,amount:value,address,network,transactionPin,mobileVerificationToken,acceptEarlyWithdrawalCharge});setSubmitting(false);if(result.requiresConfirmation&&result.breakdown){setEarlyBreakdown(result.breakdown);return;}if(!result.ok){setTransactionPin("");setMobileVerificationToken("");setError(result.message||"Withdrawal request failed");return;}setTransactionPin("");setMobileVerificationToken("");};
   const early=earlyBreakdown;
-  return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Send</h3><p className="mt-1 text-xs text-slate-500">Withdrawals are manual after balance validation.</p></div><button onClick={close} aria-label="Close withdrawal"><X/></button></div>{early?<><div className="mt-5 rounded-xl border border-[#f6c85f]/30 bg-[#2a2412] p-4 text-xs leading-5 text-[#e8d59a]"><p>Abhi aapka withdrawal eligibility volume complete nahi hua hai. Aapne required profit target ka {early.completedPercentage.toFixed(2)}% complete kiya hai aur {early.remainingPercentage.toFixed(2)}% abhi baaki hai.</p><p className="mt-2">Agar aap abhi withdrawal karte hain, toh requested amount par 20% early withdrawal charge lagega. Iske alawa $2 fixed withdrawal fee aur 5% withdrawal fee bhi apply hogi.</p></div><div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Capital amount" value={`$${early.capitalAmount.toFixed(2)}`}/><LineItem label="Earned profit" value={`$${early.earnedProfit.toFixed(2)}`}/><LineItem label="Required profit" value={`$${early.requiredProfit.toFixed(2)}`}/><LineItem label="Requested Amount" value={`$${early.withdrawalAmount.toFixed(2)}`}/><LineItem label="Early Withdrawal Charge" value={`$${early.earlyWithdrawalCharge.toFixed(2)}`}/><LineItem label="5% Withdrawal Fee" value={`$${early.percentageFee.toFixed(2)}`}/><LineItem label="Fixed Fee" value={`$${early.fixedFee.toFixed(2)}`}/><LineItem label="Total charges" value={`$${early.totalFees.toFixed(2)}`}/><LineItem label="Net Receivable Amount" value={`$${early.netAmount.toFixed(2)}`}/></div><p className="mt-3 text-xs text-slate-400">Kya aap early withdrawal confirm karna chahte hain?</p><div className="mt-5 grid grid-cols-2 gap-3"><button onClick={()=>setEarlyBreakdown(null)} disabled={submitting} className="rounded-xl border border-line py-3 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button><button onClick={()=>submit(true)} disabled={submitting} className="rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60">{submitting?"Submitting...":"Confirm Withdrawal"}</button></div></>:<><label className="mt-5 block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={e=>{setWalletType(e.target.value as "SPOT"|"BITEX");setError("");setMobileVerificationToken("");setEarlyBreakdown(null);}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="SPOT">Spot Wallet</option><option value="BITEX">AI Wallet</option></select></label><label className="mt-4 block text-xs font-bold text-slate-400">Amount</label><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");setMobileVerificationToken("");setEarlyBreakdown(null);}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3.5 outline-none"/><button onClick={()=>setAmount(available.toFixed(2))} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div><p className="mt-1 text-[10px] text-slate-500">Available: {available.toFixed(2)} USDT</p><label className="mt-4 block text-xs font-bold text-slate-400">External wallet or exchange address<input value={address} onChange={e=>{setAddress(e.target.value);setError("");setMobileVerificationToken("");setEarlyBreakdown(null);}} placeholder="0x... or exchange deposit address" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>setNetwork(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label><div className="mt-4"><TransactionPinInput label="Transaction PIN" value={transactionPin} onChange={setTransactionPin} autoFocus/></div><button type="button" onClick={useBiometric} className="mt-3 w-full rounded-xl border border-lime/30 bg-lime/10 py-3 text-xs font-black text-lime">{mobileVerificationToken?"Biometric ready":"Use biometric instead"}</button>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Wallet" value={`${label(walletType)} Wallet`}/><LineItem label="Amount" value={`${value.toFixed(2)} USDT`}/><LineItem label="Fixed fee" value={`${fixedFee.toFixed(2)} USDT`}/><LineItem label="5% fee" value={`${percentageFee.toFixed(2)} USDT`}/><LineItem label="Total fee" value={`${totalFee.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${received.toFixed(2)} USDT`}/><LineItem label="Status" value="Pending admin approval"/></div><button onClick={()=>submit()} disabled={submitting||(!mobileVerificationToken&&transactionPin.length!==6)} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">{submitting?"Submitting...":"Confirm Send"}</button></>}</div></div>
+  return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Send</h3><p className="mt-1 text-xs text-slate-500">Withdrawals are manual after balance validation.</p></div><button onClick={close} aria-label="Close withdrawal"><X/></button></div>{early?<><div className="mt-5 rounded-xl border border-[#f6c85f]/30 bg-[#2a2412] p-4 text-xs leading-5 text-[#e8d59a]"><p>Abhi aapka withdrawal eligibility volume complete nahi hua hai. Aapne required profit target ka {early.completedPercentage.toFixed(2)}% complete kiya hai aur {early.remainingPercentage.toFixed(2)}% abhi baaki hai.</p><p className="mt-2">Agar aap abhi withdrawal karte hain, toh requested amount par 20% early withdrawal charge lagega. Iske alawa $2 fixed withdrawal fee aur 5% withdrawal fee bhi apply hogi.</p></div><div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Capital amount" value={`$${early.capitalAmount.toFixed(2)}`}/><LineItem label="Earned profit" value={`$${early.earnedProfit.toFixed(2)}`}/><LineItem label="Required profit" value={`$${early.requiredProfit.toFixed(2)}`}/><LineItem label="Requested Amount" value={`$${early.withdrawalAmount.toFixed(2)}`}/><LineItem label="Early Withdrawal Charge" value={`$${early.earlyWithdrawalCharge.toFixed(2)}`}/><LineItem label="5% Withdrawal Fee" value={`$${early.percentageFee.toFixed(2)}`}/><LineItem label="Fixed Fee" value={`$${early.fixedFee.toFixed(2)}`}/><LineItem label="Total charges" value={`$${early.totalFees.toFixed(2)}`}/><LineItem label="Net Receivable Amount" value={`$${early.netAmount.toFixed(2)}`}/></div><p className="mt-3 text-xs text-slate-400">Kya aap early withdrawal confirm karna chahte hain?</p><div className="mt-5 grid grid-cols-2 gap-3"><button onClick={()=>setEarlyBreakdown(null)} disabled={submitting} className="rounded-xl border border-line py-3 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button><button onClick={()=>submit(true)} disabled={submitting} className="rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60">{submitting?"Submitting...":"Confirm Withdrawal"}</button></div></>:<><label className="mt-5 block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={e=>{setWalletType(e.target.value as "SPOT"|"AI");setError("");setMobileVerificationToken("");setEarlyBreakdown(null);}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="SPOT">Spot Wallet</option><option value="AI">AI Wallet</option></select></label><label className="mt-4 block text-xs font-bold text-slate-400">Amount</label><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");setMobileVerificationToken("");setEarlyBreakdown(null);}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3.5 outline-none"/><button onClick={()=>setAmount(available.toFixed(2))} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div><p className="mt-1 text-[10px] text-slate-500">Available: {available.toFixed(2)} USDT</p><label className="mt-4 block text-xs font-bold text-slate-400">External wallet or exchange address<input value={address} onChange={e=>{setAddress(e.target.value);setError("");setMobileVerificationToken("");setEarlyBreakdown(null);}} placeholder="0x... or exchange deposit address" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>setNetwork(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label><div className="mt-4"><TransactionPinInput label="Transaction PIN" value={transactionPin} onChange={setTransactionPin} autoFocus/></div><button type="button" onClick={useBiometric} className="mt-3 w-full rounded-xl border border-lime/30 bg-lime/10 py-3 text-xs font-black text-lime">{mobileVerificationToken?"Biometric ready":"Use biometric instead"}</button>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Wallet" value={`${label(walletType)} Wallet`}/><LineItem label="Amount" value={`${value.toFixed(2)} USDT`}/><LineItem label="Fixed fee" value={`${fixedFee.toFixed(2)} USDT`}/><LineItem label="5% fee" value={`${percentageFee.toFixed(2)} USDT`}/><LineItem label="Total fee" value={`${totalFee.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${received.toFixed(2)} USDT`}/><LineItem label="Status" value="Pending admin approval"/></div><button onClick={()=>submit()} disabled={submitting||(!mobileVerificationToken&&transactionPin.length!==6)} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">{submitting?"Submitting...":"Confirm Send"}</button></>}</div></div>
 }
 
 function VerificationRequestModal({close,notify,user}:{close:()=>void;notify:(message:string)=>void;user:CurrentUser|null}) {
