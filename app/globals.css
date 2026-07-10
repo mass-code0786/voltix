@@ -985,6 +985,7 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   position: absolute;
   inset: 0;
   display: grid;
+  gap: 12px;
   place-items: center;
   padding: 24px;
   background:
@@ -994,6 +995,21 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   text-align: center;
   font-size: 13px;
   font-weight: 800;
+}
+
+.tradingview-chart-state code {
+  display: block;
+  width: min(100%, 360px);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 1px solid rgba(24,255,138,.14);
+  border-radius: 12px;
+  background: rgba(0,0,0,.32);
+  padding: 12px;
+  color: #cbd5e1;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .orderbook-card {

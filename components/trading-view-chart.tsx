@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 const TRADING_VIEW_SCRIPT_ID = "tradingview-widget-script";
 const TRADING_VIEW_SCRIPT_SRC = "https://s3.tradingview.com/tv.js";
+let tradingViewScriptPromise: Promise<void> | null = null;
 
 export const TRADING_VIEW_SYMBOLS: Record<string, string | null> = {
   BTC: "BINANCE:BTCUSDT",
@@ -18,6 +19,12 @@ export const TRADING_VIEW_SYMBOLS: Record<string, string | null> = {
 };
 
 type TradingViewWidgetConstructor = new (options: Record<string, unknown>) => { remove?: () => void };
+type TradingViewDiagnostics = {
+  scriptLoaded: boolean;
+  widgetCreated: boolean;
+  symbol: string | null;
+  exception: string | null;
+};
 
 declare global {
   interface Window {
@@ -46,6 +53,7 @@ export function TradingViewChart({ baseSymbol, pairLabel, price, changeLabel, po
   const containerId = useMemo(() => `tradingview_${baseSymbol.toLowerCase()}_${reactId}`, [baseSymbol, reactId]);
   const widgetRef = useRef<{ remove?: () => void } | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "unavailable" | "error">("loading");
+  const [diagnostics, setDiagnostics] = useState<TradingViewDiagnostics>({ scriptLoaded: false, widgetCreated: false, symbol: null, exception: null });
   const tradingViewSymbol = useMemo(() => resolveTradingViewSymbol(baseSymbol), [baseSymbol]);
 
   useEffect(() => {
@@ -55,20 +63,23 @@ export function TradingViewChart({ baseSymbol, pairLabel, price, changeLabel, po
     if (container) container.innerHTML = "";
 
     if (!tradingViewSymbol) {
+      setDiagnostics({ scriptLoaded: false, widgetCreated: false, symbol: null, exception: null });
       setState("unavailable");
       return;
     }
 
     let cancelled = false;
     setState("loading");
+    setDiagnostics({ scriptLoaded: false, widgetCreated: false, symbol: tradingViewSymbol, exception: null });
 
     loadTradingViewScript()
       .then(() => {
         if (cancelled) return;
+        setDiagnostics({ scriptLoaded: true, widgetCreated: false, symbol: tradingViewSymbol, exception: null });
         const widget = window.TradingView?.widget;
         if (!widget) throw new Error("TradingView widget unavailable");
         const target = document.getElementById(containerId);
-        if (!target) return;
+        if (!target) throw new Error(`TradingView container not found: ${containerId}`);
         target.innerHTML = "";
         widgetRef.current = new widget({
           autosize: true,
@@ -89,10 +100,21 @@ export function TradingViewChart({ baseSymbol, pairLabel, price, changeLabel, po
           gridColor: "rgba(24,255,138,0.08)",
           support_host: "https://www.tradingview.com",
         });
+        setDiagnostics({ scriptLoaded: true, widgetCreated: true, symbol: tradingViewSymbol, exception: null });
         setState("ready");
       })
-      .catch(() => {
-        if (!cancelled) setState("error");
+      .catch((error: unknown) => {
+        const exception = error instanceof Error ? error.message : String(error);
+        console.error("[TradingViewChart] widget failed", {
+          scriptLoaded: Boolean(window.TradingView?.widget),
+          widgetCreated: false,
+          symbol: tradingViewSymbol,
+          exception,
+        });
+        if (!cancelled) {
+          setDiagnostics({ scriptLoaded: Boolean(window.TradingView?.widget), widgetCreated: false, symbol: tradingViewSymbol, exception });
+          setState("error");
+        }
       });
 
     return () => {
@@ -116,7 +138,17 @@ export function TradingViewChart({ baseSymbol, pairLabel, price, changeLabel, po
         <div id={containerId} className="tradingview-chart-container" />
         {state === "loading" && <div className="tradingview-chart-state">Loading TradingView chart...</div>}
         {(state === "unavailable" || state === "error") && (
-          <div className="tradingview-chart-state">{state === "unavailable" ? "TradingView chart is not available for this market." : "TradingView chart failed to load."}</div>
+          <div className="tradingview-chart-state">
+            <span>{state === "unavailable" ? "TradingView chart is not available for this market." : "TradingView chart failed to load."}</span>
+            {state === "error" && (
+              <code>
+                scriptLoaded: {String(diagnostics.scriptLoaded)}
+                {"\n"}widgetCreated: {String(diagnostics.widgetCreated)}
+                {"\n"}symbol: {diagnostics.symbol ?? "null"}
+                {"\n"}exception: {diagnostics.exception ?? "unknown"}
+              </code>
+            )}
+          </div>
         )}
       </div>
     </section>
@@ -125,24 +157,34 @@ export function TradingViewChart({ baseSymbol, pairLabel, price, changeLabel, po
 
 function loadTradingViewScript() {
   if (window.TradingView?.widget) return Promise.resolve();
+  if (tradingViewScriptPromise) return tradingViewScriptPromise;
   const existing = document.getElementById(TRADING_VIEW_SCRIPT_ID) as HTMLScriptElement | null;
   if (existing) {
-    return new Promise<void>((resolve, reject) => {
+    tradingViewScriptPromise = new Promise<void>((resolve, reject) => {
       if (window.TradingView?.widget) {
         resolve();
         return;
       }
       existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("TradingView script failed")), { once: true });
+      existing.addEventListener("error", () => {
+        tradingViewScriptPromise = null;
+        reject(new Error(`TradingView script failed to load: ${TRADING_VIEW_SCRIPT_SRC}`));
+      }, { once: true });
     });
+    return tradingViewScriptPromise;
   }
-  return new Promise<void>((resolve, reject) => {
+  tradingViewScriptPromise = new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
     script.id = TRADING_VIEW_SCRIPT_ID;
     script.src = TRADING_VIEW_SCRIPT_SRC;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("TradingView script failed"));
+    script.onerror = () => {
+      tradingViewScriptPromise = null;
+      script.remove();
+      reject(new Error(`TradingView script failed to load: ${TRADING_VIEW_SCRIPT_SRC}`));
+    };
     document.head.appendChild(script);
   });
+  return tradingViewScriptPromise;
 }
