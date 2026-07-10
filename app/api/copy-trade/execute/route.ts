@@ -25,6 +25,8 @@ export async function POST(request: Request) {
         returnPercent: Number(trade.returnPercent.toString()),
         status: trade.status,
         startedAt: trade.startedAt.toISOString(),
+        windowStartAt: trade.windowStartAt?.toISOString() ?? trade.startedAt.toISOString(),
+        windowCloseAt: trade.windowCloseAt?.toISOString() ?? trade.completesAt.toISOString(),
         completesAt: trade.completesAt.toISOString(),
         creditDueAt: trade.creditDueAt.toISOString(),
         settlementDueAt: trade.creditDueAt.toISOString(),

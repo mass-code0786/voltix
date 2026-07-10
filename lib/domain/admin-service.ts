@@ -383,6 +383,8 @@ function accountLabel(entry: { account: { type: string; asset: { symbol: string 
 
 function journalTypeLabel(referenceType: string) {
   if (referenceType === "BITEX_WITHDRAWAL") return "AI Wallet Withdrawal";
+  if (referenceType === "COPY_TRADE_PRINCIPAL_RETURN") return "AI Trade Principal Return";
+  if (referenceType === "COPY_TRADE_INCOME") return "AI Trade Profit";
   return referenceType.replaceAll("_", " ");
 }
 

@@ -65,7 +65,7 @@ export function getVipDailyIncomePercent(rank?: string | null) {
   return getVipTradeRowForRank(rank)?.dailyPercentMin ?? 1;
 }
 
-export function tradeTimeline(startedAt: Date, durationMinutes = 20, creditDelayMinutes = 10) {
+export function tradeTimeline(startedAt: Date, durationMinutes = 15, creditDelayMinutes = 15) {
   const completesAt = new Date(startedAt.getTime() + durationMinutes * 60_000);
   const creditDueAt = new Date(completesAt.getTime() + creditDelayMinutes * 60_000);
   return { completesAt, creditDueAt };

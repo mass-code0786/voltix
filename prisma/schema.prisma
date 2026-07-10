@@ -621,6 +621,8 @@ model CopyTrade {
   incomeAmount     Decimal?    @db.Decimal(36, 18)
   status           TradeStatus @default(PENDING)
   startedAt        DateTime
+  windowStartAt    DateTime?
+  windowCloseAt    DateTime?
   completesAt      DateTime
   creditDueAt      DateTime
   completedAt      DateTime?
@@ -633,6 +635,7 @@ model CopyTrade {
   @@index([status, completesAt])
   @@index([status, creditDueAt])
   @@index([userId, startedAt])
+  @@index([userId, slotId, windowStartAt, windowCloseAt])
   @@index([codeId])
   @@index([source, startedAt])
 }

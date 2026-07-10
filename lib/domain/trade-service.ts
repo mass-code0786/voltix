@@ -19,13 +19,14 @@ export const MANUAL_ALREADY_TRADED_IN_WINDOW_MESSAGE = "Manual trade already pla
 export const AI_AUTO_TRADE_NOTIFICATION_MESSAGE = "AI Subscription auto trade placed successfully.";
 const TRADE_TIMEZONE = "IST";
 const TRADE_DISPLAY_TIMEZONE = "Asia/Kolkata";
-const MIN_TRADE_WINDOW_MINUTES = 30;
+const TRADE_WINDOW_DURATION_MINUTES = 15;
+const TRADE_SETTLEMENT_AFTER_START_MINUTES = 30;
 const TRADE_WINDOW_DAY_OFFSETS = [-1, 0, 1] as const;
 const SETTLEABLE_TRADE_STATUSES = [TradeStatus.PENDING, TradeStatus.ACTIVE, TradeStatus.COMPLETED] as const;
 const REQUIRED_TRADE_SLOTS = [
-  { label: "Window 1", utcTime: "08:30" },
-  { label: "Window 2", utcTime: "12:30" },
-  { label: "Window 3", utcTime: "20:30" },
+  { label: "Window 1", utcTime: "08:30", durationMinutes: TRADE_WINDOW_DURATION_MINUTES },
+  { label: "Window 2", utcTime: "12:30", durationMinutes: TRADE_WINDOW_DURATION_MINUTES },
+  { label: "Window 3", utcTime: "14:30", durationMinutes: TRADE_WINDOW_DURATION_MINUTES },
 ] as const;
 const AI_AUTO_TRADE_LOG_FILE = path.join(process.cwd(), "logs", "ai-auto-trade.log");
 
@@ -58,6 +59,8 @@ type AiAutoTradeDebugResult = {
   aiSubscriptionStatus: "ACTIVE" | "INACTIVE";
   userId: string;
   uid: string;
+  email: string;
+  subscriptionExpiry: string | null;
   userVipRank: string;
   selectedVipRow: string | null;
   selectedVipRowId: string | null;
@@ -66,6 +69,7 @@ type AiAutoTradeDebugResult = {
   dailyTradesUsed: number;
   dailyTradeLimit: number;
   alreadyTradedThisWindow: boolean;
+  existingTradeSource: string | null;
   tradeCodeFound: string | null;
   tradeCodeStatus: string | null;
   stakeAmount: string;
@@ -209,8 +213,8 @@ export async function startVipCopyTrade(input: { userId: string; rowId: string; 
 export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Date; idempotencyKey?: string }) {
   const now = input.now ?? new Date();
   const [user, activeSubscription, slot] = await Promise.all([
-    prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { vipRank: true, status: true, bitexBalance: true } }),
-    prisma.aiSubscription.findFirst({ where: { userId: input.userId, active: true, startsAt: { lte: now }, expiresAt: { gt: now } }, select: { id: true } }),
+    prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { uid: true, email: true, vipRank: true, status: true, bitexBalance: true, bitexPrincipal: true } }),
+    prisma.aiSubscription.findFirst({ where: { userId: input.userId, active: true, startsAt: { lte: now }, expiresAt: { gt: now } }, select: { id: true, expiresAt: true } }),
     findOpenTradeSlot(now),
   ]);
   const normalizedVipRank = normalizeVipRank(user.vipRank);
@@ -255,6 +259,10 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
     });
     await logAiAutoTradeEvent("Executing Trade...", {
       userId: input.userId,
+      uid: user.uid,
+      email: user.email,
+      subscriptionActive: true,
+      subscriptionExpiry: activeSubscription.expiresAt.toISOString(),
       selectedVipRow: row.label,
       tradeCode: null,
       balance: user.bitexBalance.toString(),
@@ -276,11 +284,19 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
       status: trade.status,
       completesAt: trade.completesAt.toISOString(),
       creditDueAt: trade.creditDueAt.toISOString(),
+      windowStartAt: trade.windowStartAt?.toISOString() ?? null,
+      windowCloseAt: trade.windowCloseAt?.toISOString() ?? null,
     });
     await logAiTradeCycle({
       ...baseLog,
       tradeExecuted: "Yes",
       tradeId: trade.id,
+    });
+    await logAiAutoTradeEvent("AI auto trade placed successfully.", {
+      userId: input.userId,
+      uid: user.uid,
+      email: user.email,
+      createdTradeId: trade.id,
     });
     return { executed: true, tradeId: trade.id, rowId: row.id, vipRank: normalizedVipRank, selectedRow: row.label, code: null };
   } catch (error) {
@@ -291,16 +307,19 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
 }
 
 export async function runAiAutoTradeScheduler(now = new Date()) {
-  await logAiAutoTradeEvent("scheduler started", { currentTime: now.toISOString() });
+  await logAiAutoTradeEvent("scheduler started", { currentUtc: now.toISOString(), currentIst: formatTradeDebugIst(now) });
   await ensureRequiredTradeSlots();
   await prisma.aiSubscription.updateMany({ where: { active: true, expiresAt: { lte: now } }, data: { active: false } });
   const slot = await findOpenTradeSlot(now);
   if (!slot) {
     const inactiveWindowLogs = await logActiveSubscriptionsSkippedOutsideLiveWindow(now);
-    await logAiAutoTradeEvent("no live slot", { currentTime: now.toISOString(), currentIstTime: formatTradeDebugIst(now), usersScanned: inactiveWindowLogs, windows: await tradeWindowComparisons(now) });
-    return {
-      lastRunAt: now.toISOString(),
+    const noLiveSummary = {
+      currentUtc: now.toISOString(),
+      currentIst: formatTradeDebugIst(now),
       liveWindow: null,
+      windowStart: null,
+      windowClose: null,
+      settlementTime: null,
       usersScanned: inactiveWindowLogs,
       tradesPlacedThisCycle: 0,
       aiTradesAlreadyExecutedThisWindow: 0,
@@ -309,13 +328,19 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
       skipped: [] as { userId: string; reason: string }[],
       errors: [] as { userId: string; error: string }[],
     };
+    await logAiAutoTradeEvent("No live trade window.", { ...noLiveSummary, windows: await tradeWindowComparisons(now) });
+    return {
+      lastRunAt: now.toISOString(),
+      ...noLiveSummary,
+    };
   }
-  await logAiAutoTradeEvent("live slot detected", { slotId: slot.id, label: slot.label, utcTime: slot.utcTime, currentTime: now.toISOString(), currentIstTime: formatTradeDebugIst(now), windows: await tradeWindowComparisons(now) });
   const slotStart = tradeSlotStart(slot.utcTime, now);
   const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
+  const settlementTime = tradeSlotSettlementTime(slotStart);
+  await logAiAutoTradeEvent("live slot detected", { slotId: slot.id, label: slot.label, utcTime: slot.utcTime, currentUtc: now.toISOString(), currentIst: formatTradeDebugIst(now), windowStart: slotStart.toISOString(), windowClose: slotEnd.toISOString(), settlementTime: settlementTime.toISOString(), windows: await tradeWindowComparisons(now) });
   const subscriptions = await prisma.aiSubscription.findMany({
     where: { active: true, startsAt: { lte: now }, expiresAt: { gt: now } },
-    select: { userId: true },
+    select: { userId: true, expiresAt: true },
     distinct: ["userId"],
     take: 500,
   });
@@ -339,16 +364,19 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
       const diagnostic = await debugAiAutoTradeForUser({ userId: subscription.userId, now });
       await logAiAutoTradeEvent("user result", {
         userId: subscription.userId,
+        uid: diagnostic.uid,
+        email: diagnostic.email,
         subscriptionActive: diagnostic.aiSubscriptionStatus === "ACTIVE",
+        subscriptionExpiry: diagnostic.subscriptionExpiry,
         vipRank: diagnostic.userVipRank,
         selectedVipRow: diagnostic.selectedVipRow,
+        aiWalletBalance: diagnostic.aiWalletBalance,
         stakeAmount: diagnostic.stakeAmount,
-        balance: diagnostic.aiWalletBalance,
-        alreadyTraded: diagnostic.alreadyTradedThisWindow,
-        dailyLimitRemaining: Math.max(0, diagnostic.dailyTradeLimit - diagnostic.dailyTradesUsed),
-        tradePlaced: Boolean(result.executed),
+        dailyTradesUsed: diagnostic.dailyTradesUsed,
+        existingTradeSource: diagnostic.existingTradeSource,
+        decision: result.executed ? "AI auto trade placed successfully." : result.reason === AI_ALREADY_TRADED_IN_WINDOW_MESSAGE ? "AI trade already executed for this window." : result.reason === MANUAL_ALREADY_TRADED_IN_WINDOW_MESSAGE ? "Manual trade already placed for this window." : "Skipped",
         skippedReason: result.executed ? null : result.reason ?? diagnostic.skippedReason ?? "Skipped",
-        executedTradeId: result.executed ? result.tradeId : null,
+        createdTradeId: result.executed ? result.tradeId : null,
       });
     } catch (error) {
       errors.push({ userId: subscription.userId, error: error instanceof Error ? error.message : "Auto trade failed" });
@@ -356,9 +384,15 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
     }
   }
   const totalTradesForWindow = await prisma.copyTrade.count({
-    where: { slotId: slot.id, startedAt: { gte: slotStart, lt: slotEnd } },
+    where: { slotId: slot.id, windowStartAt: slotStart, windowCloseAt: slotEnd },
   });
   const summary = {
+    currentUtc: now.toISOString(),
+    currentIst: formatTradeDebugIst(now),
+    liveWindow: slot.label,
+    windowStart: slotStart.toISOString(),
+    windowClose: slotEnd.toISOString(),
+    settlementTime: settlementTime.toISOString(),
     usersScanned: subscriptions.length,
     tradesPlacedThisCycle,
     aiTradesAlreadyExecutedThisWindow,
@@ -370,14 +404,24 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
   await logAiAutoTradeEvent("scheduler complete", summary);
   return {
     lastRunAt: now.toISOString(),
+    currentUtc: summary.currentUtc,
+    currentIst: summary.currentIst,
+    windowStart: summary.windowStart,
+    windowClose: summary.windowClose,
+    settlementTime: summary.settlementTime,
     liveWindow: {
       slotId: slot.id,
       label: slot.label,
       openTime: slotStart.toISOString(),
       closeTime: slotEnd.toISOString(),
+      settlementTime: settlementTime.toISOString(),
       idempotencyScope: slotStart.toISOString(),
     },
-    ...summary,
+    usersScanned: summary.usersScanned,
+    tradesPlacedThisCycle: summary.tradesPlacedThisCycle,
+    aiTradesAlreadyExecutedThisWindow: summary.aiTradesAlreadyExecutedThisWindow,
+    manualTradesAlreadyPlacedThisWindow: summary.manualTradesAlreadyPlacedThisWindow,
+    totalTradesForWindow: summary.totalTradesForWindow,
     skipped,
     errors,
   };
@@ -406,8 +450,9 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
     if (!slot) throw new Error(TRADE_UNAVAILABLE_MESSAGE);
     const slotStart = tradeSlotStart(slot.utcTime, now);
     const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
+    const creditDueAt = tradeSlotSettlementTime(slotStart);
     const existingSlotTrade = await tx.copyTrade.findFirst({
-      where: { userId: input.userId, slotId: slot.id, startedAt: { gte: slotStart, lt: slotEnd } },
+      where: { userId: input.userId, slotId: slot.id, windowStartAt: slotStart, windowCloseAt: slotEnd },
       select: { id: true, source: true },
     });
     if (existingSlotTrade) throw new AlreadyTradedInWindowError(existingSlotTrade.source as CopyTradeSource);
@@ -429,7 +474,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
 
     const dailyPercent = new Prisma.Decimal(getVipDailyIncomePercent(normalizedVipRank));
     const perTradePercent = dailyPercent.div(limit);
-    const timeline = { completesAt: slotEnd, creditDueAt: slotEnd };
+    const timeline = { windowStartAt: slotStart, windowCloseAt: slotEnd, completesAt: slotEnd, creditDueAt };
     const trade = await tx.copyTrade.create({
       data: {
         userId: input.userId,
@@ -464,6 +509,8 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
           dailyPercent: dailyPercent.toString(),
           perTradePercent: perTradePercent.toString(),
           startTime: now.toISOString(),
+          windowStartAt: timeline.windowStartAt.toISOString(),
+          windowCloseAt: timeline.windowCloseAt.toISOString(),
           completionTime: timeline.completesAt.toISOString(),
           settlementDueAt: timeline.creditDueAt.toISOString(),
           result: "STARTED",
@@ -478,7 +525,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
         type: "AI_AUTO_TRADE",
         title: "AI auto trade placed",
         message: AI_AUTO_TRADE_NOTIFICATION_MESSAGE,
-        metadata: { tradeId: trade.id, slotId: slot.id, slotOpenTime: slotStart.toISOString(), idempotencyKey: input.idempotencyKey ?? null, tradeCode: null, selectedRow: row.label, vipRank: normalizedVipRank },
+        metadata: { tradeId: trade.id, slotId: slot.id, slotOpenTime: slotStart.toISOString(), slotCloseTime: slotEnd.toISOString(), settlementTime: creditDueAt.toISOString(), idempotencyKey: input.idempotencyKey ?? null, tradeCode: null, selectedRow: row.label, vipRank: normalizedVipRank },
       });
     }
     return trade;
@@ -526,6 +573,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
     select: {
       id: true,
       uid: true,
+      email: true,
       vipRank: true,
       status: true,
       bitexBalance: true,
@@ -533,7 +581,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
     },
   });
   const [subscription, slot, tradeWindow] = await Promise.all([
-    prisma.aiSubscription.findFirst({ where: { userId: user.id, active: true, startsAt: { lte: now }, expiresAt: { gt: now } }, select: { id: true } }),
+    prisma.aiSubscription.findFirst({ where: { userId: user.id, active: true, startsAt: { lte: now }, expiresAt: { gt: now } }, select: { id: true, expiresAt: true } }),
     findOpenTradeSlot(now),
     getCurrentTradeWindow(now),
   ]);
@@ -546,7 +594,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
   const [dailyTradesUsed, existingWindowTrade] = await Promise.all([
     prisma.copyTrade.count({ where: { userId: user.id, startedAt: { gte: dayStart } } }),
     slot && slotStart && slotEnd
-      ? prisma.copyTrade.findFirst({ where: { userId: user.id, slotId: slot.id, startedAt: { gte: slotStart, lt: slotEnd } }, select: { source: true } })
+      ? prisma.copyTrade.findFirst({ where: { userId: user.id, slotId: slot.id, windowStartAt: slotStart, windowCloseAt: slotEnd }, select: { source: true } })
       : Promise.resolve(null),
   ]);
   const limit = dailyTradeLimit();
@@ -579,6 +627,8 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
     aiSubscriptionStatus: subscription ? "ACTIVE" : "INACTIVE",
     userId: user.id,
     uid: user.uid,
+    email: user.email,
+    subscriptionExpiry: subscription?.expiresAt.toISOString() ?? null,
     userVipRank: normalizedVipRank,
     selectedVipRow: selectedRow?.label ?? null,
     selectedVipRowId: selectedRow?.id ?? null,
@@ -587,6 +637,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
     dailyTradesUsed,
     dailyTradeLimit: limit,
     alreadyTradedThisWindow: Boolean(existingWindowTrade),
+    existingTradeSource: existingWindowTrade?.source ?? null,
     tradeCodeFound: null,
     tradeCodeStatus: null,
     stakeAmount: stakeAmount.toString(),
@@ -658,14 +709,27 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: trade.userId, assetId: asset.id, type: "BITEX" } } }),
       tx.walletAccount.findFirstOrThrow({ where: { userId: null, assetId: asset.id, type: "FEE" } }),
     ]);
-    const journal = await postBalancedJournal(tx, { referenceType: "COPY_TRADE_INCOME", referenceId: trade.id, idempotencyKey: `copy-trade-settlement:${trade.id}`, memo: "AI trade settled: principal returned and profit credited", lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: bitexCredit }, { accountId: bitexAccount.id, direction: "CREDIT", amount: bitexCredit }] });
-    await tx.income.create({ data: { userId: trade.userId, type: "COPY_TRADE", sourceType: "COPY_TRADE", sourceId: trade.id, amount: profitAmount, copyTradeId: trade.id, ledgerJournalId: journal.id } });
+    const principalJournal = await postBalancedJournal(tx, {
+      referenceType: "COPY_TRADE_PRINCIPAL_RETURN",
+      referenceId: trade.id,
+      idempotencyKey: `copy-trade-principal-return:${trade.id}`,
+      memo: "AI Trade Principal Return",
+      lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: trade.principalAmount }, { accountId: bitexAccount.id, direction: "CREDIT", amount: trade.principalAmount }],
+    });
+    const profitJournal = await postBalancedJournal(tx, {
+      referenceType: "COPY_TRADE_INCOME",
+      referenceId: trade.id,
+      idempotencyKey: `copy-trade-profit:${trade.id}`,
+      memo: "AI Trade Profit",
+      lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: profitAmount }, { accountId: bitexAccount.id, direction: "CREDIT", amount: profitAmount }],
+    });
+    await tx.income.create({ data: { userId: trade.userId, type: "COPY_TRADE", sourceType: "COPY_TRADE", sourceId: trade.id, amount: profitAmount, copyTradeId: trade.id, ledgerJournalId: profitJournal.id } });
     await createNotification(tx, {
       userId: trade.userId,
       type: "COPY_TRADE_INCOME",
       title: "AI trade settled",
       message: "AI trade settled: principal returned and profit credited.",
-      metadata: { tradeId: trade.id, incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString() },
+      metadata: { tradeId: trade.id, principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id },
     });
     const progress = await tx.user.update({
       where: { id: trade.userId },
@@ -682,7 +746,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
         action: "COPY_TRADE_INCOME_POSTED",
         entityType: "CopyTrade",
         entityId: trade.id,
-        metadata: { tradeId: trade.id, incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString(), ledgerJournalId: journal.id, creditedAt: now.toISOString() },
+        metadata: { tradeId: trade.id, principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: bitexCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id, creditedAt: now.toISOString() },
       },
     });
     return tx.copyTrade.update({ where: { id: trade.id }, data: { incomeAmount: profitAmount, incomeCreditedAt: now } });
@@ -735,6 +799,10 @@ function tradeSlotStart(utcTime: string, now: Date, dayOffset = 0) {
   return start;
 }
 
+function tradeSlotSettlementTime(windowStartAt: Date) {
+  return new Date(windowStartAt.getTime() + TRADE_SETTLEMENT_AFTER_START_MINUTES * 60_000);
+}
+
 function tradeWindowPayload(status: "LIVE" | "UPCOMING" | "CLOSED", start: Date, end: Date, now: Date, currentSlot: TradeWindowSlot | null, nextSlot: TradeWindowSlot | null, nextStart: Date | null, windows?: ReturnType<typeof tradeWindowCandidates>) {
   const displaySlot = currentSlot ?? nextSlot;
   const secondsUntilOpen = status === "UPCOMING" ? Math.max(0, Math.ceil((start.getTime() - now.getTime()) / 1000)) : 0;
@@ -769,29 +837,25 @@ function formatTradeDisplayTime(value: Date) {
 }
 
 function effectiveTradeSlotDuration(durationMinutes: number) {
-  return Math.max(MIN_TRADE_WINDOW_MINUTES, Number.isFinite(durationMinutes) ? durationMinutes : 0);
+  return Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : TRADE_WINDOW_DURATION_MINUTES;
 }
 
 async function ensureRequiredTradeSlots(client: Pick<typeof prisma, "tradeSlot"> = prisma) {
   for (const required of REQUIRED_TRADE_SLOTS) {
     const slot = await client.tradeSlot.findFirst({ where: { label: required.label } });
     if (slot) {
-      if (slot.utcTime !== required.utcTime || slot.durationMinutes < MIN_TRADE_WINDOW_MINUTES || !slot.enabled) {
+      if (slot.utcTime !== required.utcTime || slot.durationMinutes !== required.durationMinutes || slot.creditDelayMins !== TRADE_WINDOW_DURATION_MINUTES || !slot.enabled) {
         await client.tradeSlot.update({
           where: { id: slot.id },
-          data: { utcTime: required.utcTime, durationMinutes: MIN_TRADE_WINDOW_MINUTES, enabled: true },
+          data: { utcTime: required.utcTime, durationMinutes: required.durationMinutes, creditDelayMins: TRADE_WINDOW_DURATION_MINUTES, enabled: true },
         });
       }
     } else {
       await client.tradeSlot.create({
-        data: { label: required.label, utcTime: required.utcTime, durationMinutes: MIN_TRADE_WINDOW_MINUTES, enabled: true },
+        data: { label: required.label, utcTime: required.utcTime, durationMinutes: required.durationMinutes, creditDelayMins: TRADE_WINDOW_DURATION_MINUTES, enabled: true },
       });
     }
   }
-  await client.tradeSlot.updateMany({
-    where: { durationMinutes: { lt: MIN_TRADE_WINDOW_MINUTES } },
-    data: { durationMinutes: MIN_TRADE_WINDOW_MINUTES },
-  });
 }
 
 async function configuredTradeSlots(client: Pick<typeof prisma, "tradeSlot"> = prisma): Promise<TradeWindowSlot[]> {
@@ -807,7 +871,7 @@ async function configuredTradeSlots(client: Pick<typeof prisma, "tradeSlot"> = p
       id: row.id,
       label: required.label,
       utcTime: required.utcTime,
-      durationMinutes: MIN_TRADE_WINDOW_MINUTES,
+      durationMinutes: required.durationMinutes,
     };
   });
 }
@@ -852,8 +916,10 @@ function serializeWindowComparison(window: ReturnType<typeof tradeWindowCandidat
     durationMinutes: window.durationMinutes,
     openUtc: window.start.toISOString(),
     closeUtc: window.end.toISOString(),
+    settlementUtc: tradeSlotSettlementTime(window.start).toISOString(),
     openIst: formatTradeDebugIst(window.start),
     closeIst: formatTradeDebugIst(window.end),
+    settlementIst: formatTradeDebugIst(tradeSlotSettlementTime(window.start)),
     nowAfterOrEqualOpen: window.isLive || window.startsInSeconds <= 0,
     nowBeforeClose: window.isLive || window.endedSecondsAgo <= 0,
     isLive: window.isLive,
@@ -995,8 +1061,10 @@ function serializeTrade(trade: Awaited<ReturnType<typeof prisma.copyTrade.findFi
     startedAt: trade!.startedAt.toISOString(),
     completesAt: trade!.completesAt.toISOString(),
     creditDueAt: trade!.creditDueAt.toISOString(),
+    windowStartAt: trade!.windowStartAt?.toISOString() ?? trade!.startedAt.toISOString(),
+    windowCloseAt: trade!.windowCloseAt?.toISOString() ?? trade!.completesAt.toISOString(),
     completedAt: trade!.completedAt?.toISOString() ?? null,
     incomeCreditedAt: trade!.incomeCreditedAt?.toISOString() ?? null,
-    remainingTime: Math.max(0, Math.ceil((trade!.completesAt.getTime() - now.getTime()) / 1000)),
+    remainingTime: Math.max(0, Math.ceil((trade!.creditDueAt.getTime() - now.getTime()) / 1000)),
   };
 }

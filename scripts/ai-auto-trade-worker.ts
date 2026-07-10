@@ -26,7 +26,12 @@ async function tick() {
     log("scheduler started");
     const result = await runAiAutoTradeScheduler(new Date());
     log("scheduler completed", {
+      currentUtc: result.currentUtc,
+      currentIst: result.currentIst,
       liveWindow: result.liveWindow,
+      windowStart: result.windowStart,
+      windowClose: result.windowClose,
+      settlementTime: result.settlementTime,
       usersScanned: result.usersScanned,
       tradesPlacedThisCycle: result.tradesPlacedThisCycle,
       aiTradesAlreadyExecutedThisWindow: result.aiTradesAlreadyExecutedThisWindow,

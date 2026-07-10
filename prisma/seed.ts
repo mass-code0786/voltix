@@ -19,10 +19,10 @@ async function main() {
     await prisma.asset.upsert({ where: { symbol: asset.symbol }, update: { name: asset.name, enabled: asset.enabled!==false }, create: { symbol: asset.symbol, name: asset.name, decimals: defaultDecimals(asset.symbol), enabled: asset.enabled!==false } });
   }
   await prisma.chainNetwork.upsert({ where: { key: "bsc" }, update: {}, create: { key: "bsc", name: "BNB Smart Chain", requiredConfirmations: 12 } });
-  for (const [label, utcTime] of [["Window 1", "08:30"], ["Window 2", "12:30"], ["Window 3", "20:30"]]) {
+  for (const [label, utcTime] of [["Window 1", "08:30"], ["Window 2", "12:30"], ["Window 3", "14:30"]]) {
     const slot = await prisma.tradeSlot.findFirst({ where: { label } });
-    if (slot) await prisma.tradeSlot.update({ where: { id: slot.id }, data: { utcTime, durationMinutes: 30 } });
-    else await prisma.tradeSlot.create({ data: { label, utcTime, durationMinutes: 30 } });
+    if (slot) await prisma.tradeSlot.update({ where: { id: slot.id }, data: { utcTime, durationMinutes: 15, creditDelayMins: 15 } });
+    else await prisma.tradeSlot.create({ data: { label, utcTime, durationMinutes: 15, creditDelayMins: 15 } });
   }
   await prisma.mlmPlan.upsert({ where: { name_version: { name: "Starter", version: 1 } }, update: {}, create: { name: "Starter", version: 1, packageAmountUsd: 50, directPercent: 5, matchingPercent: 1, levelPercents: [3,2,1] } });
   await prisma.walletAccount.createMany({ data: [{ assetId: usdt.id, type: "SPOT" }, { assetId: usdt.id, type: "FEE" }], skipDuplicates: true });
