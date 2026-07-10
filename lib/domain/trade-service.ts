@@ -29,6 +29,18 @@ const REQUIRED_TRADE_SLOTS = [
   { label: "Window 3", utcTime: "14:30", durationMinutes: TRADE_WINDOW_DURATION_MINUTES },
 ] as const;
 const AI_AUTO_TRADE_LOG_FILE = path.join(process.cwd(), "logs", "ai-auto-trade.log");
+const copyTradeStatusSelect = {
+  id: true,
+  principalAmount: true,
+  returnPercent: true,
+  status: true,
+  startedAt: true,
+  completesAt: true,
+  creditDueAt: true,
+  completedAt: true,
+  incomeCreditedAt: true,
+  code: { select: { code: true } },
+} satisfies Prisma.CopyTradeSelect;
 
 type AiTradeCycleLog = {
   userId: string;
@@ -108,15 +120,15 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   dayStart.setUTCHours(0, 0, 0, 0);
   const [activeTrade, completedToday, totalToday, history] = await Promise.all([
     prisma.copyTrade.findFirst({
-      where: { userId, status: { in: [TradeStatus.PENDING, TradeStatus.ACTIVE] } },
-      include: { code: true },
+      where: { userId, status: { in: [...SETTLEABLE_TRADE_STATUSES] }, incomeCreditedAt: null },
+      select: copyTradeStatusSelect,
       orderBy: { startedAt: "desc" },
     }),
     prisma.copyTrade.count({ where: { userId, status: TradeStatus.INCOME_CREDITED, incomeCreditedAt: { gte: dayStart } } }),
     prisma.copyTrade.count({ where: { userId, startedAt: { gte: dayStart } } }),
     prisma.copyTrade.findMany({
       where: { userId, status: TradeStatus.INCOME_CREDITED },
-      include: { code: true },
+      select: copyTradeStatusSelect,
       orderBy: { startedAt: "desc" },
       take: 20,
     }),
@@ -1047,24 +1059,26 @@ function displayVipRange(label: string) {
   return label.replace(/\s+/g, " ").trim();
 }
 
-function serializeTrade(trade: Awaited<ReturnType<typeof prisma.copyTrade.findFirst>> & { code?: { code: string } | null }, now: Date) {
-  const amount = Number(trade!.principalAmount.toString());
-  const returnPercent = Number(trade!.returnPercent.toString());
+type CopyTradeStatusRecord = Prisma.CopyTradeGetPayload<{ select: typeof copyTradeStatusSelect }>;
+
+function serializeTrade(trade: CopyTradeStatusRecord, now: Date) {
+  const amount = Number(trade.principalAmount.toString());
+  const returnPercent = Number(trade.returnPercent.toString());
   const profit = Number(((((amount / Number(COPY_TRADE_STAKE_RATE.toString())) * returnPercent) / 100)).toFixed(8));
   return {
-    id: trade!.id,
-    code: trade!.code?.code ?? "",
+    id: trade.id,
+    code: trade.code?.code ?? "",
     amount,
     returnPercent,
     profit,
-    status: trade!.status,
-    startedAt: trade!.startedAt.toISOString(),
-    completesAt: trade!.completesAt.toISOString(),
-    creditDueAt: trade!.creditDueAt.toISOString(),
-    windowStartAt: trade!.windowStartAt?.toISOString() ?? trade!.startedAt.toISOString(),
-    windowCloseAt: trade!.windowCloseAt?.toISOString() ?? trade!.completesAt.toISOString(),
-    completedAt: trade!.completedAt?.toISOString() ?? null,
-    incomeCreditedAt: trade!.incomeCreditedAt?.toISOString() ?? null,
-    remainingTime: Math.max(0, Math.ceil((trade!.creditDueAt.getTime() - now.getTime()) / 1000)),
+    status: trade.status,
+    startedAt: trade.startedAt.toISOString(),
+    completesAt: trade.completesAt.toISOString(),
+    creditDueAt: trade.creditDueAt.toISOString(),
+    windowStartAt: trade.startedAt.toISOString(),
+    windowCloseAt: trade.completesAt.toISOString(),
+    completedAt: trade.completedAt?.toISOString() ?? null,
+    incomeCreditedAt: trade.incomeCreditedAt?.toISOString() ?? null,
+    remainingTime: Math.max(0, Math.ceil((trade.creditDueAt.getTime() - now.getTime()) / 1000)),
   };
 }
