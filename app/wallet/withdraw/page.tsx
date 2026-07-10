@@ -111,17 +111,15 @@ export default function WalletWithdrawPage() {
           <h2 className="text-lg font-black">Confirm Withdrawal</h2>
           <p className="mt-1 text-xs text-slate-500">Enter your 6 digit Transaction PIN to submit this request.</p>
         </div>}
-        <div className="mt-4 space-y-2 rounded-2xl border border-white/[.08] bg-black/25 p-4">
+        {!earlyBreakdown&&<div className="mt-4 space-y-2 rounded-2xl border border-white/[.08] bg-black/25 p-4">
           <LineItem label="Wallet" value={displayWalletName(walletType)}/>
           <LineItem label="Withdrawal Amount" value={`${value.toFixed(2)} USDT`}/>
           <LineItem label="Network" value={network}/>
           <LineItem label="Address" value={address.trim()}/>
-          {!earlyBreakdown&&<>
-            <LineItem label="5% Withdrawal Fee" value={`${percentageFee.toFixed(2)} USDT`}/>
-            <LineItem label="$2 Fixed Fee" value={`${fixedFee.toFixed(2)} USDT`}/>
-            <LineItem label="Net Receivable" value={`${received.toFixed(2)} USDT`}/>
-          </>}
-        </div>
+          <LineItem label="5% Withdrawal Fee" value={`${percentageFee.toFixed(2)} USDT`}/>
+          <LineItem label="$2 Fixed Fee" value={`${fixedFee.toFixed(2)} USDT`}/>
+          <LineItem label="Net Receivable" value={`${received.toFixed(2)} USDT`}/>
+        </div>}
         {!earlyBreakdown&&<><div className="mt-4"><TransactionPinInput label="Transaction PIN" value={transactionPin} onChange={setTransactionPin} autoFocus disabled={submitting}/></div>
         <button type="button" onClick={useBiometric} disabled={submitting} className="mt-3 w-full rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 py-3 text-xs font-black text-[#18ff8a] disabled:opacity-60">{mobileVerificationToken?"Biometric ready":"Use biometric instead"}</button></>}
         {error&&<p className="mt-3 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs font-bold text-[#ff8aa0]">{error}</p>}
@@ -162,20 +160,18 @@ function LineItem({label,value}:{label:string;value:string}) {
 
 function EarlyWithdrawalWarning({breakdown}:{breakdown:EarlyWithdrawalBreakdown}) {
   return <div className="rounded-2xl border border-[#18ff8a]/20 bg-black/25 p-4 text-xs leading-5 text-slate-300">
-    <h2 className="text-lg font-black text-white">Early Withdrawal Confirmation</h2>
-    <p className="mt-2">You have not yet reached the required profit target for free withdrawal.</p>
+    <h2 className="text-lg font-black text-white">Early Withdrawal</h2>
     <div className="mt-3 rounded-2xl border border-white/[.08] bg-black/20 p-3">
       <p className="font-bold text-[#18ff8a]">Current Progress:</p>
       <p className="mt-1">{breakdown.completedPercentage.toFixed(2)}% Completed</p>
-      <p>{breakdown.remainingPercentage.toFixed(2)}% Remaining</p>
     </div>
     <div className="mt-3">
-      <p className="font-bold text-[#18ff8a]">An early withdrawal will apply:</p>
-      <p className="mt-1">- 20% Early Withdrawal Charge</p>
+      <p className="font-bold text-[#18ff8a]">Early Withdrawal Charges:</p>
+      <p className="mt-1">- 20%</p>
       <p>- 5% Withdrawal Fee</p>
       <p>- $2 Fixed Fee</p>
     </div>
-    <p className="mt-3">Review the fee summary below before continuing.</p>
+    <p className="mt-3">Press "Confirm Withdrawal" to continue.</p>
     <div className="mt-4 space-y-2 rounded-2xl border border-white/[.08] bg-black/20 p-3">
       <LineItem label="Capital Amount" value={`$${breakdown.capitalAmount.toFixed(2)}`}/>
       <LineItem label="Earned Profit" value={`$${breakdown.earnedProfit.toFixed(2)}`}/>
