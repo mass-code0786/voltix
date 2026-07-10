@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
-import { createWithdrawalRequest, getUserWithdrawals } from "@/lib/domain/payment-service";
+import { AiWithdrawalConfirmationRequiredError, createWithdrawalRequest, getUserWithdrawals } from "@/lib/domain/payment-service";
 import { rateLimitByUser } from "@/lib/security";
 import { auditFailure, auditSuccess } from "@/lib/audit";
 import { verifyTransactionPinForUser } from "@/lib/domain/transaction-pin-service";
@@ -15,6 +15,7 @@ const withdrawalSchema = z.object({
   network: z.string().trim().min(1).default("BSC"),
   transactionPin: z.string().trim().optional(),
   mobileVerificationToken: z.string().trim().optional(),
+  acceptEarlyWithdrawalCharge: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -43,12 +44,16 @@ export async function POST(request: Request) {
       amount: new Prisma.Decimal(parsed.data.amount),
       address: parsed.data.address,
       network: parsed.data.network,
+      acceptEarlyWithdrawalCharge: parsed.data.acceptEarlyWithdrawalCharge === true,
       idempotencyKey: `${user.id}:${Date.now()}:${crypto.randomUUID()}`,
     });
     await auditSuccess({ request, userId: user.id, role: "USER", action: "WITHDRAWAL_REQUESTED", module: "WITHDRAWAL", description: "User requested withdrawal", newValue: withdrawal }).catch(() => null);
     return NextResponse.json({ withdrawal }, { status: 201 });
   } catch (error) {
     await auditFailure({ request, userId: user.id, role: "USER", action: "WITHDRAWAL_REQUESTED", module: "WITHDRAWAL", description: "Withdrawal request failed", errorMessage: error instanceof Error ? error.message : "Withdrawal request failed" }).catch(() => null);
+    if (error instanceof AiWithdrawalConfirmationRequiredError) {
+      return NextResponse.json(error.breakdown, { status: 409 });
+    }
     return NextResponse.json({ error: error instanceof Error ? error.message : "Withdrawal request failed" }, { status: 400 });
   }
 }

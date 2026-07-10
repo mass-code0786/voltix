@@ -412,6 +412,18 @@ model Withdrawal {
   amount          Decimal          @db.Decimal(36, 18)
   feeAmount       Decimal          @default(0) @db.Decimal(36, 18)
   receivableAmount Decimal         @db.Decimal(36, 18)
+  eligibilityStatus String?
+  capitalAmount   Decimal          @default(0) @db.Decimal(36, 18)
+  earnedProfit    Decimal          @default(0) @db.Decimal(36, 18)
+  requiredProfit  Decimal          @default(0) @db.Decimal(36, 18)
+  completedPercentage Decimal      @default(0) @db.Decimal(8, 4)
+  earlyWithdrawal Boolean          @default(false)
+  earlyWithdrawalCharge Decimal    @default(0) @db.Decimal(36, 18)
+  percentageFee   Decimal          @default(0) @db.Decimal(36, 18)
+  fixedFee        Decimal          @default(0) @db.Decimal(36, 18)
+  totalCharges    Decimal          @default(0) @db.Decimal(36, 18)
+  netWithdrawalAmount Decimal      @default(0) @db.Decimal(36, 18)
+  earlyWithdrawalConfirmedAt DateTime?
   idempotencyKey  String           @unique
   ledgerJournalId String?          @unique
   txHash          String?

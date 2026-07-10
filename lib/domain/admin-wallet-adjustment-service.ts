@@ -155,7 +155,7 @@ async function creditWalletBalance(tx: Prisma.TransactionClient, userId: string,
     data: {
       bitexBalance: { increment: amount },
       bitexPrincipal: { increment: amount },
-      bitexTargetAmount: { increment: amount.mul(2) },
+      bitexTargetAmount: { increment: amount.mul("0.60") },
       bitexUnlocked: false,
     },
   });

@@ -52,8 +52,8 @@ export async function getUserWalletSnapshot(client: WalletClient, userId: string
     bitex: {
       principal: decimalToNumber(user.bitexPrincipal),
       incomeEarned: decimalToNumber(user.bitexIncomeEarned),
-      targetAmount: decimalToNumber(user.bitexTargetAmount),
-      unlocked: user.bitexUnlocked,
+      targetAmount: decimalToNumber(user.bitexPrincipal.mul("0.60")),
+      unlocked: user.bitexPrincipal.eq(0) || user.bitexIncomeEarned.gte(user.bitexPrincipal.mul("0.60")),
     },
     accounts: user.wallets.map(account => ({
       id: account.id,

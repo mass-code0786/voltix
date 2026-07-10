@@ -13,6 +13,7 @@ type AssetTotals = {
   total?: { spot?: number; bitex?: number };
   bitex?: { principal?: number; incomeEarned?: number };
 };
+type EarlyWithdrawalBreakdown = { requiresConfirmation: boolean; eligible: boolean; capitalAmount: number; earnedProfit: number; requiredProfit: number; completedPercentage: number; remainingPercentage: number; withdrawalAmount: number; earlyWithdrawalCharge: number; percentageFee: number; fixedFee: number; totalFees: number; netAmount: number };
 
 const fixedSpotFee = 2;
 const spotFeeRate = 0.05;
@@ -31,6 +32,7 @@ export default function WalletWithdrawPage() {
   const [submitting,setSubmitting]=useState(false);
   const [error,setError]=useState("");
   const [success,setSuccess]=useState("");
+  const [earlyBreakdown,setEarlyBreakdown]=useState<EarlyWithdrawalBreakdown|null>(null);
 
   useEffect(()=>{
     let active=true;
@@ -46,11 +48,8 @@ export default function WalletWithdrawPage() {
   const value=Number(amount)||0;
   const balances=useMemo(()=>({SPOT:Number(totals.total?.spot??0),BITEX:Number(totals.total?.bitex??0)}),[totals]);
   const available=balances[walletType];
-  const bitexPrincipal=Number(totals.bitex?.principal??0);
-  const bitexIncomeEarned=Number(totals.bitex?.incomeEarned??0);
-  const locked=walletType==="BITEX"&&bitexPrincipal>0&&bitexIncomeEarned<bitexPrincipal*2;
-  const fixedFee=walletType==="SPOT"&&value>0?fixedSpotFee:0;
-  const percentageFee=walletType==="SPOT"?value*spotFeeRate:0;
+  const fixedFee=value>0?fixedSpotFee:0;
+  const percentageFee=value*spotFeeRate;
   const totalFee=fixedFee+percentageFee;
   const received=Math.max(0,value-totalFee);
 
@@ -58,7 +57,6 @@ export default function WalletWithdrawPage() {
 
   const openConfirmation=()=>{
     resetError();
-    if(locked){setError("AI withdrawal will unlock after completing 2x copy trade income.");return;}
     if(value<=0){setError("Enter a valid withdrawal amount");return;}
     if(value>available){setError(`Insufficient ${displayWalletName(walletType)} balance`);return;}
     if(!address.trim()){setError("Enter an external wallet or exchange address");return;}
@@ -69,14 +67,18 @@ export default function WalletWithdrawPage() {
     window.scrollTo({top:0,behavior:"smooth"});
   };
 
-  const confirmWithdrawal=async()=>{
+  const confirmWithdrawal=async(acceptEarlyWithdrawalCharge=false)=>{
     resetError();
     if(!mobileVerificationToken&&transactionPin.length!==6){setError("Invalid Transaction PIN.");return;}
     setSubmitting(true);
-    const response=await fetch("/api/withdrawals",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({walletType,amount:value,address,network,transactionPin,mobileVerificationToken})});
+    const response=await fetch("/api/withdrawals",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({walletType,amount:value,address,network,transactionPin,mobileVerificationToken,acceptEarlyWithdrawalCharge})});
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){
+      if(data.requiresConfirmation){
+        setEarlyBreakdown(data as EarlyWithdrawalBreakdown);
+        return;
+      }
       setTransactionPin("");
       setMobileVerificationToken("");
       hapticNotification("error").catch(()=>null);
@@ -84,6 +86,7 @@ export default function WalletWithdrawPage() {
       return;
     }
     setConfirming(false);
+    setEarlyBreakdown(null);
     setTransactionPin("");
     setMobileVerificationToken("");
     hapticNotification("success").catch(()=>null);
@@ -104,10 +107,10 @@ export default function WalletWithdrawPage() {
       </header>
 
       {loading?<section className="profile-glass mt-2 rounded-[22px] p-5 text-sm text-slate-400">Loading wallet...</section>:confirming?<section className="profile-glass mt-2 rounded-[22px] p-4">
-        <div className="rounded-2xl border border-[#18ff8a]/20 bg-[#18ff8a]/[.06] p-4">
+        {earlyBreakdown?<EarlyWithdrawalWarning breakdown={earlyBreakdown}/>:<div className="rounded-2xl border border-[#18ff8a]/20 bg-[#18ff8a]/[.06] p-4">
           <h2 className="text-lg font-black">Confirm Withdrawal</h2>
           <p className="mt-1 text-xs text-slate-500">Enter your 6 digit Transaction PIN to submit this request.</p>
-        </div>
+        </div>}
         <div className="mt-4 space-y-2 rounded-2xl border border-white/[.08] bg-black/25 p-4">
           <LineItem label="Wallet" value={displayWalletName(walletType)}/>
           <LineItem label="Amount" value={`${value.toFixed(2)} USDT`}/>
@@ -117,17 +120,16 @@ export default function WalletWithdrawPage() {
           <LineItem label="5% fee" value={`${percentageFee.toFixed(2)} USDT`}/>
           <LineItem label="Receivable amount" value={`${received.toFixed(2)} USDT`}/>
         </div>
-        <div className="mt-4"><TransactionPinInput label="Transaction PIN" value={transactionPin} onChange={setTransactionPin} autoFocus disabled={submitting}/></div>
-        <button type="button" onClick={useBiometric} disabled={submitting} className="mt-3 w-full rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 py-3 text-xs font-black text-[#18ff8a] disabled:opacity-60">{mobileVerificationToken?"Biometric ready":"Use biometric instead"}</button>
+        {!earlyBreakdown&&<><div className="mt-4"><TransactionPinInput label="Transaction PIN" value={transactionPin} onChange={setTransactionPin} autoFocus disabled={submitting}/></div>
+        <button type="button" onClick={useBiometric} disabled={submitting} className="mt-3 w-full rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 py-3 text-xs font-black text-[#18ff8a] disabled:opacity-60">{mobileVerificationToken?"Biometric ready":"Use biometric instead"}</button></>}
         {error&&<p className="mt-3 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs font-bold text-[#ff8aa0]">{error}</p>}
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <button onClick={()=>{setConfirming(false);setTransactionPin("");setMobileVerificationToken("");setError("");}} disabled={submitting} className="rounded-2xl border border-white/[.08] bg-black/25 py-3.5 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button>
-          <button onClick={confirmWithdrawal} disabled={submitting||(!mobileVerificationToken&&transactionPin.length!==6)} className="rounded-2xl bg-[#18ff8a] py-3.5 text-xs font-black text-[#050608] disabled:opacity-60">{submitting?"Submitting...":"Confirm Withdrawal"}</button>
+          <button onClick={()=>{setConfirming(false);setEarlyBreakdown(null);setTransactionPin("");setMobileVerificationToken("");setError("");}} disabled={submitting} className="rounded-2xl border border-white/[.08] bg-black/25 py-3.5 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button>
+          <button onClick={()=>confirmWithdrawal(Boolean(earlyBreakdown))} disabled={submitting||(!earlyBreakdown&&!mobileVerificationToken&&transactionPin.length!==6)} className="rounded-2xl bg-[#18ff8a] py-3.5 text-xs font-black text-[#050608] disabled:opacity-60">{submitting?"Submitting...":earlyBreakdown?"Confirm Withdrawal":"Confirm Withdrawal"}</button>
         </div>
       </section>:<section className="profile-glass mt-2 rounded-[22px] p-4">
         {success&&<div className="mb-4 flex items-center gap-3 rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 p-3 text-sm font-bold text-[#18ff8a]"><CheckCircle2 size={18}/>{success}</div>}
         <label className="block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={event=>{setWalletType(event.target.value as WalletType);resetError();}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="SPOT">Spot Wallet</option><option value="BITEX">AI Wallet</option></select></label>
-        {locked&&<div className="mt-3 rounded-2xl border border-[#624e1a] bg-[#2a2412] p-3 text-xs leading-5 text-[#c9b98d]">AI withdrawal will unlock after completing 2x copy trade income.</div>}
         <label className="mt-4 block text-xs font-bold text-slate-400">Amount</label>
         <div className={`mt-2 flex items-center rounded-2xl border bg-black/25 ${error?"border-[#ff4f6d]/60":"border-white/[.08] focus-within:border-[#18ff8a]/50"}`}>
           <input inputMode="decimal" value={amount} onChange={event=>{setAmount(event.target.value);resetError();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3.5 text-white outline-none"/>
@@ -156,4 +158,23 @@ export default function WalletWithdrawPage() {
 
 function LineItem({label,value}:{label:string;value:string}) {
   return <div className="flex items-start justify-between gap-4 text-xs"><span className="shrink-0 text-slate-500">{label}</span><span className="min-w-0 break-words text-right font-bold text-slate-200">{value}</span></div>;
+}
+
+function EarlyWithdrawalWarning({breakdown}:{breakdown:EarlyWithdrawalBreakdown}) {
+  return <div className="rounded-2xl border border-[#f6c85f]/30 bg-[#2a2412] p-4 text-xs leading-5 text-[#e8d59a]">
+    <p>Abhi aapka withdrawal eligibility volume complete nahi hua hai. Aapne required profit target ka {breakdown.completedPercentage.toFixed(2)}% complete kiya hai aur {breakdown.remainingPercentage.toFixed(2)}% abhi baaki hai.</p>
+    <p className="mt-2">Agar aap abhi withdrawal karte hain, toh requested amount par 20% early withdrawal charge lagega. Iske alawa $2 fixed withdrawal fee aur 5% withdrawal fee bhi apply hogi.</p>
+    <div className="mt-4 space-y-2 rounded-2xl border border-white/[.08] bg-black/20 p-3">
+      <LineItem label="Capital amount" value={`$${breakdown.capitalAmount.toFixed(2)}`}/>
+      <LineItem label="Earned profit" value={`$${breakdown.earnedProfit.toFixed(2)}`}/>
+      <LineItem label="Required profit" value={`$${breakdown.requiredProfit.toFixed(2)}`}/>
+      <LineItem label="Requested Amount" value={`$${breakdown.withdrawalAmount.toFixed(2)}`}/>
+      <LineItem label="Early Withdrawal Charge" value={`$${breakdown.earlyWithdrawalCharge.toFixed(2)}`}/>
+      <LineItem label="5% Withdrawal Fee" value={`$${breakdown.percentageFee.toFixed(2)}`}/>
+      <LineItem label="Fixed Fee" value={`$${breakdown.fixedFee.toFixed(2)}`}/>
+      <LineItem label="Total charges" value={`$${breakdown.totalFees.toFixed(2)}`}/>
+      <LineItem label="Net Receivable Amount" value={`$${breakdown.netAmount.toFixed(2)}`}/>
+    </div>
+    <p className="mt-3 font-bold">Kya aap early withdrawal confirm karna chahte hain?</p>
+  </div>;
 }

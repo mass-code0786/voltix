@@ -8,6 +8,8 @@ import { displayWalletName } from "@/lib/wallet-labels";
 
 const WITHDRAWAL_FIXED_FEE = new Prisma.Decimal(2);
 const WITHDRAWAL_PERCENTAGE_RATE = new Prisma.Decimal("0.05");
+const AI_WITHDRAWAL_ELIGIBILITY_RATE = new Prisma.Decimal("0.60");
+const AI_EARLY_WITHDRAWAL_RATE = new Prisma.Decimal("0.20");
 const networkNames: Record<string, string> = {
   bsc: "BNB Smart Chain",
   tron: "TRON",
@@ -16,6 +18,45 @@ const networkNames: Record<string, string> = {
 
 type WithdrawalWallet = Extract<WalletType, "SPOT" | "BITEX">;
 type NowPaymentsPayload = Record<string, unknown>;
+type AiWithdrawalBreakdown = {
+  requiresConfirmation: boolean;
+  eligible: boolean;
+  capitalAmount: number;
+  earnedProfit: number;
+  requiredProfit: number;
+  completedPercentage: number;
+  remainingPercentage: number;
+  withdrawalAmount: number;
+  earlyWithdrawalCharge: number;
+  percentageFee: number;
+  fixedFee: number;
+  totalFees: number;
+  netAmount: number;
+};
+type WithdrawalFeeBreakdown = {
+  eligible: boolean;
+  capitalAmount: Prisma.Decimal;
+  earnedProfit: Prisma.Decimal;
+  requiredProfit: Prisma.Decimal;
+  completedPercentage: Prisma.Decimal;
+  remainingPercentage: Prisma.Decimal;
+  earlyWithdrawalCharge: Prisma.Decimal;
+  percentageFee: Prisma.Decimal;
+  fixedFee: Prisma.Decimal;
+  totalFees: Prisma.Decimal;
+  receivableAmount: Prisma.Decimal;
+  withdrawalAmount: Prisma.Decimal;
+};
+
+export class AiWithdrawalConfirmationRequiredError extends Error {
+  breakdown: AiWithdrawalBreakdown;
+
+  constructor(breakdown: AiWithdrawalBreakdown) {
+    super("Early AI withdrawal confirmation is required");
+    this.name = "AiWithdrawalConfirmationRequiredError";
+    this.breakdown = breakdown;
+  }
+}
 
 export async function getUserDeposits(userId: string) {
   const deposits = await prisma.deposit.findMany({
@@ -193,15 +234,11 @@ export async function getUserWithdrawals(userId: string) {
   return { withdrawals: withdrawals.map(formatWithdrawal) };
 }
 
-export async function createWithdrawalRequest(input: { userId: string; walletType: WithdrawalWallet; amount: Prisma.Decimal; address: string; network: string; idempotencyKey: string }) {
+export async function createWithdrawalRequest(input: { userId: string; walletType: WithdrawalWallet; amount: Prisma.Decimal; address: string; network: string; idempotencyKey: string; acceptEarlyWithdrawalCharge?: boolean }) {
   if (!input.idempotencyKey.trim()) throw new Error("Idempotency key is required");
   if (!input.address.trim()) throw new Error("External wallet address is required");
   if (input.amount.lte(0)) throw new Error("Withdrawal amount must be positive");
   if (input.walletType !== "SPOT" && input.walletType !== "BITEX") throw new Error("Only Spot and AI withdrawals are supported");
-
-  const feeAmount = calculateWithdrawalFee(input.walletType, input.amount);
-  const receivableAmount = input.amount.sub(feeAmount);
-  if (receivableAmount.lte(0)) throw new Error("Withdrawal amount must exceed the total fee");
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.withdrawal.findUnique({
@@ -214,15 +251,20 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
     const network = await ensureNetwork(tx, input.network);
     const user = await tx.user.findUniqueOrThrow({
       where: { id: input.userId },
-      select: { spotBalance: true, bitexBalance: true, bitexPrincipal: true, bitexIncomeEarned: true },
+      select: { spotBalance: true, bitexBalance: true, bitexPrincipal: true },
     });
+    const earnedProfit = input.walletType === "BITEX" ? await calculateAiEarnedProfit(tx, input.userId) : new Prisma.Decimal(0);
+    const feeBreakdown = input.walletType === "BITEX"
+      ? calculateAiWithdrawalBreakdown({ capitalAmount: user.bitexPrincipal, earnedProfit, withdrawalAmount: input.amount })
+      : calculateSpotWithdrawalBreakdown(input.amount);
+    if (feeBreakdown.receivableAmount.lte(0)) throw new Error("Withdrawal amount must exceed the total fee");
 
     if (input.walletType === "SPOT" && user.spotBalance.lt(input.amount)) throw new Error("Insufficient Spot wallet balance");
     if (input.walletType === "BITEX") {
-      if (user.bitexPrincipal.gt(0) && user.bitexIncomeEarned.lt(user.bitexPrincipal.mul(2))) {
-        throw new Error("AI withdrawal will unlock after completing 2x copy trade income.");
-      }
       if (user.bitexBalance.lt(input.amount)) throw new Error("Insufficient AI Wallet balance");
+      if (!feeBreakdown.eligible && !input.acceptEarlyWithdrawalCharge) {
+        throw new AiWithdrawalConfirmationRequiredError(formatAiWithdrawalBreakdown(feeBreakdown, true));
+      }
     }
 
     const withdrawal = await tx.withdrawal.create({
@@ -233,8 +275,20 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
         walletType: input.walletType,
         address: input.address.trim(),
         amount: input.amount,
-        feeAmount,
-        receivableAmount,
+        feeAmount: feeBreakdown.totalFees,
+        receivableAmount: feeBreakdown.receivableAmount,
+        eligibilityStatus: input.walletType === "BITEX" ? feeBreakdown.eligible ? "ELIGIBLE_WITHDRAWAL" : "EARLY_WITHDRAWAL" : "SPOT_WITHDRAWAL",
+        capitalAmount: feeBreakdown.capitalAmount,
+        earnedProfit: feeBreakdown.earnedProfit,
+        requiredProfit: feeBreakdown.requiredProfit,
+        completedPercentage: feeBreakdown.completedPercentage,
+        earlyWithdrawal: input.walletType === "BITEX" && !feeBreakdown.eligible,
+        earlyWithdrawalCharge: feeBreakdown.earlyWithdrawalCharge,
+        percentageFee: feeBreakdown.percentageFee,
+        fixedFee: feeBreakdown.fixedFee,
+        totalCharges: feeBreakdown.totalFees,
+        netWithdrawalAmount: feeBreakdown.receivableAmount,
+        earlyWithdrawalConfirmedAt: input.walletType === "BITEX" && !feeBreakdown.eligible ? new Date() : null,
         idempotencyKey: input.idempotencyKey,
         status: "PENDING",
       },
@@ -245,7 +299,83 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
 }
 
 export function calculateWithdrawalFee(walletType: WithdrawalWallet, amount: Prisma.Decimal) {
-  return walletType === "SPOT" ? WITHDRAWAL_FIXED_FEE.add(amount.mul(WITHDRAWAL_PERCENTAGE_RATE)) : new Prisma.Decimal(0);
+  return walletType === "SPOT" ? calculateSpotWithdrawalBreakdown(amount).totalFees : WITHDRAWAL_FIXED_FEE.add(amount.mul(WITHDRAWAL_PERCENTAGE_RATE));
+}
+
+export function calculateAiWithdrawalBreakdown(input: { capitalAmount: Prisma.Decimal; earnedProfit: Prisma.Decimal; withdrawalAmount: Prisma.Decimal }): WithdrawalFeeBreakdown {
+  const zero = new Prisma.Decimal(0);
+  const hundred = new Prisma.Decimal(100);
+  const capitalAmount = input.capitalAmount.gt(0) ? input.capitalAmount : zero;
+  const earnedProfit = input.earnedProfit.gt(0) ? input.earnedProfit : zero;
+  const requiredProfit = capitalAmount.mul(AI_WITHDRAWAL_ELIGIBILITY_RATE);
+  const completedRaw = requiredProfit.gt(0) ? earnedProfit.div(requiredProfit).mul(100) : hundred;
+  const completedPercentage = completedRaw.gt(100) ? hundred : completedRaw;
+  const remainingPercentage = hundred.sub(completedPercentage).gt(0) ? hundred.sub(completedPercentage) : zero;
+  const eligible = requiredProfit.eq(0) || earnedProfit.gte(requiredProfit);
+  const earlyWithdrawalCharge = eligible ? zero : input.withdrawalAmount.mul(AI_EARLY_WITHDRAWAL_RATE);
+  const percentageFee = input.withdrawalAmount.mul(WITHDRAWAL_PERCENTAGE_RATE);
+  const fixedFee = WITHDRAWAL_FIXED_FEE;
+  const totalFees = earlyWithdrawalCharge.add(percentageFee).add(fixedFee);
+  return {
+    eligible,
+    capitalAmount,
+    earnedProfit,
+    requiredProfit,
+    completedPercentage,
+    remainingPercentage,
+    earlyWithdrawalCharge,
+    percentageFee,
+    fixedFee,
+    totalFees,
+    receivableAmount: input.withdrawalAmount.sub(totalFees),
+    withdrawalAmount: input.withdrawalAmount,
+  };
+}
+
+function calculateSpotWithdrawalBreakdown(amount: Prisma.Decimal): WithdrawalFeeBreakdown {
+  const zero = new Prisma.Decimal(0);
+  const percentageFee = amount.mul(WITHDRAWAL_PERCENTAGE_RATE);
+  const totalFees = WITHDRAWAL_FIXED_FEE.add(percentageFee);
+  return {
+    eligible: true,
+    capitalAmount: zero,
+    earnedProfit: zero,
+    requiredProfit: zero,
+    completedPercentage: new Prisma.Decimal(100),
+    remainingPercentage: zero,
+    earlyWithdrawalCharge: zero,
+    percentageFee,
+    fixedFee: WITHDRAWAL_FIXED_FEE,
+    totalFees,
+    receivableAmount: amount.sub(totalFees),
+    withdrawalAmount: amount,
+  };
+}
+
+async function calculateAiEarnedProfit(tx: Prisma.TransactionClient, userId: string) {
+  const result = await tx.income.aggregate({
+    where: { userId, type: "COPY_TRADE" },
+    _sum: { amount: true },
+  });
+  return result._sum.amount ?? new Prisma.Decimal(0);
+}
+
+function formatAiWithdrawalBreakdown(breakdown: WithdrawalFeeBreakdown, requiresConfirmation: boolean): AiWithdrawalBreakdown {
+  return {
+    requiresConfirmation,
+    eligible: breakdown.eligible,
+    capitalAmount: decimalToNumber(breakdown.capitalAmount),
+    earnedProfit: decimalToNumber(breakdown.earnedProfit),
+    requiredProfit: decimalToNumber(breakdown.requiredProfit),
+    completedPercentage: decimalToNumber(breakdown.completedPercentage),
+    remainingPercentage: decimalToNumber(breakdown.remainingPercentage),
+    withdrawalAmount: decimalToNumber(breakdown.withdrawalAmount),
+    earlyWithdrawalCharge: decimalToNumber(breakdown.earlyWithdrawalCharge),
+    percentageFee: decimalToNumber(breakdown.percentageFee),
+    fixedFee: decimalToNumber(breakdown.fixedFee),
+    totalFees: decimalToNumber(breakdown.totalFees),
+    netAmount: decimalToNumber(breakdown.receivableAmount),
+  };
 }
 
 export async function approveDepositRequest(input: { depositId: string; adminUserId: string }) {
@@ -329,8 +459,8 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
     const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: input.withdrawalId }, include: { asset: true, network: true } });
     if (withdrawal.status !== "PENDING") throw new Error("Withdrawal has already been actioned");
     if (withdrawal.walletType !== "SPOT" && withdrawal.walletType !== "BITEX") throw new Error("Only Spot and AI withdrawals are supported");
-    const feeAmount = calculateWithdrawalFee(withdrawal.walletType, withdrawal.amount);
-    const receivableAmount = withdrawal.amount.sub(feeAmount);
+    const feeAmount = withdrawal.feeAmount;
+    const receivableAmount = withdrawal.receivableAmount;
     if (receivableAmount.lte(0)) throw new Error("Withdrawal amount must exceed the total fee");
 
     const debit = withdrawal.walletType === "BITEX"
@@ -357,7 +487,7 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
     });
     const updated = await tx.withdrawal.update({
       where: { id: withdrawal.id },
-      data: { status: "APPROVED", feeAmount, receivableAmount, adminActionBy: input.adminUserId, adminActionAt: new Date(), ledgerJournalId: journal.id },
+      data: { status: "APPROVED", feeAmount, receivableAmount, totalCharges: feeAmount, netWithdrawalAmount: receivableAmount, adminActionBy: input.adminUserId, adminActionAt: new Date(), ledgerJournalId: journal.id },
       include: { asset: true, network: true },
     });
     await createNotification(tx, {
@@ -454,13 +584,25 @@ function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: st
   };
 }
 
-function formatWithdrawal(withdrawal: { id: string; walletType: WalletType; amount: Prisma.Decimal; feeAmount: Prisma.Decimal; receivableAmount: Prisma.Decimal; address: string; txHash: string | null; status: string; rejectionReason: string | null; createdAt: Date; asset: { symbol: string }; network: { key: string; name: string } }) {
+function formatWithdrawal(withdrawal: { id: string; walletType: WalletType; amount: Prisma.Decimal; feeAmount: Prisma.Decimal; receivableAmount: Prisma.Decimal; address: string; txHash: string | null; status: string; rejectionReason: string | null; createdAt: Date; asset: { symbol: string }; network: { key: string; name: string }; eligibilityStatus?: string | null; capitalAmount?: Prisma.Decimal; earnedProfit?: Prisma.Decimal; requiredProfit?: Prisma.Decimal; completedPercentage?: Prisma.Decimal; earlyWithdrawal?: boolean; earlyWithdrawalCharge?: Prisma.Decimal; percentageFee?: Prisma.Decimal; fixedFee?: Prisma.Decimal; totalCharges?: Prisma.Decimal; netWithdrawalAmount?: Prisma.Decimal; earlyWithdrawalConfirmedAt?: Date | null }) {
   return {
     id: withdrawal.id,
     walletType: displayWalletName(withdrawal.walletType),
-    amount: Number(withdrawal.amount.toString()),
-    fee: Number(withdrawal.feeAmount.toString()),
-    receivable: Number(withdrawal.receivableAmount.toString()),
+    amount: decimalToNumber(withdrawal.amount),
+    fee: decimalToNumber(withdrawal.feeAmount),
+    receivable: decimalToNumber(withdrawal.receivableAmount),
+    eligibilityStatus: withdrawal.eligibilityStatus ?? null,
+    capitalAmount: withdrawal.capitalAmount ? decimalToNumber(withdrawal.capitalAmount) : 0,
+    earnedProfit: withdrawal.earnedProfit ? decimalToNumber(withdrawal.earnedProfit) : 0,
+    requiredProfit: withdrawal.requiredProfit ? decimalToNumber(withdrawal.requiredProfit) : 0,
+    completedPercentage: withdrawal.completedPercentage ? decimalToNumber(withdrawal.completedPercentage) : 0,
+    earlyWithdrawal: withdrawal.earlyWithdrawal ?? false,
+    earlyWithdrawalCharge: withdrawal.earlyWithdrawalCharge ? decimalToNumber(withdrawal.earlyWithdrawalCharge) : 0,
+    percentageFee: withdrawal.percentageFee ? decimalToNumber(withdrawal.percentageFee) : 0,
+    fixedFee: withdrawal.fixedFee ? decimalToNumber(withdrawal.fixedFee) : 0,
+    totalCharges: withdrawal.totalCharges ? decimalToNumber(withdrawal.totalCharges) : decimalToNumber(withdrawal.feeAmount),
+    netWithdrawalAmount: withdrawal.netWithdrawalAmount ? decimalToNumber(withdrawal.netWithdrawalAmount) : decimalToNumber(withdrawal.receivableAmount),
+    earlyWithdrawalConfirmedAt: withdrawal.earlyWithdrawalConfirmedAt?.toISOString() ?? null,
     asset: withdrawal.asset.symbol,
     address: withdrawal.address,
     network: withdrawal.network.key.toUpperCase(),
@@ -470,6 +612,10 @@ function formatWithdrawal(withdrawal: { id: string; walletType: WalletType; amou
     rejectionReason: withdrawal.rejectionReason,
     createdAt: withdrawal.createdAt.toISOString(),
   };
+}
+
+function decimalToNumber(value: Prisma.Decimal) {
+  return Number(value.toString());
 }
 
 async function postMemoJournal(tx: Prisma.TransactionClient, input: { referenceType: string; referenceId: string; idempotencyKey: string; memo: string }) {

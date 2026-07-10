@@ -746,9 +746,10 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
     const progress = await tx.user.update({
       where: { id: trade.userId },
       data: { bitexBalance: { increment: bitexCredit }, bitexIncomeEarned: { increment: profitAmount } },
-      select: { bitexIncomeEarned: true, bitexTargetAmount: true },
+      select: { bitexIncomeEarned: true, bitexPrincipal: true },
     });
-    if (progress.bitexTargetAmount.gt(0) && progress.bitexIncomeEarned.gte(progress.bitexTargetAmount)) {
+    const requiredProfit = progress.bitexPrincipal.mul("0.60");
+    if (requiredProfit.eq(0) || progress.bitexIncomeEarned.gte(requiredProfit)) {
       await tx.user.update({ where: { id: trade.userId }, data: { bitexUnlocked: true } });
     }
     await tx.auditLog.create({

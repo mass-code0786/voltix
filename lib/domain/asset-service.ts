@@ -45,8 +45,8 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
     bitex: {
       principal: decimalToNumber(user.bitexPrincipal),
       incomeEarned: decimalToNumber(user.bitexIncomeEarned),
-      targetAmount: decimalToNumber(user.bitexTargetAmount),
-      unlocked: user.bitexUnlocked,
+      targetAmount: decimalToNumber(user.bitexPrincipal.mul("0.60")),
+      unlocked: user.bitexPrincipal.eq(0) || user.bitexIncomeEarned.gte(user.bitexPrincipal.mul("0.60")),
     },
   };
   totals.portfolio = totals.total.spot + totals.total.futures + totals.total.bitex;
