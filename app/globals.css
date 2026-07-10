@@ -1051,8 +1051,16 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   padding: 12px;
 }
 
+.orderbook-last-inline {
+  color: #94a3b8;
+}
+
+.orderbook-last-inline b {
+  color: #18ff8a;
+  font-weight: 900;
+}
+
 .orderbook-columns,
-.orderbook-row,
 .recent-trade-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -1068,53 +1076,101 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   text-transform: uppercase;
 }
 
-.orderbook-row {
-  position: relative;
+.orderbook-split {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
   overflow: hidden;
-  border-radius: 10px;
-  padding: 6px 8px;
-  font-size: 12px;
-  font-weight: 800;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 16px;
+  background: rgba(0,0,0,.12);
 }
 
-.orderbook-row i {
-  position: absolute;
-  inset-block: 0;
-  right: 0;
-  opacity: .18;
+.orderbook-side {
+  min-width: 0;
+  padding: 10px 8px 12px;
 }
 
-.orderbook-row.is-buy i { background: #18ff8a; }
-.orderbook-row.is-sell i { background: #ff4f6d; }
-.orderbook-row.is-buy span:first-of-type { color: #18ff8a; }
-.orderbook-row.is-sell span:first-of-type { color: #ff4f6d; }
-.orderbook-row span { position: relative; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.orderbook-row span:nth-child(3),
-.orderbook-row span:nth-child(4) { text-align: right; color: #cbd5e1; }
-
-.orderbook-last {
-  margin: 9px 0;
-  border: 1px solid rgba(24,255,138,.2);
-  border-radius: 14px;
-  background: rgba(24,255,138,.08);
-  padding: 9px;
-  text-align: center;
+.orderbook-side + .orderbook-side {
+  border-left: 1px solid rgba(255,255,255,.08);
 }
 
-.orderbook-last p {
-  color: #94a3b8;
+.orderbook-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.orderbook-side.is-buy .orderbook-side-head { color: #18ff8a; }
+.orderbook-side.is-sell .orderbook-side-head { color: #ff4f6d; }
+
+.orderbook-side-columns,
+.orderbook-row {
+  display: grid;
+  grid-template-columns: minmax(0,.95fr) minmax(0,.85fr) minmax(0,1fr);
+  gap: 4px;
+  align-items: center;
+}
+
+.orderbook-side-columns {
+  padding: 0 6px 7px;
+  color: #64748b;
   font-size: 9px;
   font-weight: 900;
   text-transform: uppercase;
 }
 
-.orderbook-last strong {
-  display: block;
-  margin-top: 2px;
-  color: #18ff8a;
-  font-size: 18px;
-  font-weight: 900;
+.orderbook-side.is-buy .orderbook-side-columns,
+.orderbook-side.is-buy .orderbook-row {
+  text-align: right;
 }
+
+.orderbook-side.is-sell .orderbook-side-columns,
+.orderbook-side.is-sell .orderbook-row {
+  text-align: left;
+}
+
+.orderbook-side-rows {
+  display: grid;
+  gap: 4px;
+}
+
+.orderbook-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  min-height: 28px;
+  padding: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.orderbook-row i {
+  position: absolute;
+  inset-block: 0;
+  opacity: .18;
+}
+
+.orderbook-row.is-buy i {
+  left: 0;
+  background: linear-gradient(90deg,rgba(24,255,138,.95),rgba(24,255,138,.08));
+}
+
+.orderbook-row.is-sell i {
+  right: 0;
+  background: linear-gradient(270deg,rgba(255,79,109,.95),rgba(255,79,109,.08));
+}
+
+.orderbook-row.is-buy span:last-of-type { color: #18ff8a; }
+.orderbook-row.is-sell span:first-of-type { color: #ff4f6d; }
+.orderbook-row span { position: relative; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orderbook-row span:not(:first-of-type):not(:last-of-type) { color: #cbd5e1; }
+.orderbook-side.is-buy .orderbook-row span:first-of-type,
+.orderbook-side.is-sell .orderbook-row span:last-of-type { color: #94a3b8; }
 
 .orderbook-empty {
   display: grid;
@@ -1125,6 +1181,24 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
   color: #94a3b8;
   font-size: 12px;
   font-weight: 800;
+}
+
+@media (max-width: 420px) {
+  .orderbook-body { padding: 10px 8px; }
+  .orderbook-side { padding: 9px 5px 10px; }
+  .orderbook-side-columns,
+  .orderbook-row {
+    gap: 2px;
+  }
+  .orderbook-side-columns {
+    padding-inline: 3px;
+    font-size: 8px;
+  }
+  .orderbook-row {
+    min-height: 26px;
+    padding: 5px 3px;
+    font-size: 9px;
+  }
 }
 
 .orderbook-pressure {

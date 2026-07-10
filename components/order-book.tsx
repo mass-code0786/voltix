@@ -36,23 +36,27 @@ export function OrderBookPanel({symbol="BTCUSDT"}:{symbol?:string}){
     void loadBook();void loadTrades();void loadTicker();connect();
     return()=>{active=false;if(reconnectTimer)clearTimeout(reconnectTimer);source?.close();};
   },[symbol]);
-  const asks=useMemo(()=>(book?.asks??[]).slice(0,10).sort((a,b)=>b[0]-a[0]),[book]);
-  const bids=useMemo(()=>(book?.bids??[]).slice(0,10),[book]);
+  const asks=useMemo(()=>(book?.asks??[]).slice().sort((a,b)=>a[0]-b[0]).slice(0,10),[book]);
+  const bids=useMemo(()=>(book?.bids??[]).slice().sort((a,b)=>b[0]-a[0]).slice(0,10),[book]);
   const lastPrice=ticker?.price?ticker.price:(book&&book.bids[0]&&book.asks[0]?(book.bids[0][0]+book.asks[0][0])/2:null);
   const hasBook=asks.length>0||bids.length>0;
   const pressure=useMemo(()=>{const recent=trades.slice(0,30);const buy=recent.filter(trade=>trade.side==="BUY").reduce((sum,trade)=>sum+trade.quoteQty,0);const sell=recent.filter(trade=>trade.side==="SELL").reduce((sum,trade)=>sum+trade.quoteQty,0);const total=Math.max(buy+sell,1);return {buy,sell,buyPct:(buy/total)*100,sellPct:(sell/total)*100};},[trades]);
-  const maxTotal=Math.max(...[...asks,...bids].map(([price,amount])=>price*amount),1);
+  const maxBidTotal=Math.max(...bids.map(([price,amount])=>price*amount),1);
+  const maxAskTotal=Math.max(...asks.map(([price,amount])=>price*amount),1);
   return <section className="orderbook-card">
-    <div className="orderbook-head"><div><h3>Order Book</h3><p>{symbol.replace("USDT","/USDT")} live depth</p></div><span>Live</span></div>
+    <div className="orderbook-head"><div><h3>Order Book</h3><p>{symbol.replace("USDT","/USDT")} live depth</p><p className="orderbook-last-inline">Last Price: <b>{lastPrice!==null?formatPrice(lastPrice):"--"}</b></p></div><span>Live</span></div>
     <div className="orderbook-body">
-      <div className="orderbook-columns"><span>Price</span><span className="text-right">Amount</span><span className="text-right">Total</span></div>
-      {hasBook?<><OrderRows label="Sell" rows={asks} tone="sell" maxTotal={maxTotal}/><div className="orderbook-last"><p>Last Price</p><strong>{lastPrice!==null?formatPrice(lastPrice):"--"}</strong></div><OrderRows label="Buy" rows={bids} tone="buy" maxTotal={maxTotal}/></>:<div className="orderbook-empty">Connecting to Binance depth...</div>}
+      {hasBook?<div className="orderbook-split"><OrderRows label="Buy" rows={bids} tone="buy" maxTotal={maxBidTotal}/><OrderRows label="Sell" rows={asks} tone="sell" maxTotal={maxAskTotal}/></div>:<div className="orderbook-empty">Connecting to Binance depth...</div>}
       <div className="orderbook-pressure"><div><span>Buy/Sell Pressure</span><b>{pressure.buyPct.toFixed(0)}% / {pressure.sellPct.toFixed(0)}%</b></div><div className="flex h-2 overflow-hidden rounded-full bg-[#ff4f6d]/20"><i className="bg-[#18ff8a]" style={{width:`${pressure.buyPct}%`}}/><i className="bg-[#ff4f6d]" style={{width:`${pressure.sellPct}%`}}/></div></div>
       <div className="recent-trades"><div className="orderbook-columns"><span>Price</span><span className="text-right">Amount</span><span className="text-right">Time</span></div><div>{trades.slice(0,12).map(trade=><div key={trade.id} className="recent-trade-row"><span className={trade.side==="BUY"?"text-[#18ff8a]":"text-[#ff4f6d]"}>{formatPrice(trade.price)}</span><span>{trade.qty.toFixed(5)}</span><span>{new Date(trade.time).toLocaleTimeString("en-US",{hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"})}</span></div>)}</div></div>
     </div>
   </section>;
 }
 
-function OrderRows({label,rows,tone,maxTotal}:{label:"Buy"|"Sell";rows:[number,number][];tone:"buy"|"sell";maxTotal:number}){return <div className="space-y-1">{rows.map(([price,amount])=>{const total=price*amount;return <div key={`${label}-${price}-${amount}`} className={`orderbook-row ${tone==="buy"?"is-buy":"is-sell"}`}><i style={{width:`${Math.min(100,(total/maxTotal)*100)}%`}}/><span>{formatPrice(price)}</span><span>{amount.toFixed(3)}</span><span>{formatQty(total)}</span></div>;})}</div>}
+function OrderRows({label,rows,tone,maxTotal}:{label:"Buy"|"Sell";rows:[number,number][];tone:"buy"|"sell";maxTotal:number}){const isBuy=tone==="buy";return <div className={`orderbook-side is-${tone}`}>
+  <div className="orderbook-side-head"><span>{label} Orders</span></div>
+  <div className="orderbook-side-columns">{isBuy?<><span>Total</span><span>Amount</span><span>Price</span></>:<><span>Price</span><span>Amount</span><span>Total</span></>}</div>
+  <div className="orderbook-side-rows">{rows.map(([price,amount])=>{const total=price*amount;const depth=Math.min(100,(total/maxTotal)*100);return <div key={`${label}-${price}-${amount}`} className={`orderbook-row is-${tone}`}><i style={{width:`${depth}%`}}/>{isBuy?<><span>{formatQty(total)}</span><span>{amount.toFixed(3)}</span><span>{formatPrice(price)}</span></>:<><span>{formatPrice(price)}</span><span>{amount.toFixed(3)}</span><span>{formatQty(total)}</span></>}</div>;})}</div>
+</div>}
 const formatPrice=(value:number)=>value<1?value.toFixed(6):value.toLocaleString("en-US",{maximumFractionDigits:2});
 const formatQty=(value:number)=>new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:2}).format(value);
