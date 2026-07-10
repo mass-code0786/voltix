@@ -957,6 +957,7 @@ html.voltix-capacitor .fixed.inset-x-4.bottom-24 {
 .tradingview-chart-card {
   display: flex;
   flex-direction: column;
+  min-height: clamp(350px, 50vh, 480px);
 }
 
 .tradingview-chart-shell {
