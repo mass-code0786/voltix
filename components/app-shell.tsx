@@ -1107,7 +1107,7 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
           {kycApproved&&<CheckCircle2 size={14} className="shrink-0 text-[#18ff8a]" fill="rgba(24,255,138,.18)" />}
         </div>
         <div className="mt-1 flex items-center gap-1.5">
-          <span className="flex h-5 items-center rounded-full border border-[#9b5cff]/35 bg-[#9b5cff]/12 px-2 text-[8px] font-black text-[#c9aeff]">{currentUser.vipRank || "VIP 0"}</span>
+          <span className="flex h-5 items-center rounded-full border border-[#9b5cff]/35 bg-[#9b5cff]/12 px-2 text-[8px] font-black text-[#c9aeff]">{currentUser.vipRank || "—"}</span>
           <span className={`flex h-5 items-center rounded-full border px-2 text-[8px] font-black ${kycApproved?"border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]":"border-[#f6c85f]/25 bg-[#f6c85f]/10 text-[#f6c85f]"}`}>{kycApproved?"Verified":"Not Verified"}</span>
         </div>
         <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>

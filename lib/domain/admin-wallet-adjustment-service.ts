@@ -4,7 +4,7 @@ import { createNotification } from "./notification-service";
 import { postBalancedJournal } from "./ledger";
 import { ensureUserWalletAccounts } from "./user-wallets";
 import { displayWalletName } from "@/lib/wallet-labels";
-import { refreshUserVipRank } from "./vip-rank-service";
+import { recalculateVipRanksForUserAndUplines } from "./vip-rank-service";
 
 type UserWallet = Extract<WalletType, "SPOT" | "FUTURES" | "AI">;
 type AdjustmentAction = "CREDIT" | "DEBIT";
@@ -66,7 +66,7 @@ export async function adjustAdminWallet(input: {
 
     if (input.action === "CREDIT") {
       await creditWalletBalance(tx, user.id, input.walletType, input.amount);
-      if ((input.walletType === "SPOT" && depositId) || input.walletType === "AI") await refreshUserVipRank(user.id, tx);
+      if (input.walletType === "SPOT" && depositId) await recalculateVipRanksForUserAndUplines(user.id, tx);
     } else {
       await debitWalletBalance(tx, user.id, input.walletType, input.amount);
     }

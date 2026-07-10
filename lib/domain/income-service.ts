@@ -3,14 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { postBalancedJournal } from "./ledger";
 import { settleDueCopyTrades } from "./trade-service";
 import { createNotification } from "./notification-service";
+import { runVipSalaryJob } from "./vip-salary-service";
 
 const REFERRAL_LEVEL_1 = new Prisma.Decimal("0.05");
 const REFERRAL_LEVEL_2 = new Prisma.Decimal("0.01");
 const BOT_DIRECT_RATE = new Prisma.Decimal("0.10");
-const vipSalaryByRank: Record<string, Prisma.Decimal> = {
-  VIP: new Prisma.Decimal(process.env.VOLTIX_VIP_SALARY_VIP ?? 0),
-  PRO: new Prisma.Decimal(process.env.VOLTIX_VIP_SALARY_PRO ?? 0),
-};
 
 export async function getUserIncomeHistory(userId: string) {
   const incomes = await prisma.income.findMany({
@@ -104,37 +101,6 @@ export async function postBotSubscriptionCommission(input: { buyerUserId: string
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function runVipSalaryJob(now = new Date()) {
-  if (!isVipSalaryDay(now)) return { due: false, paid: 0 };
-  const period = vipSalaryPeriod(now);
-  const users = await prisma.user.findMany({ where: { status: "ACTIVE", vipRank: { not: "NONE" } }, select: { id: true, vipRank: true } });
-  let paid = 0;
-  for (const user of users) {
-    const amount = vipSalaryByRank[user.vipRank.toUpperCase()] ?? new Prisma.Decimal(0);
-    if (amount.lte(0)) continue;
-    const qualified = await verifyVipQualification(user.id, user.vipRank);
-    if (!qualified) continue;
-    await prisma.$transaction(async (tx) => {
-      await postIncome(tx, {
-        userId: user.id,
-        type: "VIP_SALARY",
-        sourceType: "VIP_SALARY",
-        sourceId: period,
-        amount,
-        memo: `VIP salary ${period}`,
-        auditAction: "VIP_SALARY_PAID",
-        metadata: { vipRank: user.vipRank, period },
-      });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }).then(() => { paid += 1; }).catch(() => null);
-  }
-  return { due: true, period, paid };
-}
-
-async function verifyVipQualification(userId: string, vipRank: string) {
-  if (!vipRank || vipRank === "NONE") return false;
-  const activePackage = await prisma.userPackage.findFirst({ where: { userId, status: "ACTIVE" }, select: { id: true } });
-  return Boolean(activePackage);
-}
 
 async function postIncome(tx: Prisma.TransactionClient, input: { userId: string; type: IncomeType; sourceType: string; sourceId: string; amount: Prisma.Decimal; memo: string; auditAction: string; actorId?: string; metadata?: Prisma.InputJsonValue }) {
   if (input.amount.lte(0)) return null;
@@ -175,16 +141,6 @@ async function postIncome(tx: Prisma.TransactionClient, input: { userId: string;
     data: { actorId: input.actorId ?? input.userId, actorType: input.actorId ? "ADMIN" : "SYSTEM", action: input.auditAction, entityType: "Income", entityId: income.id, metadata: input.metadata ?? {} },
   });
   return income;
-}
-
-function isVipSalaryDay(now: Date) {
-  const day = now.getUTCDate();
-  return day === 1 || day === 16;
-}
-
-function vipSalaryPeriod(now: Date) {
-  const half = now.getUTCDate() < 16 ? "01" : "16";
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${half}`;
 }
 
 function formatIncome(income: { id: string; type: IncomeType; sourceType: string; sourceId: string; amount: Prisma.Decimal; createdAt: Date; user: { name: string; uid: string } }) {

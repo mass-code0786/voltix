@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getDashboardSnapshot } from "@/lib/domain/dashboard-service";
-import { refreshUserVipRank } from "@/lib/domain/vip-rank-service";
+import { recalculateVipRanksForUserAndUplines } from "@/lib/domain/vip-rank-service";
 import { prisma } from "@/lib/prisma";
 
 const emptyDashboard = {
@@ -51,8 +51,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ authenticated: false, dashboard: emptyDashboard }, { status: 401 });
   }
 
-  await refreshUserVipRank(user.id);
+  const vip = (await recalculateVipRanksForUserAndUplines(user.id)).find(result => result.userId === user.id) ?? null;
   const origin = new URL(request.url).origin;
   const dashboard = await getDashboardSnapshot(prisma, user.id, origin);
-  return NextResponse.json({ authenticated: true, userId: user.id, dashboard });
+  return NextResponse.json({ authenticated: true, userId: user.id, dashboard: { ...dashboard, user: { ...dashboard.user, ...vip } } });
 }

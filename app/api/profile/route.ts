@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeLanguage } from "@/lib/profile-options";
 import { auditSuccess } from "@/lib/audit";
 import { buildReferralLink } from "@/lib/app-url";
-import { refreshUserVipRank } from "@/lib/domain/vip-rank-service";
+import { recalculateVipRanksForUserAndUplines } from "@/lib/domain/vip-rank-service";
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -19,7 +19,7 @@ function referralLink(uid: string | null | undefined) {
 }
 
 async function profilePayload(userId: string) {
-  await refreshUserVipRank(userId);
+  const vip = (await recalculateVipRanksForUserAndUplines(userId)).find(result => result.userId === userId) ?? null;
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -49,7 +49,14 @@ async function profilePayload(userId: string) {
     email: user.email,
     country: user.country,
     language: user.language,
-    vipRank: user.vipRank,
+    vipRank: vip?.vipRank ?? user.vipRank,
+    vipLabel: vip?.vipLabel ?? user.vipRank,
+    vipSalary: vip?.vipSalary ?? 0,
+    qualifiedDirects: vip?.qualifiedDirects ?? 0,
+    qualifiedTeamSize: vip?.qualifiedTeamSize ?? 0,
+    nextRank: vip?.nextRank ?? null,
+    nextRankProgress: vip?.nextRankProgress ?? 100,
+    missingConditions: vip?.missingConditions ?? [],
     referralUid: user.uid,
     referralLink: referralLink(user.uid),
     memberSince: user.joinedAt.toISOString(),

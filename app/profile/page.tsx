@@ -44,6 +44,8 @@ type Profile = {
   country: string;
   language: string;
   vipRank: string;
+  nextRank: string | null;
+  nextRankProgress: number;
   referralUid: string | null;
   referralLink: string | null;
   memberSince: string;
@@ -172,8 +174,8 @@ export default function ProfilePage() {
   const referralIncome = Number(income?.incomes?.filter(row => ["DIRECT","LEVEL","BOT_COMMISSION"].includes(row.type ?? "")).reduce((sum,row)=>sum+Number(row.amount ?? 0),0) ?? 0);
   const teamSize = Number(team?.stats?.totalNetworkCount ?? dashboard?.team?.stats?.totalNetworkCount ?? 0);
   const currentVip = profile?.vipRank?.trim() || "—";
-  const nextVip = currentVip.match(/\d+/) ? `VIP ${Number(currentVip.match(/\d+/)?.[0] ?? 0) + 1}` : "—";
-  const vipProgress = 0;
+  const nextVip = profile?.nextRank ?? "Max level";
+  const vipProgress = Number(profile?.nextRankProgress ?? 0);
   const displayProfile = useMemo(() => {
     if (!profile) return null;
     const fallback = buildReferralLink(profile.referralUid || profile.uid, getClientAppOrigin());

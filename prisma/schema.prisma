@@ -139,6 +139,13 @@ enum AuditStatus {
   WARNING
 }
 
+enum VipSalaryPayoutStatus {
+  PENDING
+  PROCESSING
+  CREDITED
+  FAILED
+}
+
 model User {
   id                    String           @id @default(cuid())
   email                 String           @unique
@@ -150,7 +157,9 @@ model User {
   passwordHash          String
   transactionPinHash    String?
   transactionPinSetAt   DateTime?
-  vipRank               String           @default("NONE")
+  vipRank               String           @default("VIP 0")
+  vipAchievedAt         DateTime?
+  vipUpdatedAt          DateTime?
   role                  Role             @default(USER)
   status                UserStatus       @default(ACTIVE)
   referredById          String?
@@ -180,6 +189,7 @@ model User {
   assignedCodes         TradeCode[]
   trades                CopyTrade[]
   incomes               Income[]
+  vipSalaryPayouts      VipSalaryPayout[]
   kycRequests           KycRequest[]
   reviewedKycRequests   KycRequest[]     @relation("KycReviewer")
   supportTickets        SupportTicket[]
@@ -667,6 +677,26 @@ model Income {
 
   @@unique([userId, type, sourceType, sourceId])
   @@index([userId, createdAt])
+}
+
+model VipSalaryPayout {
+  id                   String                @id @default(cuid())
+  userId               String
+  user                 User                  @relation(fields: [userId], references: [id])
+  vipRank              String
+  grossSalary          Decimal               @db.Decimal(18, 2)
+  payoutDate           DateTime              @db.Date
+  walletType           WalletType            @default(SPOT)
+  transactionReference String                @unique
+  ledgerJournalId      String?               @unique
+  status               VipSalaryPayoutStatus @default(PENDING)
+  failureReason        String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  creditedAt           DateTime?
+
+  @@unique([userId, payoutDate])
+  @@index([status, payoutDate])
 }
 
 model AuditLog {
