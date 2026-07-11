@@ -4,13 +4,18 @@ import { useEffect, useRef, useState } from "react";
 
 const SPLASH_DURATION_MS = 2800;
 const REDUCED_MOTION_DURATION_MS = 650;
-export const POST_LOGIN_SPLASH_PREFIX = "voltix-login-splash:";
+export const POST_LOGIN_SPLASH_KEY = "voltix-login-splash-shown";
+
+export function hasShownPostLoginSplash() {
+  return window.sessionStorage.getItem(POST_LOGIN_SPLASH_KEY) === "true";
+}
+
+export function markPostLoginSplashShown() {
+  window.sessionStorage.setItem(POST_LOGIN_SPLASH_KEY, "true");
+}
 
 export function clearPostLoginSplashFlags() {
-  for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
-    const key = window.sessionStorage.key(index);
-    if (key?.startsWith(POST_LOGIN_SPLASH_PREFIX)) window.sessionStorage.removeItem(key);
-  }
+  window.sessionStorage.removeItem(POST_LOGIN_SPLASH_KEY);
 }
 
 export function AppLaunchSplash({ onComplete }: { onComplete: () => void }) {

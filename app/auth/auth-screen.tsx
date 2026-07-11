@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState, type CSSProperties } from "react";
 import { Eye, EyeOff, Lock, Mail, ShieldCheck, User } from "lucide-react";
 import { SearchableSelect } from "@/components/searchable-select";
-import { AppLaunchSplash, POST_LOGIN_SPLASH_PREFIX } from "@/components/app-launch-splash";
+import { AppLaunchSplash, clearPostLoginSplashFlags, hasShownPostLoginSplash, markPostLoginSplashShown } from "@/components/app-launch-splash";
 import { mobileFetchHeaders, offerBiometricEnrollment } from "@/lib/mobile-native";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 
@@ -37,6 +37,9 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
   const [showPostLoginSplash, setShowPostLoginSplash] = useState(false);
 
   useEffect(() => {
+    // This page is server-gated and renders only without a valid session. A
+    // future successful login therefore represents a new authenticated session.
+    clearPostLoginSplashFlags();
     const params = new URLSearchParams(window.location.search);
     const urlReferralCode = params.get("referralCode")?.trim() || "";
     const urlLocked = params.get("referralLocked") === "1";
@@ -81,10 +84,13 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
       if (!user) throw new Error("Login session could not be verified. Please try again.");
       setAuthStatus("authenticated");
       if (mode === "login") {
-        const sessionId = String(user.id ?? user.uid ?? email).trim().toLowerCase();
-        window.sessionStorage.setItem(`${POST_LOGIN_SPLASH_PREFIX}${sessionId}`, "shown");
-        setShowPostLoginSplash(true);
         await offerBiometricEnrollment(data.mobileSessionToken).catch(() => null);
+        if (!hasShownPostLoginSplash()) {
+          markPostLoginSplashShown();
+          setShowPostLoginSplash(true);
+          return;
+        }
+        navigateToAuthenticatedRoute(returnTo);
         return;
       }
       navigateToAuthenticatedRoute(returnTo);
