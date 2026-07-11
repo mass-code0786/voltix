@@ -786,6 +786,7 @@ export async function getLiveManualTradeWindow(now = new Date()) {
     slotLabel: live.slot.label,
     windowStartAt: live.start,
     windowCloseAt: live.end,
+    settlementDueAt: tradeSlotSettlementTime(live.start),
     serverNow: now,
   };
 }

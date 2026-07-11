@@ -7,6 +7,7 @@ import { rateLimitByUser } from "@/lib/security";
 import { auditFailure, auditSuccess } from "@/lib/audit";
 
 const requestSchema = z.object({
+  signalId: z.string().trim().min(1).max(64),
   slotId: z.string().trim().min(1).max(64),
   selectedPair: z.string().trim().regex(/^[A-Za-z0-9/]{5,24}$/),
   clientRequestId: z.string().trim().min(8).max(120),
@@ -28,17 +29,17 @@ export async function POST(request: Request) {
       device: request.headers.get("user-agent") ?? undefined,
     });
     await auditSuccess({ request, userId: user.id, role: "USER", action: "MANUAL_TRADE_EXECUTE", module: "COPY_TRADE", description: "User executed guided manual trade", newValue: { tradeId: result.trade.id, slotId: parsed.data.slotId, selectedPair: result.selectedPair, idempotent: result.idempotent } }).catch(() => null);
+    const displayPair = `${result.selectedPair.slice(0, -4)}/USDT`;
     return NextResponse.json({
-      trade: {
-        id: result.trade.id,
-        source: result.trade.source,
-        selectedPair: result.selectedPair,
-        amount: Number(result.trade.principalAmount.toString()),
-        status: result.trade.status,
-        startedAt: result.trade.startedAt.toISOString(),
-        windowStartAt: result.trade.windowStartAt?.toISOString() ?? result.trade.startedAt.toISOString(),
-        windowCloseAt: result.trade.windowCloseAt?.toISOString() ?? result.trade.completesAt.toISOString(),
-      },
+      success: true,
+      tradeId: result.trade.id,
+      pair: displayPair,
+      windowLabel: result.windowLabel,
+      stakeAmount: Number(result.trade.principalAmount.toString()),
+      stakePercent: 1,
+      windowCloseAt: result.trade.windowCloseAt?.toISOString() ?? result.trade.completesAt.toISOString(),
+      settlementDueAt: result.trade.creditDueAt.toISOString(),
+      status: "PLACED",
       idempotent: result.idempotent,
     }, { status: result.idempotent ? 200 : 201 });
   } catch (error) {

@@ -670,6 +670,21 @@ model CopyTrade {
   @@index([source, startedAt])
 }
 
+model ManualTradeSignal {
+  id              String   @id @default(cuid())
+  occurrenceKey   String   @unique
+  slotId          String
+  windowLabel     String
+  windowStartAt   DateTime
+  windowCloseAt   DateTime
+  settlementDueAt DateTime
+  pairs           Json
+  recommendedPair String
+  createdAt       DateTime @default(now())
+
+  @@index([slotId, windowStartAt])
+}
+
 model Income {
   id              String     @id @default(cuid())
   userId          String

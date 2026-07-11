@@ -8,8 +8,8 @@ import {
 import { getVipTradeRowForRank } from "./trade-rules";
 
 const MANUAL_PAIR_COUNT = 10;
-export const WRONG_MANUAL_PAIR_MESSAGE = "That is not the recommended pair for this trading window. Please select the assigned pair.";
-export const CLOSED_MANUAL_WINDOW_MESSAGE = "This trading window has closed. Please wait for the next trading window.";
+export const WRONG_MANUAL_PAIR_MESSAGE = "That is not the recommended pair for this trading window. Please select the highlighted pair.";
+export const CLOSED_MANUAL_WINDOW_MESSAGE = "This trading window has ended. Please wait for the next trading window.";
 
 export type ManualSignalPair = {
   symbol: string;
@@ -22,9 +22,30 @@ export async function getManualTradeSignal(userId?: string, now = new Date()) {
   const window = await getLiveManualTradeWindow(now);
   if (!window) return { live: false as const, serverNow: now.toISOString(), message: "No manual trading window is currently active." };
 
-  const pairs = await deterministicPairsForWindow(window.slotId, window.windowStartAt);
-  const seed = `manual-pairs:${window.slotId}:${window.windowStartAt.toISOString()}`;
-  const recommendedPair = pairs[hashString(`${seed}:recommended`) % pairs.length];
+  const occurrenceKey = `manual-signal:${window.slotId}:${window.windowStartAt.toISOString()}`;
+  let stored = await prisma.manualTradeSignal.findUnique({ where: { occurrenceKey } });
+  if (!stored) {
+    const generatedPairs = await deterministicPairsForWindow(window.slotId, window.windowStartAt);
+    const seed = `manual-pairs:${window.slotId}:${window.windowStartAt.toISOString()}`;
+    const generatedRecommendedPair = generatedPairs[hashString(`${seed}:recommended`) % generatedPairs.length];
+    stored = await prisma.manualTradeSignal.upsert({
+      where: { occurrenceKey },
+      update: {},
+      create: {
+        occurrenceKey,
+        slotId: window.slotId,
+        windowLabel: window.slotLabel,
+        windowStartAt: window.windowStartAt,
+        windowCloseAt: window.windowCloseAt,
+        settlementDueAt: window.settlementDueAt,
+        pairs: generatedPairs as unknown as Prisma.InputJsonValue,
+        recommendedPair: generatedRecommendedPair.symbol,
+      },
+    });
+  }
+  const pairs = stored.pairs as unknown as ManualSignalPair[];
+  const recommendedPair = pairs.find(pair => pair.symbol === stored.recommendedPair);
+  if (!recommendedPair || pairs.length !== MANUAL_PAIR_COUNT) throw new Error("Stored manual trade signal is invalid.");
   const existingTrade = userId ? await prisma.copyTrade.findFirst({
     where: { userId, slotId: window.slotId, windowStartAt: window.windowStartAt, windowCloseAt: window.windowCloseAt },
     select: { source: true },
@@ -37,10 +58,13 @@ export async function getManualTradeSignal(userId?: string, now = new Date()) {
 
   return {
     live: true as const,
+    signalId: stored.id,
     serverNow: window.serverNow.toISOString(),
     slotId: window.slotId,
+    windowLabel: stored.windowLabel,
     windowStartAt: window.windowStartAt.toISOString(),
     windowCloseAt: window.windowCloseAt.toISOString(),
+    settlementDueAt: stored.settlementDueAt.toISOString(),
     recommendedPair: recommendedPair.symbol,
     recommendedDisplayPair: recommendedPair.displayPair,
     pairs,
@@ -48,23 +72,23 @@ export async function getManualTradeSignal(userId?: string, now = new Date()) {
   };
 }
 
-export async function placeGuidedManualTrade(input: { userId: string; slotId: string; selectedPair: string; clientRequestId: string; now?: Date; ipAddress?: string; device?: string }) {
+export async function placeGuidedManualTrade(input: { userId: string; signalId: string; slotId: string; selectedPair: string; clientRequestId: string; now?: Date; ipAddress?: string; device?: string }) {
   const now = input.now ?? new Date();
   const selectedPair = normalizePair(input.selectedPair);
   const idempotencyKey = `manual-trade:${input.userId}:${input.clientRequestId}:${selectedPair}`;
-  const existingRequest = await prisma.copyTrade.findUnique({ where: { idempotencyKey } });
-  if (existingRequest) {
-    if (existingRequest.userId !== input.userId) throw new Error("Invalid manual trade request.");
-    return { trade: existingRequest, selectedPair, idempotent: true };
-  }
-
   const signal = await getManualTradeSignal(input.userId, now);
   if (!signal.live) throw new Error(CLOSED_MANUAL_WINDOW_MESSAGE);
-  if (signal.slotId !== input.slotId) throw new Error(CLOSED_MANUAL_WINDOW_MESSAGE);
+  if (signal.signalId !== input.signalId || signal.slotId !== input.slotId) throw new Error(CLOSED_MANUAL_WINDOW_MESSAGE);
 
   if (!signal.pairs.some(pair => pair.symbol === selectedPair)) throw new Error("Selected pair is not available for this trading window.");
   if (selectedPair !== signal.recommendedPair) throw new Error(WRONG_MANUAL_PAIR_MESSAGE);
   if (signal.blockedMessage) throw new Error(signal.blockedMessage);
+
+  const existingRequest = await prisma.copyTrade.findUnique({ where: { idempotencyKey } });
+  if (existingRequest) {
+    if (existingRequest.userId !== input.userId) throw new Error("Invalid manual trade request.");
+    return { trade: existingRequest, selectedPair, windowLabel: signal.windowLabel, idempotent: true };
+  }
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { vipRank: true } });
   const row = getVipTradeRowForRank(user.vipRank);
@@ -82,11 +106,11 @@ export async function placeGuidedManualTrade(input: { userId: string; slotId: st
       idempotencyKey,
       expectedSlotId: signal.slotId,
     });
-    return { trade, selectedPair, idempotent: false };
+    return { trade, selectedPair, windowLabel: signal.windowLabel, idempotent: false };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const repeated = await prisma.copyTrade.findUnique({ where: { idempotencyKey } });
-      if (repeated?.userId === input.userId) return { trade: repeated, selectedPair, idempotent: true };
+      if (repeated?.userId === input.userId) return { trade: repeated, selectedPair, windowLabel: signal.windowLabel, idempotent: true };
     }
     throw error;
   }
