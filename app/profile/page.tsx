@@ -30,6 +30,8 @@ import {
 import { AppHeader, BottomNav } from "@/components/design-system";
 import { SearchableSelect } from "@/components/searchable-select";
 import { buildReferralLink, getClientAppOrigin } from "@/lib/app-url";
+import { getVipIconPath } from "@/lib/vip-icons";
+import { clearPostLoginSplashFlags } from "@/components/app-launch-splash";
 import { clearMobileNativeSession, isVoltixNativeApp, nativeShareReferral } from "@/lib/mobile-native";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 import { usd } from "@/lib/format";
@@ -389,7 +391,7 @@ export default function ProfilePage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Logout failed");
       await clearMobileNativeSession().catch(() => null);
-      window.sessionStorage.removeItem("voltixIntroShown");
+      clearPostLoginSplashFlags();
       setProfile(null);
       setDashboard(null);
       setTeam(null);
@@ -540,7 +542,7 @@ function ProfileHero({profile,initialsText,kycTone,totalBalance,totalIncome,refe
             {profile.kycStatus === "APPROVED" && <CheckCircle2 size={16} className="shrink-0 text-[#18ff8a] drop-shadow-[0_0_10px_rgba(24,255,138,.55)]"/>}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span className="profile-vip-pill">{profile.vipRank || "—"}</span>
+            <span className="profile-vip-pill inline-flex items-center gap-1.5"><img src={getVipIconPath(profile.vipRank)} alt={`${profile.vipRank || "VIP 0"} badge`} className="h-6 w-6 object-contain"/>{profile.vipRank || "VIP 0"}</span>
             <span className={`profile-status-pill ${kycTone}`}>KYC {kycLabel(profile.kycStatus)}</span>
           </div>
           <button onClick={copyUid} className="mt-1 flex max-w-full items-center gap-1.5 text-[11px] font-bold text-slate-400">

@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail, ShieldCheck, User } from "lucide-react";
 import { SearchableSelect } from "@/components/searchable-select";
+import { AppLaunchSplash, POST_LOGIN_SPLASH_PREFIX } from "@/components/app-launch-splash";
 import { mobileFetchHeaders, offerBiometricEnrollment } from "@/lib/mobile-native";
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 
@@ -34,6 +35,7 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPostLoginSplash, setShowPostLoginSplash] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -79,8 +81,11 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
       const user = await refreshAuthenticatedData();
       if (!user) throw new Error("Login session could not be verified. Please try again.");
       if (mode === "login") {
-        window.sessionStorage.removeItem("voltixIntroShown");
+        const sessionId = String(user.id ?? user.uid ?? email).trim().toLowerCase();
+        window.sessionStorage.setItem(`${POST_LOGIN_SPLASH_PREFIX}${sessionId}`, "shown");
+        setShowPostLoginSplash(true);
         await offerBiometricEnrollment(data.mobileSessionToken).catch(() => null);
+        return;
       }
       router.replace(returnTo);
     } catch (err) {
@@ -91,6 +96,10 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
   };
 
   const isRegister = mode === "register";
+
+  if (showPostLoginSplash) {
+    return <><main className="auth-premium-page min-h-screen" aria-hidden="true" /><AppLaunchSplash onComplete={() => router.replace(returnTo)} /></>;
+  }
 
   return (
     <main className="auth-premium-page min-h-screen text-white">

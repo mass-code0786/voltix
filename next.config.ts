@@ -27,7 +27,16 @@ const nextConfig: NextConfig = {
     if (process.env.NODE_ENV === "production") {
       headers.push({ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains; preload" });
     }
-    return [{ source: "/(.*)", headers }];
+    return [
+      { source: "/(.*)", headers },
+      {
+        source: "/downloads/:path*.apk",
+        headers: [
+          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate, max-age=0" },
+          { key: "Content-Type", value: "application/vnd.android.package-archive" },
+        ],
+      },
+    ];
   },
 };
 

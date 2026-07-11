@@ -6,7 +6,7 @@ import {
   ArrowDownLeft, ArrowDownToLine, ArrowLeftRight, ArrowUpRight, BarChart3, Bell,
   Bot, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Copy, Eye, EyeOff, FileClock, FileText, Grid2X2,
   Headphones, Home, Landmark, LineChart, Menu, Network, Plus, QrCode, Search, SlidersHorizontal,
-  Send, Settings, Share2, ShieldCheck, Star,
+  RefreshCw, Send, Settings, Share2, ShieldCheck, Star,
   Trophy, Users, Wallet, X, Zap,
 } from "lucide-react";
 import { CoinMark } from "./coin-mark";
@@ -30,6 +30,9 @@ import {
 import type { Coin } from "@/lib/market-defaults";
 import { compact, usd } from "@/lib/format";
 import { useLiveTickers } from "@/lib/use-market-data";
+import { formatLedgerStatus } from "@/lib/format-ledger-status";
+import { clearPostLoginSplashFlags } from "@/components/app-launch-splash";
+import { getVipIconPath } from "@/lib/vip-icons";
 import { currencyConfigForCountry, formatLocalCurrency } from "@/lib/local-currency";
 import { getTranslator } from "@/lib/i18n";
 import { getKycDocumentTypes, kycDocumentRequiresBackPhoto } from "@/lib/kyc-document-types";
@@ -311,7 +314,7 @@ function mapLedgerHistory(rows: WalletHistoryRecord[]): WalletActivity[] {
     row.direction === "CREDIT" ? ArrowDownLeft : ArrowUpRight,
     row.title || `${row.walletType} movement`,
     `${row.signedAmount >= 0 ? "+" : "-"}${Math.abs(Number(row.amount)).toFixed(2)} ${row.asset}`,
-    row.status,
+    formatLedgerStatus(row.status),
   ] as WalletActivity);
 }
 
@@ -329,6 +332,7 @@ export default function AppShell() {
   const [copyTradeCounts, setCopyTradeCounts] = useState<CopyTradeCounts>(defaultCopyTradeCounts);
   const [vipTradeRows, setVipTradeRows] = useState<VipTradeRow[]>([]);
   const [marketCoins, setMarketCoins] = useState<AppCoin[]>([]);
+  const marketCoinsRef = useRef<AppCoin[]>([]);
   const [marketCoinsLoading, setMarketCoinsLoading] = useState(true);
   const [marketCoinsError, setMarketCoinsError] = useState("");
   const [walletAssets, setWalletAssets] = useState<AppCoin[]>([]);
@@ -351,9 +355,12 @@ export default function AppShell() {
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [walletLoading, setWalletLoading] = useState(true);
+  const [walletRefreshing, setWalletRefreshing] = useState(false);
   const dashboardRequestRef = useRef(0);
   const walletRequestRef = useRef(0);
   const walletAbortRef = useRef<AbortController | null>(null);
+  const walletLoadedRef = useRef(false);
+  const walletManualRefreshRef = useRef(false);
   const [aiSubscription, setAiSubscription] = useState<AiSubscriptionStatus | null>(null);
   const [aiPurchaseConfirmOpen, setAiPurchaseConfirmOpen] = useState(false);
   const aiPurchaseConfirmationRef = useRef<((confirmed: boolean) => void) | null>(null);
@@ -361,6 +368,10 @@ export default function AppShell() {
   const [userCountry, setUserCountry] = useState("United States");
   const [userLanguage, setUserLanguage] = useState("en");
   const t = useMemo(() => getTranslator(userLanguage), [userLanguage]);
+
+  useEffect(() => {
+    marketCoinsRef.current = marketCoins;
+  }, [marketCoins]);
 
   useEffect(() => {
     try {
@@ -465,7 +476,7 @@ export default function AppShell() {
     walletAbortRef.current?.abort();
     const controller = new AbortController();
     walletAbortRef.current = controller;
-    setWalletLoading(Boolean(user));
+    if (user && !walletLoadedRef.current) setWalletLoading(true);
     if (!user) {
       setWalletAssets([]);
       setP2PAssets([]);
@@ -474,26 +485,31 @@ export default function AppShell() {
       setFuturesBalance(0);
       setAiWalletBalance(0);
       setWalletLoading(false);
+      walletLoadedRef.current = false;
       return;
     }
-    const response = await fetch("/api/assets", { cache: "no-store", credentials: "include", signal: controller.signal });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Assets request failed");
-    const assets = Array.isArray(data.assets) ? data.assets as AssetRecord[] : [];
-    const totals = data.totals as AssetTotals;
-    const history = Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
-    if (requestId !== walletRequestRef.current || controller.signal.aborted) return;
-    setWalletAssets(mergeAssetRecords(marketCoins, assets));
-    setP2PAssets(assets.filter(asset => asset.walletType === "SPOT" && asset.enabled && Number(asset.balance ?? 0) > 0).map(asset => ({ symbol: asset.symbol, name: asset.name, balance: Number(asset.balance ?? 0), enabled: asset.enabled })));
-    setAssetTotals(totals ?? emptyAssetTotals);
-    setFuturesBalance(Number(totals?.total?.futures ?? 0));
-    setAiWalletBalance(Number(totals?.total?.aiWallet ?? 0));
-    setAiTradeTransferred(Number(totals?.aiWallet?.principal ?? 0));
-    setAiTradePrincipalLocked(Number(totals?.aiWallet?.principal ?? 0));
-    setAiTradeProfitEarned(Number(totals?.aiWallet?.incomeEarned ?? 0));
-    setWalletActivity(mapLedgerHistory(history));
-    setWalletLoading(false);
-  }, [marketCoins]);
+    try {
+      const response = await fetch("/api/assets", { cache: "no-store", credentials: "include", signal: controller.signal });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Assets request failed");
+      const assets = Array.isArray(data.assets) ? data.assets as AssetRecord[] : [];
+      const totals = data.totals as AssetTotals;
+      const history = Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
+      if (requestId !== walletRequestRef.current || controller.signal.aborted) return;
+      setWalletAssets(mergeAssetRecords(marketCoinsRef.current, assets));
+      setP2PAssets(assets.filter(asset => asset.walletType === "SPOT" && asset.enabled && Number(asset.balance ?? 0) > 0).map(asset => ({ symbol: asset.symbol, name: asset.name, balance: Number(asset.balance ?? 0), enabled: asset.enabled })));
+      setAssetTotals(totals ?? emptyAssetTotals);
+      setFuturesBalance(Number(totals?.total?.futures ?? 0));
+      setAiWalletBalance(Number(totals?.total?.aiWallet ?? 0));
+      setAiTradeTransferred(Number(totals?.aiWallet?.principal ?? 0));
+      setAiTradePrincipalLocked(Number(totals?.aiWallet?.principal ?? 0));
+      setAiTradeProfitEarned(Number(totals?.aiWallet?.incomeEarned ?? 0));
+      setWalletActivity(mapLedgerHistory(history));
+      walletLoadedRef.current = true;
+    } finally {
+      if (requestId === walletRequestRef.current) setWalletLoading(false);
+    }
+  }, []);
 
   const refreshNotifications = useCallback(async (user: CurrentUser | null) => {
     if (!user) {
@@ -515,6 +531,9 @@ export default function AppShell() {
     walletRequestRef.current += 1;
     walletAbortRef.current?.abort();
     setWalletLoading(false);
+    setWalletRefreshing(false);
+    walletLoadedRef.current = false;
+    walletManualRefreshRef.current = false;
     setDashboardLoading(false);
     setFuturesBalance(0);
     setAiWalletBalance(0);
@@ -541,7 +560,7 @@ export default function AppShell() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Logout failed");
       await clearMobileNativeSession().catch(() => null);
-      window.sessionStorage.removeItem("voltixIntroShown");
+      clearPostLoginSplashFlags();
       clearAuthenticatedState();
       setMenu(false);
       window.location.replace("/");
@@ -601,15 +620,10 @@ export default function AppShell() {
   useEffect(() => {
     if (!currentUser) return;
     const timer = window.setInterval(() => {
-      refreshCopyTradeStatus(currentUser)
-        .then(() => Promise.all([
-          refreshAssets(currentUser),
-          refreshDashboard(currentUser),
-        ]))
-        .catch(() => {});
+      refreshCopyTradeStatus(currentUser).catch(() => {});
     }, 20_000);
     return () => window.clearInterval(timer);
-  }, [currentUser, refreshAssets, refreshCopyTradeStatus, refreshDashboard]);
+  }, [currentUser, refreshCopyTradeStatus]);
 
   useEffect(() => {
     refreshAiSubscription(currentUser)
@@ -660,13 +674,36 @@ export default function AppShell() {
         refreshNotifications(currentUser),
       ]);
     };
+    const reconnect = () => {
+      if (!currentUser) return;
+      void Promise.allSettled([
+        refreshMe(),
+        refreshCopyTradeStatus(currentUser),
+        refreshAiSubscription(currentUser),
+        refreshNotifications(currentUser),
+      ]);
+    };
     window.addEventListener("voltix:native-refresh", refresh);
-    window.addEventListener("voltix:native-reconnect", refresh);
+    window.addEventListener("voltix:native-reconnect", reconnect);
     return () => {
       window.removeEventListener("voltix:native-refresh", refresh);
-      window.removeEventListener("voltix:native-reconnect", refresh);
+      window.removeEventListener("voltix:native-reconnect", reconnect);
     };
   }, [currentUser, refreshAiSubscription, refreshAssets, refreshCopyTradeStatus, refreshDashboard, refreshMe, refreshNotifications]);
+
+  const manualRefreshWallet = useCallback(async () => {
+    if (!currentUser || walletManualRefreshRef.current) return;
+    walletManualRefreshRef.current = true;
+    setWalletRefreshing(true);
+    try {
+      await Promise.all([refreshAssets(currentUser), refreshDashboard(currentUser)]);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Wallet refresh failed");
+    } finally {
+      walletManualRefreshRef.current = false;
+      setWalletRefreshing(false);
+    }
+  }, [currentUser, notify, refreshAssets, refreshDashboard]);
 
   const syncNavigation = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -889,23 +926,13 @@ export default function AppShell() {
     }
   }, [currentUser, unreadNotifications]);
 
-  const deleteNotification = useCallback(async (id: string) => {
-    if (!currentUser) return;
-    const response = await fetch(`/api/notifications/${id}`, { method: "DELETE", credentials: "include" });
-    const data = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setNotifications(current => current.filter(notification => notification.id !== id));
-      setUnreadNotifications(Number(data.unreadCount ?? 0));
-    }
-  }, [currentUser]);
-
   const screen = {
     home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("aiTrade")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} dashboardLoading={dashboardLoading} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} aiWalletBalance={aiWalletBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} loading={marketCoinsLoading} error={marketCoinsError} />,
     trade: <TradeWorkspace category={tradeCategory} coins={marketCoins} loading={marketCoinsLoading} error={marketCoinsError} />,
     aiTrade: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} aiWalletBalance={aiWalletBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
-    wallet: <WalletScreen notify={notify} assets={walletAssets} loading={walletLoading} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} aiWalletBalance={aiWalletBalance} aiTradeProfitEarned={aiTradeProfitEarned} aiTradeTarget={aiTradePrincipalLocked*.6} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
+    wallet: <WalletScreen notify={notify} assets={walletAssets} loading={walletLoading} refreshing={walletRefreshing} onRefresh={manualRefreshWallet} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} aiWalletBalance={aiWalletBalance} aiTradeProfitEarned={aiTradeProfitEarned} aiTradeTarget={aiTradePrincipalLocked*.6} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
 
   return (
@@ -939,7 +966,7 @@ export default function AppShell() {
             onNotifications={() => { if (!currentUser) { openAuthPage("login"); return; } setNotificationOpen(value => !value); setMenu(false); refreshNotifications(currentUser).catch(() => {}); }}
             onMenu={() => { setMenu(!menu); setNotificationOpen(false); }}
           />
-          {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} deleteNotification={deleteNotification} />}
+          {notificationOpen && <NotificationMenu close={() => setNotificationOpen(false)} notifications={notifications} unreadCount={unreadNotifications} markRead={markNotificationsRead} />}
           {menu && <ProfileMenu close={() => setMenu(false)} notify={notify} user={currentUser} openLogin={()=>{setMenu(false);openAuthPage("login");}} openRegister={()=>{setMenu(false);openAuthPage("register");}} logout={logout} openVerification={()=>{setMenu(false);if(!currentUser){openAuthPage("login");return;}setVerificationOpen(true);}} openHelp={()=>{setMenu(false);setHelpOpen(true);}} />}
           <div className={`mx-auto ${tab === "wallet" ? "max-w-[430px] px-0" : "max-w-[420px] px-4"} lg:max-w-6xl lg:px-8 ${tab === "home" ? "pb-20 pt-1 lg:pb-8 lg:pt-1" : tab === "aiTrade" || tab === "markets" ? "pb-36 pt-1 lg:py-8" : tab === "wallet" ? "pb-44 pt-1 lg:py-8" : "pb-20 pt-2.5 lg:py-8"}`}>{screen}</div>
         </main>
@@ -991,8 +1018,8 @@ function normalizeTrade(raw: ActiveCopyTrade & { startedAt?: string; remainingTi
   };
 }
 
-function NotificationMenu({ close, notifications, unreadCount, markRead, deleteNotification }: { close: () => void; notifications: NotificationItem[]; unreadCount: number; markRead: () => void; deleteNotification: (id: string) => void }) {
-  return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => { const target=notificationTarget(notification); return <div key={notification.id} onClick={()=>{if(target){close();window.location.href=target;}}} className={`rounded-xl p-3 ${target?"cursor-pointer":""} ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p><p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div><button onClick={event => { event.stopPropagation(); deleteNotification(notification.id); }} aria-label="Delete notification" className="rounded-lg p-1 text-slate-600 hover:bg-white/5 hover:text-danger"><X size={14}/></button></div></div>}) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
+function NotificationMenu({ close, notifications, unreadCount, markRead }: { close: () => void; notifications: NotificationItem[]; unreadCount: number; markRead: () => void }) {
+  return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => { const target=notificationTarget(notification); return <div key={notification.id} onClick={()=>{if(target){close();window.location.href=target;}}} className={`rounded-xl p-3 ${target?"cursor-pointer":""} ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p><p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div></div></div>}) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
 }
 
 function notificationTarget(notification: NotificationItem) {
@@ -1087,7 +1114,7 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
           {kycApproved&&<CheckCircle2 size={14} className="shrink-0 text-[#18ff8a]" fill="rgba(24,255,138,.18)" />}
         </div>
         <div className="mt-1 flex items-center gap-1.5">
-          <span className="flex h-5 items-center rounded-full border border-[#9b5cff]/35 bg-[#9b5cff]/12 px-2 text-[8px] font-black text-[#c9aeff]">{currentUser.vipRank || "—"}</span>
+          <span className="flex h-7 items-center gap-1 rounded-full border border-[#18ff8a]/30 bg-[#18ff8a]/10 px-1.5 pr-2 text-[8px] font-black text-[#c9ffe4]"><img src={getVipIconPath(currentUser.vipRank)} alt={`${currentUser.vipRank || "VIP 0"} badge`} className="h-6 w-6 object-contain"/>{currentUser.vipRank || "VIP 0"}</span>
           <span className={`flex h-5 items-center rounded-full border px-2 text-[8px] font-black ${kycApproved?"border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]":"border-[#f6c85f]/25 bg-[#f6c85f]/10 text-[#f6c85f]"}`}>{kycApproved?"Verified":"Not Verified"}</span>
         </div>
         <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>
@@ -1773,6 +1800,7 @@ function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,aiW
       <div className="relative z-10">
         <h1>AI Trade</h1>
         <p>Smart AI. Auto Trade. Daily Income.</p>
+        {currentUser&&<div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#18ff8a]/20 bg-black/25 px-2 py-1.5"><img src={getVipIconPath(currentUser.vipRank)} alt={`${currentUser.vipRank || "VIP 0"} badge`} className="h-8 w-8 object-contain"/><span className="text-[10px] font-black text-[#dfffea]">Current {currentUser.vipRank || "VIP 0"}</span></div>}
       </div>
       <AiTradeHeroVisual/>
     </section>
@@ -2070,11 +2098,11 @@ function CopyTradeScreen({activeTrade,aiWalletBalance,tradeRows,startTrade,compl
   };
   return <div className="space-y-5"><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="font-bold">Copy Trade Income</h3><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="p-4 sm:p-5"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="divide-y divide-line/70">{rows.map(row=>{const status=localTradeStatus(row,nowTick);const countdown=tradeCountdownLabel(row,nowTick);const tradeEnabled=isTradeButtonEnabled(row,nowTick);const actionLabel=tradeButtonLabel(row,status,tradeEnabled);return <div key={row.id} className="flex items-center gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black">{displayVipLabel(row.vipRange??row.label)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${status==="LIVE"?"bg-lime/10 text-lime":status==="UPCOMING"?"bg-[#f6c85f]/10 text-[#f6c85f]":"bg-white/5 text-slate-500"}`}>{status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade time: {readableTradeTime(row)}{countdown?` | ${countdown}`:""}</p><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${Number(row.tradeAmount ?? aiWalletBalance*.01).toFixed(2)} | Daily {row.dailyReturnMin??row.dailyPercentMin}% - {row.dailyReturnMax??row.dailyPercentMax}%</p>{!tradeEnabled&&status==="LIVE"&&<p className="mt-1 text-[10px] text-danger">{actionLabel}</p>}</div><button onClick={()=>start(row)} disabled={loadingRow===row.id||!tradeEnabled} className="w-[112px] shrink-0 rounded-lg bg-lime px-3 py-2 text-[10px] font-black leading-tight text-ink disabled:opacity-50">{loadingRow===row.id?"Wait":actionLabel}</button></div>})}</div>}{error&&<p className="border-t border-line px-5 py-3 text-xs text-danger">{error}</p>}</section></div>;
 }
-function WalletScreen({notify,assets,loading,spotBalance,futuresBalance,aiWalletBalance,aiTradeProfitEarned,aiTradeTarget,activity,section,action,balanceVisible,setBalanceVisible,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];loading:boolean;spotBalance:number;futuresBalance:number;aiWalletBalance:number;aiTradeProfitEarned:number;aiTradeTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
+function WalletScreen({notify,assets,loading,refreshing,onRefresh,spotBalance,futuresBalance,aiWalletBalance,aiTradeProfitEarned,aiTradeTarget,activity,section,action,balanceVisible,setBalanceVisible,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];loading:boolean;refreshing:boolean;onRefresh:()=>void;spotBalance:number;futuresBalance:number;aiWalletBalance:number;aiTradeProfitEarned:number;aiTradeTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
  const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+aiWalletBalance;
 if(loading)return <div className="wallet-page -mt-1 min-h-screen" aria-busy="true"><WalletHero/><section className="wallet-glass wallet-total-card animate-pulse"><div className="h-16 w-48 rounded-xl bg-white/10"/></section><section className="wallet-type-grid animate-pulse">{[0,1,2].map(item=><div key={item} className="wallet-glass wallet-type-card h-24"><div className="h-4 w-24 rounded bg-white/10"/></div>)}</section></div>;
 return <div className="wallet-page -mt-1 min-h-screen">
-  <WalletHero/>
+  <WalletHero refreshing={refreshing} onRefresh={onRefresh}/>
   <WalletTotalCard total={total} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
   <WalletTypeCards spot={spotBalance} ai={aiWalletBalance} futures={futuresBalance} balanceVisible={balanceVisible}/>
   <WalletQuickActions onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal} onOpenTransfer={onOpenTransfer} onHistory={()=>onSectionChange("ledger")} onAddressBook={()=>notify("Address book unavailable")}/>
@@ -2086,8 +2114,8 @@ return <div className="wallet-page -mt-1 min-h-screen">
 
 function WalletBalanceRow({label,balance}:{label:string;balance:number}) { return <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5"><p className="text-sm font-bold">{label}</p><p className="text-sm font-black">{balance.toFixed(2)} USDT</p></div> }
 
-function WalletHero() {
-  return <section className="wallet-hero"><div className="relative z-10"><h1>Wallet</h1><p>Manage your assets securely</p></div><WalletHeroSvg/></section>;
+function WalletHero({refreshing,onRefresh}:{refreshing?:boolean;onRefresh?:()=>void}) {
+  return <section className="wallet-hero"><div className="relative z-10"><h1>Wallet</h1><p>Manage your assets securely</p>{onRefresh&&<button type="button" onClick={onRefresh} disabled={refreshing} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#18ff8a]/25 bg-black/25 px-3 py-2 text-[10px] font-black text-[#18ff8a] disabled:cursor-wait" aria-label="Refresh wallet balances and ledger"><RefreshCw size={13} className={refreshing?"animate-spin":""}/>{refreshing?"Refreshing...":"Refresh"}</button>}</div><WalletHeroSvg/></section>;
 }
 
 function WalletHeroSvg() {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, LockKeyhole, ShieldCheck } from "lucide-react";
 import { TransactionPinInput } from "@/components/transaction-pin-input";
+import { clearPostLoginSplashFlags } from "@/components/app-launch-splash";
 
 type SessionInfo = { id: string; createdAt: string; expiresAt: string };
 type TransactionPinStatus = { isSet: boolean; setAt: string | null };
@@ -64,7 +65,7 @@ export default function SecurityPage() {
       setError(data.error || "Logout all failed");
       return;
     }
-    window.sessionStorage.removeItem("voltixIntroShown");
+    clearPostLoginSplashFlags();
     window.location.replace("/");
   };
 

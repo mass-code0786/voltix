@@ -4,21 +4,29 @@ import { useEffect, useRef, useState } from "react";
 
 const SPLASH_DURATION_MS = 2800;
 const REDUCED_MOTION_DURATION_MS = 650;
-export const VOLTIX_INTRO_SHOWN_KEY = "voltixIntroShown";
+export const POST_LOGIN_SPLASH_PREFIX = "voltix-login-splash:";
 
-export function AppLaunchSplash() {
-  const [visible, setVisible] = useState(false);
-  const ownsSessionIntro = useRef(false);
+export function clearPostLoginSplashFlags() {
+  for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.sessionStorage.key(index);
+    if (key?.startsWith(POST_LOGIN_SPLASH_PREFIX)) window.sessionStorage.removeItem(key);
+  }
+}
+
+export function AppLaunchSplash({ onComplete }: { onComplete: () => void }) {
+  const [visible, setVisible] = useState(true);
+  const onCompleteRef = useRef(onComplete);
 
   useEffect(() => {
-    if (!ownsSessionIntro.current && window.sessionStorage.getItem(VOLTIX_INTRO_SHOWN_KEY) === "true") return;
-    if (!ownsSessionIntro.current) {
-      window.sessionStorage.setItem(VOLTIX_INTRO_SHOWN_KEY, "true");
-      ownsSessionIntro.current = true;
-    }
-    setVisible(true);
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const timer = window.setTimeout(() => setVisible(false), reducedMotion ? REDUCED_MOTION_DURATION_MS : SPLASH_DURATION_MS);
+    const timer = window.setTimeout(() => {
+      setVisible(false);
+      onCompleteRef.current();
+    }, reducedMotion ? REDUCED_MOTION_DURATION_MS : SPLASH_DURATION_MS);
     return () => window.clearTimeout(timer);
   }, []);
 

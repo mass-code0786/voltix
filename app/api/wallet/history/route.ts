@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { formatLedgerStatus } from "@/lib/format-ledger-status";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserWalletHistory } from "@/lib/domain/asset-service";
 import { prisma } from "@/lib/prisma";
@@ -33,7 +34,7 @@ export async function GET() {
       title: "Deposit",
       referenceType: "DEPOSIT",
       referenceId: row.id,
-      status: cleanStatus(row.status),
+      status: formatLedgerStatus(row.status),
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
@@ -48,7 +49,7 @@ export async function GET() {
       title: "Withdrawal",
       referenceType: "WITHDRAWAL",
       referenceId: row.id,
-      status: cleanStatus(row.status),
+      status: formatLedgerStatus(row.status),
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
@@ -63,7 +64,7 @@ export async function GET() {
       title: `Transfer ${displayWalletName(row.fromWallet)} to ${displayWalletName(row.toWallet)}`,
       referenceType: "WALLET_TRANSFER",
       referenceId: row.id,
-      status: cleanStatus(row.status),
+      status: formatLedgerStatus(row.status),
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
@@ -81,7 +82,7 @@ export async function GET() {
         title: sent ? `P2P Sent to ${peer.name} / ${peer.uid}` : `P2P Received from ${peer.name} / ${peer.uid}`,
         referenceType: "P2P_TRANSFER",
         referenceId: row.id,
-        status: cleanStatus(row.status),
+        status: formatLedgerStatus(row.status),
         createdAt: row.createdAt.toISOString(),
         sortAt: row.createdAt.toISOString(),
       };
@@ -112,7 +113,7 @@ export async function GET() {
       title: "AI Trade Principal Locked",
       referenceType: "COPY_TRADE",
       referenceId: row.id,
-      status: cleanStatus(row.status),
+      status: formatLedgerStatus(row.status),
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),
@@ -142,7 +143,7 @@ export async function GET() {
       ...row,
       type: "LEDGER",
       title: ledgerTitle(row.referenceType, row.title, row.direction),
-      status: cleanStatus(row.status),
+      status: formatLedgerStatus(row.status),
       sortAt: row.createdAt,
     }));
 
@@ -170,11 +171,4 @@ function ledgerTitle(referenceType: string, memo: string, direction: string) {
   if (referenceType.includes("WITHDRAWAL")) return "Withdrawal";
   if (referenceType.includes("REFERRAL") || memo.toLowerCase().includes("referral")) return "Referral Income";
   return memo || "Wallet Activity";
-}
-
-function cleanStatus(status: string) {
-  if (status === "POSTED" || status === "CREDITED" || status === "COMPLETED" || status === "APPROVED" || status === "INCOME_CREDITED") return "Completed";
-  if (status === "PENDING" || status === "CONFIRMING" || status === "CONFIRMED" || status === "DETECTED") return "Pending";
-  if (status === "REJECTED" || status === "FAILED" || status === "EXPIRED") return "Failed";
-  return status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
 }
