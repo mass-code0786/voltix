@@ -125,6 +125,13 @@ enum NotificationType {
   ADMIN_TRADE_CODE
   ADMIN_BROADCAST
   ADMIN_WALLET_ADJUSTMENT
+  VIP_ACHIEVEMENT_REWARD
+}
+
+enum VipAchievementRewardStatus {
+  PENDING
+  CREDITED
+  FAILED
 }
 
 enum AuditRole {
@@ -190,6 +197,7 @@ model User {
   trades                CopyTrade[]
   incomes               Income[]
   vipSalaryPayouts      VipSalaryPayout[]
+  vipAchievementRewards VipAchievementReward[]
   kycRequests           KycRequest[]
   reviewedKycRequests   KycRequest[]     @relation("KycReviewer")
   supportTickets        SupportTicket[]
@@ -697,6 +705,27 @@ model VipSalaryPayout {
 
   @@unique([userId, payoutDate])
   @@index([status, payoutDate])
+}
+
+model VipAchievementReward {
+  id              String                     @id @default(cuid())
+  userId          String
+  user            User                       @relation(fields: [userId], references: [id])
+  vipRank         Int
+  rewardAmount    Decimal                    @db.Decimal(18, 2)
+  walletType      WalletType                 @default(SPOT)
+  transactionId   String?                    @unique
+  status          VipAchievementRewardStatus @default(PENDING)
+  uniqueReference String                     @unique
+  previousRank    String
+  newRank         String
+  achievedAt      DateTime
+  creditedAt      DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  @@unique([userId, vipRank])
+  @@index([status, achievedAt])
 }
 
 model AuditLog {

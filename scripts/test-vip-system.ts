@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { evaluateVipMetrics, VIP_RULES, vipSalaryForRank } from "../lib/domain/vip-rank-service";
 import { businessDate } from "../lib/domain/vip-salary-service";
+import { vipAchievementRewardForRank } from "../lib/domain/vip-achievement-reward-service";
 
 const evaluate = (qualifiedDirects: number, qualifiedTeamSize: number, directRankLevels: number[] = [], teamRankLevels = directRankLevels, previousRank = "VIP 0") =>
   evaluateVipMetrics({ previousRank, qualifiedDirects, qualifiedTeamSize, directRankLevels, teamRankLevels });
@@ -30,5 +31,6 @@ assert.equal(evaluate(5, 100, [3, 3, 3], [3, 3, 3]).calculatedLevel, 3, "higher 
 for (const rule of VIP_RULES) assert.equal(vipSalaryForRank(`VIP ${rule.level}`), rule.salary, `VIP ${rule.level} salary`);
 assert.equal(vipSalaryForRank("VIP 0"), 0, "VIP 0 salary");
 assert.equal(businessDate(new Date("2026-07-15T18:30:00.000Z")), "2026-07-16", "salary date uses Asia/Kolkata");
+assert.deepEqual(Array.from({length: 10}, (_, index) => vipAchievementRewardForRank(index + 1).toFixed(0)), ["50","100","200","500","1000","3000","5000","10000","25000","50000"], "achievement reward configuration");
 
 console.log(`VIP tests passed: VIP 0 and exact VIP 1-VIP 10 boundaries, scope, permanence, higher-rank matching, salaries, and timezone.`);

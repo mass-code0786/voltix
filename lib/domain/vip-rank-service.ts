@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { creditVipAchievementRewards } from "./vip-achievement-reward-service";
 
 export const VIP_MIN_DEPOSIT = new Prisma.Decimal(100);
 
@@ -37,6 +38,7 @@ export type VipEvaluation = {
 };
 
 export async function calculateHighestVipRank(userId: string, client: VipRankClient = prisma): Promise<VipEvaluation | null> {
+  if (client === prisma) return prisma.$transaction(tx => calculateHighestVipRank(userId, tx), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   const snapshot = await loadVipSnapshot(client);
   return calculateFromSnapshot(userId, snapshot, client);
 }
@@ -54,13 +56,14 @@ export async function recalculateAllVipRanks(client: VipRankClient = prisma, exe
   const ordered = [...snapshot.users].sort((a, b) => depth(b) - depth(a));
   const results: VipEvaluation[] = [];
   for (const user of ordered) {
-    const result = await calculateFromSnapshot(user.id, snapshot, client, execute);
+    const result = await calculateFromSnapshot(user.id, snapshot, client, execute, false);
     if (result) results.push(result);
   }
   return results;
 }
 
-export async function recalculateVipRanksForUserAndUplines(userId: string, client: VipRankClient = prisma) {
+export async function recalculateVipRanksForUserAndUplines(userId: string, client: VipRankClient = prisma): Promise<VipEvaluation[]> {
+  if (client === prisma) return prisma.$transaction(tx => recalculateVipRanksForUserAndUplines(userId, tx), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   const snapshot = await loadVipSnapshot(client);
   const byId = new Map(snapshot.users.map(user => [user.id, user]));
   const chain: string[] = [];
@@ -145,7 +148,7 @@ async function loadVipSnapshot(client: VipRankClient): Promise<VipSnapshot> {
   };
 }
 
-async function calculateFromSnapshot(userId: string, snapshot: VipSnapshot, client: VipRankClient, persist = true): Promise<VipEvaluation | null> {
+async function calculateFromSnapshot(userId: string, snapshot: VipSnapshot, client: VipRankClient, persist = true, rewardEnabled = true): Promise<VipEvaluation | null> {
   const user = snapshot.users.find(item => item.id === userId);
   if (!user) return null;
   const children = new Map<string, SnapshotUser[]>();
@@ -184,6 +187,9 @@ async function calculateFromSnapshot(userId: string, snapshot: VipSnapshot, clie
       where: { id: userId },
       data: { vipRank, vipUpdatedAt: now, ...(updated && evaluated.level > vipLevel(user.vipRank) ? { vipAchievedAt: now } : {}) },
     });
+    if (updated && evaluated.level > vipLevel(user.vipRank) && rewardEnabled) {
+      await creditVipAchievementRewards(client as Prisma.TransactionClient, { userId, previousLevel: vipLevel(user.vipRank), newLevel: evaluated.level, achievedAt: now });
+    }
   }
   user.vipRank = vipRank;
   return {
