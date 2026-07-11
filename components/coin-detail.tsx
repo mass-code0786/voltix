@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Star } from "lucide-react";
 import { BuySellPressurePanel, OrderBookPanel } from "./order-book";
@@ -76,14 +76,33 @@ export function CoinDetail({ symbol }: { symbol: string }) {
 }
 
 function FixedTradeActions() {
+  const [buyPercentage, setBuyPercentage] = useState<number | null>(null);
+  const [sellPercentage, setSellPercentage] = useState<number | null>(null);
+
+  useEffect(() => {
+    const updatePercentages = () => {
+      setBuyPercentage(randomInteger(64, 75));
+      setSellPercentage(randomInteger(62, 70));
+    };
+
+    updatePercentages();
+    const intervalId = window.setInterval(updatePercentages, 30_000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   return (
     <div className="market-fixed-actions">
       <div>
-        <button disabled className="coin-action-buy opacity-60">Buy Coming Soon</button>
-        <button disabled className="coin-action-sell opacity-60">Sell Coming Soon</button>
+        <button disabled className="coin-action-buy">Buy {buyPercentage ?? "--"}%</button>
+        <button disabled className="coin-action-sell">Sell {sellPercentage ?? "--"}%</button>
       </div>
     </div>
   );
+}
+
+function randomInteger(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function formatPrice(value: number) {
