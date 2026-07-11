@@ -218,8 +218,8 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   };
 }
 
-export async function startVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string }) {
-  return executeVipCopyTrade({ ...input, actorType: "USER" });
+export async function startVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string; idempotencyKey?: string; expectedSlotId?: string }) {
+  return executeVipCopyTrade({ ...input, actorType: "USER", source: "MANUAL" });
 }
 
 export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Date; idempotencyKey?: string }) {
@@ -439,7 +439,7 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
   };
 }
 
-async function executeVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string; actorType: "USER" | "SYSTEM"; source?: "MANUAL" | "AI_SUBSCRIPTION" | "AI_SUBSCRIPTION_AUTO"; idempotencyKey?: string }) {
+async function executeVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string; actorType: "USER" | "SYSTEM"; source?: "MANUAL" | "AI_SUBSCRIPTION" | "AI_SUBSCRIPTION_AUTO"; idempotencyKey?: string; expectedSlotId?: string }) {
   const now = input.now ?? new Date();
   return prisma.$transaction(async (tx) => {
     const isAiAutoTrade = input.source === "AI_SUBSCRIPTION" || input.source === "AI_SUBSCRIPTION_AUTO";
@@ -460,6 +460,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
 
     const slot = await findOpenTradeSlot(now, tx);
     if (!slot) throw new Error(TRADE_UNAVAILABLE_MESSAGE);
+    if (input.expectedSlotId && slot.id !== input.expectedSlotId) throw new Error("This trading window has closed. Please wait for the next trading window.");
     const slotStart = tradeSlotStart(slot.utcTime, now);
     const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
     const creditDueAt = tradeSlotSettlementTime(slotStart);
@@ -774,6 +775,19 @@ async function findOpenTradeSlot(now: Date, client: Prisma.TransactionClient | t
   const slots = await configuredTradeSlots(client);
   const live = tradeWindowCandidates(slots, now).find(candidate => candidate.isLive);
   return live?.slot ?? null;
+}
+
+export async function getLiveManualTradeWindow(now = new Date()) {
+  const slots = await configuredTradeSlots();
+  const live = tradeWindowCandidates(slots, now).find(candidate => candidate.isLive);
+  if (!live) return null;
+  return {
+    slotId: live.slot.id,
+    slotLabel: live.slot.label,
+    windowStartAt: live.start,
+    windowCloseAt: live.end,
+    serverNow: now,
+  };
 }
 
 async function getCurrentTradeWindow(now: Date) {

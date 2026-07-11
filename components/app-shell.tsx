@@ -33,6 +33,7 @@ import { useLiveTickers } from "@/lib/use-market-data";
 import { formatLedgerStatus } from "@/lib/format-ledger-status";
 import { clearPostLoginSplashFlags } from "@/components/app-launch-splash";
 import { getVipIconPath } from "@/lib/vip-icons";
+import { ManualTradeWizard } from "@/components/manual-trade-wizard";
 import { currencyConfigForCountry, formatLocalCurrency } from "@/lib/local-currency";
 import { getTranslator } from "@/lib/i18n";
 import { getKycDocumentTypes, kycDocumentRequiresBackPhoto } from "@/lib/kyc-document-types";
@@ -230,10 +231,6 @@ const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA"
 const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, aiWallet: 0 }, locked: { spot: 0, futures: 0, aiWallet: 0 }, total: { spot: 0, futures: 0, aiWallet: 0 }, portfolio: 0, aiWallet: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
 const defaultCopyTradeCounts: CopyTradeCounts = { todaysTradeCount: 0, dailyTradeLimit: 3 };
 const activeAiSubscriptionMessage = "You already have an active AI Subscription. You can buy again after it expires.";
-const duplicateTradeWindowMessages = new Set([
-  "AI trade already executed for this window.",
-  "Manual trade already placed for this window.",
-]);
 
 function mergeCoinSettings(baseCoins: AppCoin[], settings: Record<string,CoinSetting>): AppCoin[] {
   const bySymbol = new Map(baseCoins.map(coin => [coin.symbol, coin]));
@@ -859,20 +856,10 @@ export default function AppShell() {
     return { ok: true, message: "", transfer: data.transfer };
   }, [currentUser, notify, refreshAssets, refreshDashboard, refreshNotifications]);
 
-  const startCopyTrade = useCallback(async (rowId: string) => {
-    const response = await fetch("/api/copy-trade/execute", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rowId }) });
-    const data = await response.json();
-    if (!response.ok) {
-      hapticNotification("error").catch(() => null);
-      return { ok: false, message: data.error || "Copy trade failed" };
-    }
-    await refreshCopyTradeStatus(currentUser);
-    await refreshAssets(currentUser);
-    const message = "Trade placed. Profit will be credited after window closes.";
-    notify(message);
+  const refreshAfterManualTrade = useCallback(async () => {
+    await Promise.all([refreshCopyTradeStatus(currentUser), refreshAssets(currentUser)]);
     hapticNotification("success").catch(() => null);
-    return { ok: true, message };
-  }, [currentUser, notify, refreshAssets, refreshCopyTradeStatus]);
+  }, [currentUser, refreshAssets, refreshCopyTradeStatus]);
 
   const purchaseAi = useCallback(async () => {
     if (!currentUser) {
@@ -927,10 +914,10 @@ export default function AppShell() {
   }, [currentUser, unreadNotifications]);
 
   const screen = {
-    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("aiTrade")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} dashboardLoading={dashboardLoading} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} aiWalletBalance={aiWalletBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
+    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("aiTrade")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} dashboardLoading={dashboardLoading} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} aiWalletBalance={aiWalletBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} onManualTradePlaced={refreshAfterManualTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} loading={marketCoinsLoading} error={marketCoinsError} />,
     trade: <TradeWorkspace category={tradeCategory} coins={marketCoins} loading={marketCoinsLoading} error={marketCoinsError} />,
-    aiTrade: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} aiWalletBalance={aiWalletBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
+    aiTrade: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} aiWalletBalance={aiWalletBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} onManualTradePlaced={refreshAfterManualTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
     wallet: <WalletScreen notify={notify} assets={walletAssets} loading={walletLoading} refreshing={walletRefreshing} onRefresh={manualRefreshWallet} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} aiWalletBalance={aiWalletBalance} aiTradeProfitEarned={aiTradeProfitEarned} aiTradeTarget={aiTradePrincipalLocked*.6} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
@@ -1035,7 +1022,7 @@ function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerif
   return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">{user?.name?.trim() || "Account"}</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>{uid?`UID ${uid}`:"Not logged in"}</span>{uid&&<button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button>}<span>· {user?.vipRank || "Pro"} member</span></div></div>{user?<><Link href="/profile" onClick={close} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Settings size={17}/> Profile & Settings</Link><button onClick={logout} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Logout</button></>:<><button onClick={openLogin} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Login</button><button onClick={openRegister} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Users size={17}/> Register</button></>}<button onClick={openVerification} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button>{isAdminUser && <Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link>}</div></>;
 }
 
-function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, onOpenP2P, assets, dashboard, dashboardLoading, balanceVisible, setBalanceVisible, copyTradeHistory, aiWalletBalance, userCountry, aiSubscription, vipTradeRows, startTrade, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; dashboardLoading: boolean; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; aiWalletBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
+function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, onOpenP2P, assets, dashboard, dashboardLoading, balanceVisible, setBalanceVisible, copyTradeHistory, aiWalletBalance, userCountry, aiSubscription, vipTradeRows, onManualTradePlaced, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; dashboardLoading: boolean; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; aiWalletBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; onManualTradePlaced: () => void | Promise<void>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
   const total = dashboard?.summary?.totalPortfolio ?? 0;
   const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
   const aiCopyTradingIncome = dashboard?.summary?.aiCopyTradingIncome ?? 0;
@@ -1071,7 +1058,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, o
     </div>
 
     <AiOverviewCard totalIncome={aiCopyTradingIncome} history={copyTradeHistory} balanceVisible={balanceVisible} />
-    <VipTradeRowsCard rows={vipTradeRows} startTrade={startTrade} notify={notify} />
+    <VipTradeRowsCard rows={vipTradeRows} onTradePlaced={onManualTradePlaced} />
     <HomeAiSubscriptionCard currentUser={currentUser} status={aiSubscription} purchaseAi={purchaseAi} onOpenAuth={onOpenAuth} notify={notify} />
 
     <GlassCard className="home-depth-card overflow-hidden rounded-[20px] p-3">
@@ -1286,60 +1273,34 @@ function IncomeChart({ data }: { data: number[] }) {
   </svg>;
 }
 
-function VipTradeRowsCard({ rows, startTrade, notify }: { rows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
-  const [loadingRow,setLoadingRow]=useState("");
+function VipTradeRowsCard({ rows, onTradePlaced }: { rows: VipTradeRow[]; onTradePlaced: () => void | Promise<void> }) {
   const [error,setError]=useState("");
-  const [duplicateToast,setDuplicateToast]=useState<{message:string;accent:string;id:number}|null>(null);
+  const [wizardOpen,setWizardOpen]=useState(false);
   const [nowTick,setNowTick]=useState(0);
   const countdownKey=tradeRowsCountdownKey(rows);
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(value => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => {
-    if (!duplicateToast) return;
-    const timer = window.setTimeout(() => setDuplicateToast(null), 3000);
-    return () => window.clearTimeout(timer);
-  }, [duplicateToast]);
   useEffect(() => setNowTick(0), [countdownKey]);
   const nextRow=rows.find(row=>row.tradeStatus==="LIVE") ?? rows.find(row=>row.tradeStatus==="UPCOMING") ?? rows[0];
   const nextTime=nextRow ? readableTradeTime(nextRow) : "";
-  const start=async(row:VipTradeRow)=>{
+  const start=(row:VipTradeRow)=>{
     setError("");
     if(!isTradeButtonEnabled(row,nowTick)){setError(row.reason || row.message || "Trade not available.");return;}
     if(!row.eligible){setError(row.message || "You are not eligible for this trade.");return;}
-    setLoadingRow(row.id);
-    const result=await startTrade(row.id);
-    setLoadingRow("");
-    if(!result.ok){
-      if(duplicateTradeWindowMessages.has(result.message)){
-        setError("");
-        setDuplicateToast({message:result.message,accent:vipAccent(row),id:Date.now()});
-        return;
-      }
-      setError(result.message);
-      return;
-    }
-    notify(result.message || "Trade placed. Profit will be credited after window closes.");
+    setWizardOpen(true);
   };
-  return <GlassCard className="home-depth-card overflow-hidden rounded-[20px] p-3">
+  return <><GlassCard className="home-depth-card overflow-hidden rounded-[20px] p-3">
     <div className="flex items-start justify-between gap-3 pb-1.5">
       <h3 className="text-[16px] font-black text-white">VIP Trade Rows</h3>
       <div className="text-right"><p className="text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Trade Time</p><p className="mt-0.5 text-[10px] font-black text-[#18ff8a]">{nextTime}</p></div>
     </div>
     <div className="space-y-1.5">
-      {rows.length ? rows.map(row=><VipTradeRowItem key={row.id} row={row} loading={loadingRow===row.id} tick={nowTick} start={()=>start(row)} />) : <EmptyState title="No VIP trade rows available" icon={LineChart} />}
+      {rows.length ? rows.map(row=><VipTradeRowItem key={row.id} row={row} tick={nowTick} start={()=>start(row)} />) : <EmptyState title="No VIP trade rows available" icon={LineChart} />}
     </div>
     {error&&<p className="mt-3 border-t border-[#18ff8a]/10 pt-3 text-xs font-bold text-danger">{error}</p>}
-    {duplicateToast&&<VipTradeToast message={duplicateToast.message} accent={duplicateToast.accent}/>}
-  </GlassCard>;
-}
-
-function VipTradeToast({message,accent}:{message:string;accent:string}) {
-  return <div className="fixed left-1/2 z-[70] w-[min(23rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border px-4 py-3 text-center text-xs font-black leading-5 text-white shadow-2xl backdrop-blur-md [bottom:calc(96px+18px+env(safe-area-inset-bottom))] lg:bottom-8" style={{borderColor:`${accent}66`,background:`linear-gradient(145deg, rgba(9,18,15,.96), ${accent}26)`,boxShadow:`0 18px 45px rgba(0,0,0,.42), 0 0 22px ${accent}42`}}>
-    <span className="mr-2 inline-block h-2 w-2 rounded-full align-middle" style={{backgroundColor:accent,boxShadow:`0 0 12px ${accent}`}} />
-    {message}
-  </div>;
+  </GlassCard>{wizardOpen&&<ManualTradeWizard onClose={()=>setWizardOpen(false)} onPlaced={onTradePlaced}/>}</>;
 }
 
 function vipAccent(row: VipTradeRow) {
@@ -1351,7 +1312,7 @@ function vipAccent(row: VipTradeRow) {
   return "#18ff8a";
 }
 
-function VipTradeRowItem({ row, loading, tick, start }: { row: VipTradeRow; loading: boolean; tick: number; start: () => void }) {
+function VipTradeRowItem({ row, tick, start }: { row: VipTradeRow; tick: number; start: () => void }) {
   const accent=vipAccent(row);
   const status=localTradeStatus(row,tick);
   const label=displayVipLabel(row.vipRange??row.label);
@@ -1368,7 +1329,7 @@ function VipTradeRowItem({ row, loading, tick, start }: { row: VipTradeRow; load
       </div>
       <p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{countdown || (!tradeEnabled&&status==="LIVE"?actionLabel:`${(row.dailyReturnMin??row.dailyPercentMin).toFixed(1)}% - ${(row.dailyReturnMax??row.dailyPercentMax).toFixed(1)}% Daily Return`)}</p>
     </div>
-    <button onClick={start} disabled={loading||!tradeEnabled} className="h-8 w-[96px] shrink-0 rounded-[10px] px-1 text-[9px] font-black leading-tight text-[#050807] disabled:opacity-50" style={{background:accent,boxShadow:`0 0 18px ${accent}2e`}}>{loading?"Wait":actionLabel}</button>
+    <button onClick={start} disabled={!tradeEnabled} className="h-8 w-[96px] shrink-0 rounded-[10px] px-1 text-[9px] font-black leading-tight text-[#050807] disabled:opacity-50" style={{background:accent,boxShadow:`0 0 18px ${accent}2e`}}>{actionLabel}</button>
   </div>;
 }
 
@@ -1785,7 +1746,7 @@ function TradeWorkspace({category,coins,loading,error}:{category:TradeCategory;c
   return <div className="space-y-5"><div><h2 className="text-2xl font-black">Trade</h2></div><TradingCategoryPage category={category==="copy"?"spot":category} coins={coins} loading={loading} error={error}/></div>;
 }
 
-function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,aiWalletBalance,tradeRows,copyTradeCounts,copyTradeHistory,startTrade,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;aiWalletBalance:number;tradeRows:VipTradeRow[];copyTradeCounts:CopyTradeCounts;copyTradeHistory:CopyTradeHistory[];startTrade:(rowId:string)=>Promise<{ok:boolean;message:string}>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
+function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,aiWalletBalance,tradeRows,copyTradeCounts,copyTradeHistory,onManualTradePlaced,completeTrade: _completeTrade,purchaseAi,openLogin,notify}:{currentUser:CurrentUser|null;subscription:AiSubscriptionStatus|null;activeTrade:ActiveCopyTrade|null;aiWalletBalance:number;tradeRows:VipTradeRow[];copyTradeCounts:CopyTradeCounts;copyTradeHistory:CopyTradeHistory[];onManualTradePlaced:()=>void|Promise<void>;completeTrade:()=>void;purchaseAi:()=>Promise<{ok:boolean;message:string}>;openLogin:()=>void;notify:(message:string)=>void}) {
   const active=Boolean(subscription?.subscription?.active);
   const today=new Date().toDateString();
   const creditedHistory=useMemo(()=>copyTradeHistory.filter(isCreditedCopyTrade),[copyTradeHistory]);
@@ -1807,7 +1768,7 @@ function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,aiW
     <AiTopStats balance={aiWalletBalance} todayIncome={todayIncome} currentTrades={currentTrades} allowedTrades={allowedTrades} active={active}/>
     <AiTradeOverviewCard history={creditedHistory} todayIncome={todayIncome}/>
     <TopCopyTraders/>
-    <VipTradeRowsCard rows={tradeRows.slice(0,5)} startTrade={startTrade} notify={notify}/>
+    <VipTradeRowsCard rows={tradeRows.slice(0,5)} onTradePlaced={onManualTradePlaced}/>
     <AiInfoStrip/>
     <AiSubscriptionPanel currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin} notify={notify}/>
   </div>;
