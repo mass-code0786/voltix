@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Star } from "lucide-react";
 import { BuySellPressurePanel, OrderBookPanel } from "./order-book";
 import { TradingViewChart } from "./trading-view-chart";
+import { ShineConverter } from "./shine-converter";
 import { useLiveTickers } from "@/lib/use-market-data";
 import { SHINE_PAIR, SHINE_PRICE_USD } from "@/lib/shine-token";
 
@@ -64,7 +65,7 @@ export function CoinDetail({ symbol }: { symbol: string }) {
           <button type="button" className="market-indicator-tab" disabled>Indicators</button>
         </nav>
 
-        <TradingViewChart baseSymbol={base} interval={interval} />
+        {isShine ? <ShineConverter /> : <TradingViewChart baseSymbol={base} interval={interval} />}
         <BuySellPressurePanel symbol={symbol} />
         <OrderBookPanel symbol={symbol} />
         <div className="market-terminal-bottom-space" aria-hidden="true" />

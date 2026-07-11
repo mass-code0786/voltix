@@ -1462,6 +1462,41 @@ html.voltix-capacitor .market-fixed-actions {
   border-radius: 13px;
 }
 
+.shine-converter-card { position:relative; width:100%; overflow:hidden; border:1px solid rgba(24,255,138,.13); border-radius:13px; background:linear-gradient(180deg,rgba(7,16,12,.92),rgba(3,7,6,.97)); padding:18px; box-shadow:0 10px 28px rgba(0,0,0,.28),0 0 20px rgba(24,255,138,.055); }
+.shine-converter-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+.shine-converter-head p { color:#18ff8a; font-size:9px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+.shine-converter-head h2 { margin-top:4px; color:#fff; font-size:18px; font-weight:900; }
+.shine-converter-head > span { border:1px solid rgba(24,255,138,.16); border-radius:999px; background:rgba(24,255,138,.06); padding:6px 9px; color:#8ea39a; font-size:9px; font-weight:900; }
+.shine-converter-field { display:block; border:1px solid rgba(255,255,255,.08); border-radius:13px; background:rgba(255,255,255,.035); padding:12px; }
+.shine-converter-field > span { color:#74877e; font-size:10px; font-weight:800; }
+.shine-converter-field > div { display:flex; align-items:center; gap:10px; margin-top:7px; }
+.shine-converter-field input { min-width:0; width:100%; background:transparent; color:#fff; font-size:23px; font-weight:900; outline:none; font-variant-numeric:tabular-nums; }
+.shine-converter-field input::placeholder { color:#39473f; }
+.shine-converter-field b { color:#e5efe9; font-size:12px; font-weight:900; }
+.shine-swap { display:grid; width:34px; height:34px; place-items:center; margin:-1px auto; border:4px solid #07100c; border-radius:50%; background:#17251e; color:#18ff8a; position:relative; z-index:2; }
+.shine-swap:disabled { opacity:1; cursor:not-allowed; }
+.shine-converter-summary { display:grid; gap:10px; margin:17px 0; border-top:1px solid rgba(255,255,255,.07); padding-top:15px; }
+.shine-converter-summary div { display:flex; justify-content:space-between; gap:16px; font-size:11px; }
+.shine-converter-summary dt { color:#718179; font-weight:800; }
+.shine-converter-summary dd { color:#e4eee9; text-align:right; font-weight:900; font-variant-numeric:tabular-nums; }
+.shine-converter-message { margin-bottom:12px; border-radius:11px; padding:10px 12px; font-size:11px; font-weight:800; }
+.shine-converter-message.is-error { border:1px solid rgba(255,79,109,.22); background:rgba(255,79,109,.08); color:#ff8a9d; }
+.shine-converter-message.is-success { display:flex; gap:9px; border:1px solid rgba(24,255,138,.2); background:rgba(24,255,138,.08); color:#bdfedc; }
+.shine-converter-message.is-success b { display:block; color:#18ff8a; margin-bottom:2px; }
+.shine-convert-button { width:100%; border-radius:12px; background:linear-gradient(135deg,#18ff8a,#00c96b); padding:13px; color:#04100a; font-size:12px; font-weight:950; box-shadow:0 8px 20px rgba(24,255,138,.13); }
+.shine-convert-button:disabled { opacity:.5; }
+.shine-confirm-overlay { position:fixed; inset:0; z-index:90; display:grid; place-items:end center; background:rgba(0,0,0,.76); padding:12px; backdrop-filter:blur(7px); }
+.shine-confirm-dialog { position:relative; width:min(100%,420px); border:1px solid rgba(24,255,138,.18); border-radius:24px; background:#0c1712; padding:22px; box-shadow:0 24px 70px #000; }
+.shine-confirm-dialog h3 { color:#fff; font-size:20px; font-weight:900; }
+.shine-confirm-close { position:absolute; top:18px; right:18px; color:#778b81; }
+.shine-confirm-dialog > div { display:grid; gap:10px; margin:20px 0; border:1px solid rgba(255,255,255,.07); border-radius:13px; background:rgba(0,0,0,.2); padding:14px; color:#93a69c; font-size:12px; }
+.shine-confirm-dialog p { display:flex; justify-content:space-between; gap:12px; }
+.shine-confirm-dialog b { color:#fff; }
+.shine-confirm-dialog footer { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.shine-confirm-dialog footer button { border:1px solid rgba(255,255,255,.1); border-radius:11px; padding:12px; color:#dce8e2; font-size:12px; font-weight:900; }
+.shine-confirm-dialog footer button:last-child { border-color:transparent; background:#18ff8a; color:#04100a; }
+@media (min-width:640px) { .shine-confirm-overlay { place-items:center; } }
+
 @media (max-width: 430px) {
   .market-terminal-page {
     padding-inline: .625rem;

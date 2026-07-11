@@ -12,7 +12,10 @@ export async function convertUsdtToShine(input: { userId: string; usdtAmount: Pr
 
   return prisma.$transaction(async tx=>{
     const existing=await tx.assetConversion.findUnique({where:{idempotencyKey}});
-    if(existing)return formatConversion(existing);
+    if(existing){
+      if(existing.userId!==input.userId)throw new Error("Idempotency key is already in use");
+      return formatConversion(existing);
+    }
 
     const [user,usdtAsset,shineAsset]=await Promise.all([
       tx.user.findUniqueOrThrow({where:{id:input.userId},select:{id:true,spotBalance:true}}),
@@ -75,8 +78,20 @@ export async function convertUsdtToShine(input: { userId: string; usdtAmount: Pr
 }
 
 export async function getUserShineConversions(userId:string) {
-  const rows=await prisma.assetConversion.findMany({where:{userId,toSymbol:SHINE_SYMBOL},orderBy:{createdAt:"desc"},take:25});
-  return {conversions:rows.map(formatConversion)};
+  const [rows,user,shineAsset]=await Promise.all([
+    prisma.assetConversion.findMany({where:{userId,toSymbol:SHINE_SYMBOL},orderBy:{createdAt:"desc"},take:25}),
+    prisma.user.findUniqueOrThrow({where:{id:userId},select:{spotBalance:true}}),
+    prisma.asset.findUnique({where:{symbol:SHINE_SYMBOL},select:{id:true}}),
+  ]);
+  let shineBalance=new Prisma.Decimal(0);
+  if(shineAsset){
+    const account=await prisma.walletAccount.findUnique({where:{userId_assetId_type:{userId,assetId:shineAsset.id,type:"SPOT"}},select:{id:true}});
+    if(account){
+      const entries=await prisma.ledgerEntry.findMany({where:{accountId:account.id},select:{direction:true,amount:true}});
+      shineBalance=entries.reduce((sum,entry)=>entry.direction==="CREDIT"?sum.add(entry.amount):sum.sub(entry.amount),new Prisma.Decimal(0));
+    }
+  }
+  return {fromSymbol:"USDT",toSymbol:SHINE_SYMBOL,rate:new Prisma.Decimal(SHINE_PRICE_USD).toString(),balances:{usdt:user.spotBalance.toString(),shine:shineBalance.toString()},conversions:rows.map(formatConversion)};
 }
 
 async function ensureAccount(tx:Prisma.TransactionClient,userId:string,assetId:string,type:"SPOT") {

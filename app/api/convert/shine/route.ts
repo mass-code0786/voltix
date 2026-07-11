@@ -7,7 +7,7 @@ import { rateLimitByUser } from "@/lib/security";
 import { convertUsdtToShine, getUserShineConversions } from "@/lib/domain/shine-conversion-service";
 
 const convertSchema=z.object({
-  amount:z.coerce.number().positive("Amount must be greater than 0"),
+  amount:z.string().trim().regex(/^\d+(?:\.\d{1,18})?$/,"Enter a valid amount with up to 18 decimals"),
   idempotencyKey:z.string().trim().min(8,"Idempotency key is required").max(120),
 });
 
