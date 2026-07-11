@@ -8,9 +8,12 @@ export const sessionCookieName = "voltix_session";
 export const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 export const sessionCookieOptions = {
   httpOnly: true,
-  sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
+  // The web app, API, and Capacitor server.url share one HTTPS origin. Keeping
+  // this first-party avoids Android WebView third-party-cookie restrictions.
+  sameSite: "lax" as const,
   secure: process.env.NODE_ENV === "production",
   path: "/",
+  priority: "high" as const,
 };
 
 export async function hashPassword(password: string) {

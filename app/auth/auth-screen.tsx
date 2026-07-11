@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState, type CSSProperties } from "react";
-import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail, ShieldCheck, User } from "lucide-react";
 import { SearchableSelect } from "@/components/searchable-select";
 import { AppLaunchSplash, POST_LOGIN_SPLASH_PREFIX } from "@/components/app-launch-splash";
@@ -9,6 +8,7 @@ import { mobileFetchHeaders, offerBiometricEnrollment } from "@/lib/mobile-nativ
 import { countryOptions, languageOptions } from "@/lib/profile-options";
 
 export type AuthMode = "login" | "register";
+type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 type AuthScreenProps = {
   initialMode?: AuthMode;
@@ -18,7 +18,6 @@ type AuthScreenProps = {
 };
 
 export function AuthScreen({ initialMode = "login", initialReferralCode = "", lockedReferral = false, initialSponsorLabel = "" }: AuthScreenProps) {
-  const router = useRouter();
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [returnTo, setReturnTo] = useState("/dashboard");
   const [name, setName] = useState("");
@@ -34,7 +33,7 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("unauthenticated");
   const [showPostLoginSplash, setShowPostLoginSplash] = useState(false);
 
   useEffect(() => {
@@ -64,7 +63,7 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
-    setLoading(true);
+    setAuthStatus("loading");
     try {
       const endpoint = mode === "register" ? "/api/auth/register" : "/api/auth/login";
       const body = mode === "register"
@@ -80,6 +79,7 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
       if (!response.ok) throw new Error(data.error || "Authentication failed");
       const user = await refreshAuthenticatedData();
       if (!user) throw new Error("Login session could not be verified. Please try again.");
+      setAuthStatus("authenticated");
       if (mode === "login") {
         const sessionId = String(user.id ?? user.uid ?? email).trim().toLowerCase();
         window.sessionStorage.setItem(`${POST_LOGIN_SPLASH_PREFIX}${sessionId}`, "shown");
@@ -87,18 +87,17 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
         await offerBiometricEnrollment(data.mobileSessionToken).catch(() => null);
         return;
       }
-      router.replace(returnTo);
+      navigateToAuthenticatedRoute(returnTo);
     } catch (err) {
+      setAuthStatus("unauthenticated");
       setError(err instanceof Error ? err.message : "Authentication failed");
-    } finally {
-      setLoading(false);
     }
   };
 
   const isRegister = mode === "register";
 
-  if (showPostLoginSplash) {
-    return <><main className="auth-premium-page min-h-screen" aria-hidden="true" /><AppLaunchSplash onComplete={() => router.replace(returnTo)} /></>;
+  if (showPostLoginSplash && authStatus === "authenticated") {
+    return <><main className="auth-premium-page min-h-screen" aria-hidden="true" /><AppLaunchSplash onComplete={() => navigateToAuthenticatedRoute(returnTo)} /></>;
   }
 
   return (
@@ -150,8 +149,8 @@ export function AuthScreen({ initialMode = "login", initialReferralCode = "", lo
 
           {error && <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-xs font-bold text-danger">{error}</p>}
 
-          <button disabled={loading} className="auth-submit">
-            {loading ? "Please wait..." : isRegister ? "Create Account" : "Login"}
+          <button disabled={authStatus === "loading"} className="auth-submit">
+            {authStatus === "loading" ? "Please wait..." : isRegister ? "Create Account" : "Login"}
           </button>
 
           <div className="auth-footer-link">
@@ -202,9 +201,7 @@ function PasswordInput({ label, value, onChange, visible, setVisible, autoComple
 }
 
 async function refreshAuthenticatedData() {
-  const meResponse = await fetch("/api/me", { cache: "no-store", credentials: "include" });
-  const meData = await meResponse.json().catch(() => ({}));
-  const user = meResponse.ok && meData?.authenticated ? meData.user : null;
+  const user = await verifyAuthenticatedUser();
   if (!user) return null;
   await Promise.allSettled([
     fetch("/api/dashboard", { cache: "no-store", credentials: "include" }),
@@ -214,4 +211,22 @@ async function refreshAuthenticatedData() {
     fetch("/api/ai/subscription", { cache: "no-store", credentials: "include" }),
   ]);
   return user;
+}
+
+async function verifyAuthenticatedUser() {
+  // Some Android System WebView versions expose a newly received cookie to the
+  // next request one task later. Retry only hydration; never redirect meanwhile.
+  for (const delayMs of [0, 100, 250]) {
+    if (delayMs) await new Promise(resolve => window.setTimeout(resolve, delayMs));
+    const response = await fetch("/api/me", { cache: "no-store", credentials: "include" });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data?.authenticated && data.user) return data.user;
+  }
+  return null;
+}
+
+function navigateToAuthenticatedRoute(returnTo: string) {
+  // A document navigation makes the server route guard read the committed
+  // WebView cookie instead of reusing a pre-login router/RSC response.
+  window.location.replace(returnTo);
 }
