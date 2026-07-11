@@ -8,9 +8,12 @@ export const metadata: Metadata = {
   description: "Digital asset, copy strategy and network rewards dashboard",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/apk-icon.png",
-    shortcut: "/apk-icon.png",
-    apple: "/apk-icon.png",
+    icon: [
+      { url: "/apk-icon-32-v2.png", sizes: "32x32", type: "image/png" },
+      { url: "/apk-icon-192-v2.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/apk-icon-32-v2.png",
+    apple: [{ url: "/apk-icon-180-v2.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

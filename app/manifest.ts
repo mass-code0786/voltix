@@ -11,13 +11,19 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#050b08",
     icons: [
       {
-        src: "/apk-icon.png",
+        src: "/apk-icon-192-v2.png",
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/apk-icon.png",
+        src: "/apk-icon-512-v2.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/apk-icon-512-v2.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
