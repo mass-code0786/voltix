@@ -266,11 +266,12 @@ function coinsFromApi(rows: (CoinSetting & { symbol: string })[]): AppCoin[] {
 }
 
 function mergeAssetRecords(baseCoins: AppCoin[], assets: AssetRecord[]): AppCoin[] {
+  // Futures and AI are separate cards; the holdings list is Spot-only.
+  assets = assets.filter(asset => asset.walletType === "SPOT");
   const bySymbol = new Map(baseCoins.map(coin => [coin.symbol, coin]));
   const grouped = new Map<string, AssetRecord>();
   for (const asset of assets) {
-    const current = grouped.get(asset.symbol);
-    grouped.set(asset.symbol, current ? { ...current, balance: current.balance + Number(asset.balance ?? 0), enabled: current.enabled || asset.enabled } : { ...asset, balance: Number(asset.balance ?? 0) });
+    grouped.set(asset.symbol, { ...asset, balance: Number(asset.balance ?? 0) });
   }
   return Array.from(grouped.values()).map((asset, index) => {
     const base = bySymbol.get(asset.symbol);
@@ -348,6 +349,11 @@ export default function AppShell() {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [walletLoading, setWalletLoading] = useState(true);
+  const dashboardRequestRef = useRef(0);
+  const walletRequestRef = useRef(0);
+  const walletAbortRef = useRef<AbortController | null>(null);
   const [aiSubscription, setAiSubscription] = useState<AiSubscriptionStatus | null>(null);
   const [aiPurchaseConfirmOpen, setAiPurchaseConfirmOpen] = useState(false);
   const aiPurchaseConfirmationRef = useRef<((confirmed: boolean) => void) | null>(null);
@@ -404,50 +410,20 @@ export default function AppShell() {
     return user;
   }, [applyAuthenticatedUser]);
 
-  const applyWalletSnapshot = useCallback((wallet: WalletSnapshot | null) => {
-    if (!wallet) {
-      setFuturesBalance(0);
-      setAiWalletBalance(0);
-      setAiTradeTransferred(0);
-      setAiTradePrincipalLocked(0);
-      setAiTradeProfitEarned(0);
-      return;
-    }
-
-    const balances = wallet.balances ?? {};
-    const spotBalance = Number(balances.spot ?? 0);
-    const fundingBalance = Number(balances.funding ?? balances.futures ?? 0);
-    const realAiWalletBalance = Number(balances.aiWallet ?? 0);
-    const aiTradePrincipal = Number(wallet.aiWallet?.principal ?? 0);
-    const aiTradeProfit = Number(wallet.aiWallet?.incomeEarned ?? 0);
-
-    setFuturesBalance(fundingBalance);
-    setAiWalletBalance(realAiWalletBalance);
-    setAiTradeTransferred(aiTradePrincipal);
-    setAiTradePrincipalLocked(aiTradePrincipal);
-    setAiTradeProfitEarned(aiTradeProfit);
-  }, []);
-
-  const refreshWallet = useCallback(async (user: CurrentUser | null) => {
-    if (!user) {
-      applyWalletSnapshot(null);
-      return;
-    }
-    const response = await fetch("/api/wallet", { cache: "no-store", credentials: "include" });
-    if (!response.ok) throw new Error("Wallet request failed");
-    const data = await response.json();
-    applyWalletSnapshot(data?.authenticated ? data.wallet as WalletSnapshot : null);
-  }, [applyWalletSnapshot]);
-
   const refreshDashboard = useCallback(async (user: CurrentUser | null) => {
+    const requestId = ++dashboardRequestRef.current;
+    setDashboardLoading(Boolean(user));
     if (!user) {
       setDashboard(null);
+      setDashboardLoading(false);
       return;
     }
     const response = await fetch("/api/dashboard", { cache: "no-store", credentials: "include" });
     if (!response.ok) throw new Error("Dashboard request failed");
     const data = await response.json();
+    if (requestId !== dashboardRequestRef.current) return;
     setDashboard(data?.authenticated ? data.dashboard as DashboardSnapshot : null);
+    setDashboardLoading(false);
   }, []);
 
   const refreshCopyTradeStatus = useCallback(async (user: CurrentUser | null) => {
@@ -485,21 +461,28 @@ export default function AppShell() {
   }, []);
 
   const refreshAssets = useCallback(async (user: CurrentUser | null) => {
+    const requestId = ++walletRequestRef.current;
+    walletAbortRef.current?.abort();
+    const controller = new AbortController();
+    walletAbortRef.current = controller;
+    setWalletLoading(Boolean(user));
     if (!user) {
       setWalletAssets([]);
       setP2PAssets([]);
       setAssetTotals(emptyAssetTotals);
       setWalletActivity([]);
+      setFuturesBalance(0);
+      setAiWalletBalance(0);
+      setWalletLoading(false);
       return;
     }
-    const response = await fetch("/api/assets", { cache: "no-store", credentials: "include" });
+    const response = await fetch("/api/assets", { cache: "no-store", credentials: "include", signal: controller.signal });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "Assets request failed");
     const assets = Array.isArray(data.assets) ? data.assets as AssetRecord[] : [];
     const totals = data.totals as AssetTotals;
-    const historyResponse = await fetch("/api/wallet/history", { cache: "no-store", credentials: "include" });
-    const historyData = await historyResponse.json().catch(() => ({}));
-    const history = Array.isArray(historyData.history) ? historyData.history as WalletHistoryRecord[] : Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
+    const history = Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
+    if (requestId !== walletRequestRef.current || controller.signal.aborted) return;
     setWalletAssets(mergeAssetRecords(marketCoins, assets));
     setP2PAssets(assets.filter(asset => asset.walletType === "SPOT" && asset.enabled && Number(asset.balance ?? 0) > 0).map(asset => ({ symbol: asset.symbol, name: asset.name, balance: Number(asset.balance ?? 0), enabled: asset.enabled })));
     setAssetTotals(totals ?? emptyAssetTotals);
@@ -509,6 +492,7 @@ export default function AppShell() {
     setAiTradePrincipalLocked(Number(totals?.aiWallet?.principal ?? 0));
     setAiTradeProfitEarned(Number(totals?.aiWallet?.incomeEarned ?? 0));
     setWalletActivity(mapLedgerHistory(history));
+    setWalletLoading(false);
   }, [marketCoins]);
 
   const refreshNotifications = useCallback(async (user: CurrentUser | null) => {
@@ -528,7 +512,12 @@ export default function AppShell() {
   const clearAuthenticatedState = useCallback(() => {
     applyAuthenticatedUser(null);
     setDashboard(null);
-    applyWalletSnapshot(null);
+    walletRequestRef.current += 1;
+    walletAbortRef.current?.abort();
+    setWalletLoading(false);
+    setDashboardLoading(false);
+    setFuturesBalance(0);
+    setAiWalletBalance(0);
     setWalletAssets([]);
     setP2PAssets([]);
     setAssetTotals(emptyAssetTotals);
@@ -544,7 +533,7 @@ export default function AppShell() {
     setTransferOpen(null);
     setWithdrawalOpen(false);
     setVerificationOpen(false);
-  }, [applyAuthenticatedUser, applyWalletSnapshot]);
+  }, [applyAuthenticatedUser]);
 
   const logout = useCallback(async () => {
     try {
@@ -592,13 +581,6 @@ export default function AppShell() {
   }, [refreshMe]);
 
   useEffect(() => {
-    refreshWallet(currentUser)
-      .catch(() => {
-        if (!currentUser) applyWalletSnapshot(null);
-      });
-  }, [applyWalletSnapshot, currentUser, refreshWallet]);
-
-  useEffect(() => {
     refreshDashboard(currentUser)
       .catch(() => {
         if (!currentUser) setDashboard(null);
@@ -621,14 +603,13 @@ export default function AppShell() {
     const timer = window.setInterval(() => {
       refreshCopyTradeStatus(currentUser)
         .then(() => Promise.all([
-          refreshWallet(currentUser),
           refreshAssets(currentUser),
           refreshDashboard(currentUser),
         ]))
         .catch(() => {});
     }, 20_000);
     return () => window.clearInterval(timer);
-  }, [currentUser, refreshAssets, refreshCopyTradeStatus, refreshDashboard, refreshWallet]);
+  }, [currentUser, refreshAssets, refreshCopyTradeStatus, refreshDashboard]);
 
   useEffect(() => {
     refreshAiSubscription(currentUser)
@@ -672,7 +653,6 @@ export default function AppShell() {
       if (!currentUser) return;
       void Promise.allSettled([
         refreshMe(),
-        refreshWallet(currentUser),
         refreshDashboard(currentUser),
         refreshCopyTradeStatus(currentUser),
         refreshAiSubscription(currentUser),
@@ -686,7 +666,7 @@ export default function AppShell() {
       window.removeEventListener("voltix:native-refresh", refresh);
       window.removeEventListener("voltix:native-reconnect", refresh);
     };
-  }, [currentUser, refreshAiSubscription, refreshAssets, refreshCopyTradeStatus, refreshDashboard, refreshMe, refreshNotifications, refreshWallet]);
+  }, [currentUser, refreshAiSubscription, refreshAssets, refreshCopyTradeStatus, refreshDashboard, refreshMe, refreshNotifications]);
 
   const syncNavigation = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -789,11 +769,11 @@ export default function AppShell() {
       notify(data.error || "Transfer could not be completed");
       return false;
     }
-    await Promise.all([refreshWallet(currentUser), refreshAssets(currentUser), refreshDashboard(currentUser)]);
+    await Promise.all([refreshAssets(currentUser), refreshDashboard(currentUser)]);
     setTransferOpen(null);
     notify(`Successfully transferred to ${displayWalletName(to)}`);
     return true;
-  }, [assetTotals, aiWalletBalance, currentUser, futuresBalance, notify, refreshAssets, refreshDashboard, refreshWallet]);
+  }, [assetTotals, aiWalletBalance, currentUser, futuresBalance, notify, refreshAssets, refreshDashboard]);
 
   const createDeposit = useCallback(async ({ amount, network, payCurrency }: DepositInput) => {
     const response = await fetch("/api/deposits/nowpayments/create", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, network, payCurrency }) });
@@ -836,11 +816,11 @@ export default function AppShell() {
       hapticNotification("error").catch(() => null);
       return { ok: false, message: data.error || "P2P transfer failed" };
     }
-    await Promise.all([refreshAssets(currentUser), refreshWallet(currentUser), refreshDashboard(currentUser), refreshNotifications(currentUser)]);
+    await Promise.all([refreshAssets(currentUser), refreshDashboard(currentUser), refreshNotifications(currentUser)]);
     notify(`${input.amount.toFixed(2)} ${input.asset} sent`);
     hapticNotification("success").catch(() => null);
     return { ok: true, message: "", transfer: data.transfer };
-  }, [currentUser, notify, refreshAssets, refreshDashboard, refreshNotifications, refreshWallet]);
+  }, [currentUser, notify, refreshAssets, refreshDashboard, refreshNotifications]);
 
   const startCopyTrade = useCallback(async (rowId: string) => {
     const response = await fetch("/api/copy-trade/execute", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rowId }) });
@@ -850,13 +830,12 @@ export default function AppShell() {
       return { ok: false, message: data.error || "Copy trade failed" };
     }
     await refreshCopyTradeStatus(currentUser);
-    await refreshWallet(currentUser);
     await refreshAssets(currentUser);
     const message = "Trade placed. Profit will be credited after window closes.";
     notify(message);
     hapticNotification("success").catch(() => null);
     return { ok: true, message };
-  }, [currentUser, notify, refreshAssets, refreshCopyTradeStatus, refreshWallet]);
+  }, [currentUser, notify, refreshAssets, refreshCopyTradeStatus]);
 
   const purchaseAi = useCallback(async () => {
     if (!currentUser) {
@@ -883,7 +862,7 @@ export default function AppShell() {
         return { ok: false, message: data.error || "AI purchase failed" };
       }
       await Promise.all([
-        refreshWallet(currentUser),
+        refreshAssets(currentUser),
         refreshAiSubscription(currentUser),
         refreshDashboard(currentUser),
         refreshCopyTradeStatus(currentUser),
@@ -893,12 +872,12 @@ export default function AppShell() {
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "AI purchase failed" };
     }
-  }, [currentUser, notify, openAuthPage, refreshAiSubscription, refreshCopyTradeStatus, refreshDashboard, refreshWallet, requestAiPurchaseConfirmation]);
+  }, [currentUser, notify, openAuthPage, refreshAiSubscription, refreshAssets, refreshCopyTradeStatus, refreshDashboard, requestAiPurchaseConfirmation]);
 
   const completeActiveCopyTrade = useCallback(() => {
     refreshCopyTradeStatus(currentUser).catch(() => {});
-    refreshWallet(currentUser).catch(() => {});
-  }, [currentUser, refreshCopyTradeStatus, refreshWallet]);
+    refreshAssets(currentUser).catch(() => {});
+  }, [currentUser, refreshAssets, refreshCopyTradeStatus]);
 
   const markNotificationsRead = useCallback(async () => {
     if (!currentUser || !unreadNotifications) return;
@@ -921,12 +900,12 @@ export default function AppShell() {
   }, [currentUser]);
 
   const screen = {
-    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("aiTrade")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} aiWalletBalance={aiWalletBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
+    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("aiTrade")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} dashboardLoading={dashboardLoading} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} aiWalletBalance={aiWalletBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} startTrade={startCopyTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} loading={marketCoinsLoading} error={marketCoinsError} />,
     trade: <TradeWorkspace category={tradeCategory} coins={marketCoins} loading={marketCoinsLoading} error={marketCoinsError} />,
     aiTrade: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} aiWalletBalance={aiWalletBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} startTrade={startCopyTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
-    wallet: <WalletScreen notify={notify} assets={walletAssets} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} aiWalletBalance={aiWalletBalance} aiTradeProfitEarned={aiTradeProfitEarned} aiTradeTarget={aiTradePrincipalLocked*.6} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
+    wallet: <WalletScreen notify={notify} assets={walletAssets} loading={walletLoading} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} aiWalletBalance={aiWalletBalance} aiTradeProfitEarned={aiTradeProfitEarned} aiTradeTarget={aiTradePrincipalLocked*.6} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
 
   return (
@@ -1029,7 +1008,7 @@ function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerif
   return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">{user?.name?.trim() || "Account"}</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>{uid?`UID ${uid}`:"Not logged in"}</span>{uid&&<button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button>}<span>· {user?.vipRank || "Pro"} member</span></div></div>{user?<><Link href="/profile" onClick={close} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Settings size={17}/> Profile & Settings</Link><button onClick={logout} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Logout</button></>:<><button onClick={openLogin} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Login</button><button onClick={openRegister} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Users size={17}/> Register</button></>}<button onClick={openVerification} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button>{isAdminUser && <Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link>}</div></>;
 }
 
-function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, onOpenP2P, assets, dashboard, balanceVisible, setBalanceVisible, copyTradeHistory, aiWalletBalance, userCountry, aiSubscription, vipTradeRows, startTrade, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; aiWalletBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
+function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, onOpenP2P, assets, dashboard, dashboardLoading, balanceVisible, setBalanceVisible, copyTradeHistory, aiWalletBalance, userCountry, aiSubscription, vipTradeRows, startTrade, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; dashboardLoading: boolean; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; aiWalletBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; startTrade: (rowId: string) => Promise<{ok:boolean;message:string}>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
   const total = dashboard?.summary?.totalPortfolio ?? 0;
   const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
   const aiCopyTradingIncome = dashboard?.summary?.aiCopyTradingIncome ?? 0;
@@ -1050,7 +1029,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, o
     { icon: Users, label: "Invite", onClick: () => onNavigate("team") },
   ];
   return <div className="mx-auto max-w-[390px] space-y-2 overflow-x-hidden">
-    {currentUser ? (
+    {currentUser && dashboardLoading ? <BalanceLoadingCard /> : currentUser ? (
       <VoltixPortfolioHero
         currentUser={currentUser}
         total={total}
@@ -1079,6 +1058,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, o
     </GlassCard>
   </div>;
 }
+function BalanceLoadingCard() { return <GlassCard className="home-hero-card relative h-[158px] overflow-hidden rounded-[21px] p-4" aria-busy="true"><div className="h-full animate-pulse space-y-3"><div className="h-3 w-24 rounded bg-white/10"/><div className="h-5 w-40 rounded bg-white/10"/><div className="mt-6 h-8 w-44 rounded bg-[#18ff8a]/10"/></div></GlassCard>; }
 function WelcomeCard({ t, onOpenAuth }: { t: ReturnType<typeof getTranslator>; onOpenAuth: () => void }) {
   return <GlassCard className="home-hero-card relative h-[158px] overflow-hidden rounded-[21px] p-4">
     <div className="relative grid h-full grid-cols-[minmax(0,1fr)_108px] items-center gap-1">
@@ -2090,8 +2070,9 @@ function CopyTradeScreen({activeTrade,aiWalletBalance,tradeRows,startTrade,compl
   };
   return <div className="space-y-5"><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="font-bold">Copy Trade Income</h3><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="p-4 sm:p-5"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="divide-y divide-line/70">{rows.map(row=>{const status=localTradeStatus(row,nowTick);const countdown=tradeCountdownLabel(row,nowTick);const tradeEnabled=isTradeButtonEnabled(row,nowTick);const actionLabel=tradeButtonLabel(row,status,tradeEnabled);return <div key={row.id} className="flex items-center gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black">{displayVipLabel(row.vipRange??row.label)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${status==="LIVE"?"bg-lime/10 text-lime":status==="UPCOMING"?"bg-[#f6c85f]/10 text-[#f6c85f]":"bg-white/5 text-slate-500"}`}>{status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade time: {readableTradeTime(row)}{countdown?` | ${countdown}`:""}</p><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${Number(row.tradeAmount ?? aiWalletBalance*.01).toFixed(2)} | Daily {row.dailyReturnMin??row.dailyPercentMin}% - {row.dailyReturnMax??row.dailyPercentMax}%</p>{!tradeEnabled&&status==="LIVE"&&<p className="mt-1 text-[10px] text-danger">{actionLabel}</p>}</div><button onClick={()=>start(row)} disabled={loadingRow===row.id||!tradeEnabled} className="w-[112px] shrink-0 rounded-lg bg-lime px-3 py-2 text-[10px] font-black leading-tight text-ink disabled:opacity-50">{loadingRow===row.id?"Wait":actionLabel}</button></div>})}</div>}{error&&<p className="border-t border-line px-5 py-3 text-xs text-danger">{error}</p>}</section></div>;
 }
-function WalletScreen({notify,assets,spotBalance,futuresBalance,aiWalletBalance,aiTradeProfitEarned,aiTradeTarget,activity,section,action,balanceVisible,setBalanceVisible,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];spotBalance:number;futuresBalance:number;aiWalletBalance:number;aiTradeProfitEarned:number;aiTradeTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
+function WalletScreen({notify,assets,loading,spotBalance,futuresBalance,aiWalletBalance,aiTradeProfitEarned,aiTradeTarget,activity,section,action,balanceVisible,setBalanceVisible,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];loading:boolean;spotBalance:number;futuresBalance:number;aiWalletBalance:number;aiTradeProfitEarned:number;aiTradeTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
  const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+aiWalletBalance;
+if(loading)return <div className="wallet-page -mt-1 min-h-screen" aria-busy="true"><WalletHero/><section className="wallet-glass wallet-total-card animate-pulse"><div className="h-16 w-48 rounded-xl bg-white/10"/></section><section className="wallet-type-grid animate-pulse">{[0,1,2].map(item=><div key={item} className="wallet-glass wallet-type-card h-24"><div className="h-4 w-24 rounded bg-white/10"/></div>)}</section></div>;
 return <div className="wallet-page -mt-1 min-h-screen">
   <WalletHero/>
   <WalletTotalCard total={total} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
