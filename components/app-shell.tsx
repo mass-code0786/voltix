@@ -1761,7 +1761,6 @@ function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,aiW
       <div className="relative z-10">
         <h1>AI Trade</h1>
         <p>Smart AI. Auto Trade. Daily Income.</p>
-        {currentUser&&<div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#18ff8a]/20 bg-black/25 px-2 py-1.5"><img src={getVipIconPath(currentUser.vipRank)} alt={`${currentUser.vipRank || "VIP 0"} badge`} className="h-8 w-8 object-contain"/><span className="text-[10px] font-black text-[#dfffea]">Current {currentUser.vipRank || "VIP 0"}</span></div>}
       </div>
       <AiTradeHeroVisual/>
     </section>
