@@ -96,7 +96,7 @@ function formatLedgerEntry(entry: {
   amount: Prisma.Decimal;
   createdAt: Date;
   account: { type: WalletType; asset: { symbol: string } };
-  journal: { id: string; referenceType: string; referenceId: string; memo: string; status: string };
+  journal: { id: string; referenceType: string; referenceId: string; memo: string; status: string; postedAt: Date | null };
 }) {
   return {
     id: entry.id,
@@ -110,7 +110,7 @@ function formatLedgerEntry(entry: {
     referenceType: entry.journal.referenceType,
     referenceId: entry.journal.referenceId,
     status: entry.journal.status,
-    createdAt: entry.createdAt.toISOString(),
+    createdAt: (entry.journal.postedAt ?? entry.createdAt).toISOString(),
   };
 }
 

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getUserWalletHistory } from "@/lib/domain/asset-service";
 import { prisma } from "@/lib/prisma";
 import { displayWalletName } from "@/lib/wallet-labels";
+import { tradePlacementTitle } from "@/lib/ledger-display";
 
 const emptyHistory = { authenticated: false, assets: [], totals: {}, history: [] };
 const copyTradeIncomeTypes = new Set(["COPY_TRADE"]);
@@ -110,10 +111,11 @@ export async function GET() {
       direction: "DEBIT",
       amount: Number(row.principalAmount.toString()),
       signedAmount: -Number(row.principalAmount.toString()),
-      title: "AI Trade Principal Locked",
+      title: tradePlacementTitle(row.source),
+      source: row.source,
       referenceType: "COPY_TRADE",
       referenceId: row.id,
-      status: formatLedgerStatus(row.status),
+      status: row.status === "FAILED" ? "Failed" : "Completed",
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
     })),

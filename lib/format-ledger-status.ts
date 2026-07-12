@@ -18,6 +18,8 @@ export function formatLedgerStatus(status: string) {
     case "CANCELLED":
     case "CANCELED":
       return "Cancelled";
+    case "REVERSED":
+      return "Reversed";
     default:
       return status;
   }

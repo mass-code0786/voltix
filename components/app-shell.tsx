@@ -30,7 +30,7 @@ import {
 import type { Coin } from "@/lib/market-defaults";
 import { compact, usd } from "@/lib/format";
 import { useLiveTickers } from "@/lib/use-market-data";
-import { formatLedgerStatus } from "@/lib/format-ledger-status";
+import { getLedgerDisplay } from "@/lib/ledger-display";
 import { clearPostLoginSplashFlags } from "@/components/app-launch-splash";
 import { getVipIconPath } from "@/lib/vip-icons";
 import { ManualTradeWizard } from "@/components/manual-trade-wizard";
@@ -47,7 +47,7 @@ type TradeCategory = "spot" | "futures" | "grid" | "margin" | "copy";
 type WalletSection = "overview" | "assets" | "ledger";
 type WalletAction = "deposit" | null;
 type UserWallet = "SPOT" | "FUTURES" | "AI";
-type WalletActivity = readonly [typeof ArrowDownLeft, string, string, string];
+type WalletActivity = readonly [typeof ArrowDownLeft, string, string, string, string];
 type EarlyWithdrawalBreakdown = { requiresConfirmation: boolean; eligible: boolean; capitalAmount: number; earnedProfit: number; requiredProfit: number; completedPercentage: number; remainingPercentage: number; withdrawalAmount: number; earlyWithdrawalCharge: number; percentageFee: number; fixedFee: number; totalFees: number; netAmount: number };
 type WithdrawalInput = { walletType: "SPOT" | "AI"; amount: number; address: string; network: string; transactionPin: string; mobileVerificationToken?: string; acceptEarlyWithdrawalCharge?: boolean };
 type WithdrawalResult = { ok: boolean; message: string; requiresConfirmation?: boolean; breakdown?: EarlyWithdrawalBreakdown };
@@ -121,6 +121,9 @@ type WalletHistoryRecord = {
   title: string;
   status: string;
   createdAt: string;
+  referenceType?: string;
+  type?: string;
+  source?: string;
 };
 type TeamMember = {
   id: string;
@@ -307,12 +310,16 @@ function assetLogoPath(symbol: string, base?: AppCoin) {
 }
 
 function mapLedgerHistory(rows: WalletHistoryRecord[]): WalletActivity[] {
-  return rows.map(row => [
-    row.direction === "CREDIT" ? ArrowDownLeft : ArrowUpRight,
-    row.title || `${row.walletType} movement`,
-    `${row.signedAmount >= 0 ? "+" : "-"}${Math.abs(Number(row.amount)).toFixed(2)} ${row.asset}`,
-    formatLedgerStatus(row.status),
-  ] as WalletActivity);
+  return rows.map(row => {
+    const display=getLedgerDisplay(row);
+    return [
+      row.direction === "CREDIT" ? ArrowDownLeft : ArrowUpRight,
+      display.title || `${row.walletType} movement`,
+      `${row.signedAmount >= 0 ? "+" : "-"}${Math.abs(Number(row.amount)).toFixed(2)} ${row.asset}`,
+      display.statusLabel,
+      display.dateTimeLabel,
+    ] as WalletActivity;
+  });
 }
 
 export default function AppShell() {
@@ -2138,7 +2145,7 @@ function ShieldLockSvg() {
   return <svg width="62" height="62" viewBox="0 0 62 62" className="wallet-shield-svg" aria-hidden="true"><defs><linearGradient id="shieldGrad" x1="15" y1="5" x2="47" y2="55"><stop stopColor="#eafff4"/><stop offset=".42" stopColor="#18ff8a"/><stop offset="1" stopColor="#047a49"/></linearGradient></defs><ellipse cx="31" cy="52" rx="22" ry="6" fill="#18ff8a" opacity=".16"/><path d="M31 5 49 13v15c0 13-8 21-18 27C21 49 13 41 13 28V13Z" fill="url(#shieldGrad)" fillOpacity=".18" stroke="#18ff8a"/><rect x="22" y="28" width="18" height="14" rx="4" fill="#07130f" stroke="#eafff4" strokeOpacity=".55"/><path d="M26 28v-5a5 5 0 0 1 10 0v5" stroke="#18ff8a" strokeWidth="2"/></svg>;
 }
 
-function ActivityRows({rows}:{rows:readonly WalletActivity[]}) { return <div className="mt-4 space-y-4">{rows.length?rows.map(([I,t,a,s],index)=><div className="flex items-center gap-3" key={`${t}-${a}-${index}`}><div className="rounded-xl bg-white/5 p-2.5 text-slate-400"><I size={17}/></div><div className="flex-1"><p className="text-sm font-semibold">{t}</p><p className="text-[10px] text-mint">{s}</p></div><p className="text-xs font-bold">{a}</p></div>):<p className="py-6 text-center text-xs text-slate-500">No records available</p>}</div> }
+function ActivityRows({rows}:{rows:readonly WalletActivity[]}) { return <div className="mt-4 space-y-4">{rows.length?rows.map(([I,t,a,s,d],index)=><div className="flex items-center gap-3" key={`${t}-${a}-${index}`}><div className="shrink-0 rounded-xl bg-white/5 p-2.5 text-slate-400"><I size={17}/></div><div className="min-w-0 flex-1"><p className="text-sm font-semibold leading-snug">{t}</p><p className="text-[10px] text-mint">{s}</p><p className="mt-0.5 text-[9px] leading-tight text-slate-500">{d}</p></div><p className="shrink-0 text-right text-xs font-bold">{a}</p></div>):<p className="py-6 text-center text-xs text-slate-500">No records available</p>}</div> }
 
 function DepositModal({close,notify,createDeposit}:{close:()=>void;notify:(s:string)=>void;createDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) { const [amount,setAmount]=useState(""); const [network,setNetwork]=useState("BSC"); const [payCurrency,setPayCurrency]=useState("usdtbsc"); const [error,setError]=useState(""); const [submitting,setSubmitting]=useState(false); const [deposit,setDeposit]=useState<DepositResult|null>(null); const value=Number(amount); const payAddress=deposit?.payAddress ?? ""; const qrValue=payAddress || deposit?.providerPaymentId || ""; const copyPayment=()=>{if(!payAddress){notify("Payment address unavailable");return;}navigator.clipboard?.writeText(payAddress);notify("Payment address copied");}; const submit=async()=>{if(value<=0){setError("Enter a valid deposit amount");return;}setSubmitting(true);const result=await createDeposit({amount:value,network,payCurrency});setSubmitting(false);if(!result.ok){setError(result.message||"NOWPayments deposit failed");return;}setError("");setDeposit(result.deposit??null);}; return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex justify-between"><div><h3 className="text-xl font-black">Create Deposit</h3><p className="mt-1 text-xs text-slate-500">Send only the selected coin/network via NOWPayments.</p></div><button onClick={close}><X/></button></div>{deposit?<><div className="mx-auto my-6 grid h-44 w-44 place-items-center rounded-2xl bg-white p-3">{qrValue?<img src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrValue)}`} alt="NOWPayments payment QR code" className="h-full w-full object-contain"/>:<div className="grid h-full w-full place-items-center bg-ink p-2 text-center text-[10px] font-bold text-slate-500">Payment QR unavailable</div>}</div><div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4 text-xs"><LineItem label="Payment ID" value={deposit.providerPaymentId ?? "Pending"}/><LineItem label="Status" value={deposit.paymentStatus ?? deposit.status}/><LineItem label="Amount" value={`${deposit.amount.toFixed(2)} ${deposit.asset}`}/><LineItem label="Currency" value={deposit.payCurrency ?? payCurrency.toUpperCase()}/><LineItem label="Network" value={deposit.networkName}/></div><button onClick={copyPayment} className="mt-3 flex w-full items-center gap-3 rounded-xl border border-line bg-ink p-3 text-left"><span className="min-w-0 flex-1 break-all text-xs text-slate-300">{payAddress || "Payment address unavailable"}</span><Copy size={16} className="shrink-0 text-lime"/></button><div className="mt-4 rounded-xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Deposit will credit to Spot Wallet only after NOWPayments marks the payment confirmed or finished.</div></>:<><label className="mt-5 block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");}} placeholder="0.00" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>{setNetwork(e.target.value);setPayCurrency(e.target.value==="TRON"?"usdttrc20":e.target.value==="ETH"?"usdterc20":"usdtbsc");}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label><label className="mt-4 block text-xs font-bold text-slate-400">Payment currency<select value={payCurrency} onChange={e=>setPayCurrency(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="usdtbsc">USDT BSC</option><option value="usdttrc20">USDT TRC20</option><option value="usdterc20">USDT ERC20</option><option value="btc">BTC</option><option value="eth">ETH</option></select></label><div className="mt-4 rounded-xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. Send only the selected coin/network via NOWPayments. Manual tx hashes are not accepted.</div></>}{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<button onClick={submit} disabled={submitting||Boolean(deposit)} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">{submitting?"Creating...":deposit?"Payment Created":"Create Deposit"}</button></div></div> }
 
