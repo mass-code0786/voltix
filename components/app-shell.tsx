@@ -1025,7 +1025,6 @@ function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerif
 function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, onOpenP2P, assets, dashboard, dashboardLoading, balanceVisible, setBalanceVisible, copyTradeHistory, aiWalletBalance, userCountry, aiSubscription, vipTradeRows, onManualTradePlaced, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; dashboardLoading: boolean; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; aiWalletBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; onManualTradePlaced: () => void | Promise<void>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
   const total = dashboard?.summary?.totalPortfolio ?? 0;
   const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
-  const aiCopyTradingIncome = dashboard?.summary?.aiCopyTradingIncome ?? 0;
   const live=useLiveTickers();
   const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]);
   const localCurrency=useMemo(()=>currencyConfigForCountry(userCountry),[userCountry]);
@@ -1057,7 +1056,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, o
       {shortcuts.map(({icon:Icon,label,onClick}) => <HomeActionTile key={label} icon={Icon} label={label} onClick={onClick} />)}
     </div>
 
-    <AiOverviewCard totalIncome={aiCopyTradingIncome} history={copyTradeHistory} balanceVisible={balanceVisible} />
+    <AiOverviewCard balanceVisible={balanceVisible} />
     <VipTradeRowsCard rows={vipTradeRows} onTradePlaced={onManualTradePlaced} />
     <HomeAiSubscriptionCard currentUser={currentUser} status={aiSubscription} purchaseAi={purchaseAi} onOpenAuth={onOpenAuth} notify={notify} />
 
@@ -1096,13 +1095,10 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
     <div className="relative grid h-full grid-cols-[minmax(0,1fr)_108px] items-center gap-1">
       <div className="min-w-0">
         <p className="text-[12px] font-semibold text-slate-400">Welcome Back,</p>
-        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-          <h2 className="truncate text-[19px] font-bold leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
-          {kycApproved&&<CheckCircle2 size={14} className="shrink-0 text-[#18ff8a]" fill="rgba(24,255,138,.18)" />}
-        </div>
-        <div className="mt-1 flex items-center gap-1.5">
-          <span className="flex h-7 items-center gap-1 rounded-full border border-[#18ff8a]/30 bg-[#18ff8a]/10 px-1.5 pr-2 text-[8px] font-black text-[#c9ffe4]"><img src={getVipIconPath(currentUser.vipRank)} alt={`${currentUser.vipRank || "VIP 0"} badge`} className="h-6 w-6 object-contain"/>{currentUser.vipRank || "VIP 0"}</span>
-          <span className={`flex h-5 items-center rounded-full border px-2 text-[8px] font-black ${kycApproved?"border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]":"border-[#f6c85f]/25 bg-[#f6c85f]/10 text-[#f6c85f]"}`}>{kycApproved?"Verified":"Not Verified"}</span>
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 pr-1">
+          <h2 className="max-w-full text-[19px] font-bold leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
+          <span className={`flex h-5 shrink-0 items-center gap-1 rounded-full border px-2 text-[8px] font-black ${kycApproved?"border-[#58a6ff]/25 bg-[#58a6ff]/10 text-[#77b7ff]":"border-[#f6c85f]/25 bg-[#f6c85f]/10 text-[#f6c85f]"}`}>{kycApproved&&<CheckCircle2 size={11} fill="rgba(88,166,255,.18)"/>}{kycApproved?"Verified":"Not Verified"}</span>
+          <span className="flex h-6 shrink-0 items-center gap-0.5 rounded-full border border-[#18ff8a]/30 bg-[#18ff8a]/10 px-1 pr-1.5 text-[8px] font-black text-[#c9ffe4]"><img src={getVipIconPath(currentUser.vipRank)} alt={`${currentUser.vipRank || "VIP 0"} badge`} className="h-5 w-5 object-contain"/>{currentUser.vipRank || "VIP 0"}</span>
         </div>
         <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>
         <div className="mt-1 flex min-w-0 flex-wrap items-end gap-x-2 gap-y-1">
@@ -1241,36 +1237,61 @@ function HomeActionTile({ icon: Icon, label, onClick }: { icon: typeof Home; lab
   </button>;
 }
 
-function AiOverviewCard({ totalIncome, history, balanceVisible }: { totalIncome: number; history: CopyTradeHistory[]; balanceVisible: boolean }) {
-  const chartData=useMemo(()=>history.map(row=>Number(row.profit ?? 0)).filter(value=>Number.isFinite(value)),[history]);
-  const percent=history.length?chartData.reduce((sum,value)=>sum+value,0):0;
+type AiOverviewRange = "today" | "week" | "month";
+type AiOverviewData = { range: AiOverviewRange; totalIncome: number; currency: string; points: { label: string; value: number }[] };
+const overviewRangeLabels: Record<AiOverviewRange, string> = { today: "Today", week: "This Week", month: "This Month" };
+
+function AiOverviewCard({ balanceVisible }: { balanceVisible: boolean }) {
+  const [range,setRange]=useState<AiOverviewRange>("week");
+  const [data,setData]=useState<AiOverviewData|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [retryKey,setRetryKey]=useState(0);
+  useEffect(()=>{
+    const controller=new AbortController();
+    setLoading(true);
+    setError("");
+    fetch(`/api/ai-trading/overview?range=${range}`,{credentials:"include",cache:"no-store",signal:controller.signal})
+      .then(async response=>{const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||"Overview unavailable");return body as AiOverviewData;})
+      .then(next=>{if(!controller.signal.aborted)setData(next);})
+      .catch(err=>{if(!controller.signal.aborted)setError(err instanceof Error?err.message:"Overview unavailable");})
+      .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+    return()=>controller.abort();
+  },[range,retryKey]);
   return <GlassCard className="home-depth-card h-[126px] rounded-[20px] p-3">
     <div className="flex items-start justify-between gap-3">
       <h3 className="text-[16px] font-bold leading-tight text-white">AI Copy Trading Overview</h3>
-      <button className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-[#18ff8a]/15 bg-white/[.04] px-2 text-[10px] font-black text-slate-300">This Week <ChevronDown size={10}/></button>
+      <label className="relative flex h-7 max-w-[104px] shrink-0 items-center rounded-full border border-[#18ff8a]/15 bg-[#0b1511] text-[10px] font-black text-slate-300">
+        <select aria-label="AI trading overview range" value={range} onChange={event=>setRange(event.target.value as AiOverviewRange)} className="h-full w-full appearance-none rounded-full bg-transparent pl-2.5 pr-6 outline-none">
+          <option value="today">Today</option><option value="week">This Week</option><option value="month">This Month</option>
+        </select>
+        <ChevronDown size={10} className="pointer-events-none absolute right-2"/>
+      </label>
     </div>
     <div className="mt-2 grid grid-cols-[minmax(0,1fr)_136px] items-end gap-2.5">
       <div>
         <p className="text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Income</p>
-        <p className="mt-0.5 text-[24px] font-black leading-none text-[#18ff8a]">{balanceVisible ? usd(totalIncome) : BALANCE_MASK}</p>
-        <p className="mt-0.5 text-[10px] font-bold text-slate-500">{balanceVisible ? history.length ? `${percent >= 0 ? "+" : ""}${percent.toFixed(2)} USDT` : "No chart data yet" : `${BALANCE_MASK} USDT`}</p>
+        <p className={`mt-0.5 text-[24px] font-black leading-none text-[#18ff8a] transition-opacity ${loading&&data?"opacity-55":""}`}>{balanceVisible ? data?usd(data.totalIncome):"—" : BALANCE_MASK}</p>
+        <p className="mt-0.5 text-[9px] font-bold text-slate-500">{error?<button type="button" onClick={()=>setRetryKey(value=>value+1)} className="text-[#f6c85f]">Retry overview</button>:loading?`Loading ${overviewRangeLabels[range].toLowerCase()}…`:data?.totalIncome?`${data.totalIncome>=0?"+":""}${data.totalIncome.toFixed(2)} ${data.currency}`:"No income in this range"}</p>
       </div>
-      <IncomeChart data={chartData} />
+      <IncomeChart points={data?.points??[]} loading={loading} />
     </div>
   </GlassCard>;
 }
 
-function IncomeChart({ data }: { data: number[] }) {
-  if (!data.length) return <div className="grid h-[64px] w-[136px] place-items-center rounded-xl border border-white/[.06] bg-black/20 text-center text-[10px] font-bold text-slate-600">No chart data</div>;
-  const width=136, height=64;
+function IncomeChart({ points,loading }: { points: {label:string;value:number}[];loading:boolean }) {
+  const data=points.map(point=>point.value);
+  if (!points.length) return <div className="grid h-[64px] w-[136px] place-items-center rounded-xl border border-white/[.06] bg-black/20 text-center text-[10px] font-bold text-slate-600">{loading?"Loading…":"No chart data"}</div>;
+  const width=136, height=50;
   const cumulative=data.reduce<number[]>((series,value,index)=>[...series,(series[index-1]??0)+value],[]);
   const min=Math.min(...cumulative,0), max=Math.max(...cumulative,1);
-  const points=cumulative.map((value,index)=>`${(index/Math.max(cumulative.length-1,1))*width},${height-8-((value-min)/Math.max(max-min,1))*(height-18)}`).join(" ");
-  return <svg className="h-[64px] w-[136px] drop-shadow-[0_0_12px_rgba(24,255,138,.38)]" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+  const polylinePoints=cumulative.map((value,index)=>`${(index/Math.max(cumulative.length-1,1))*width},${height-8-((value-min)/Math.max(max-min,1))*(height-18)}`).join(" ");
+  const labelIndexes=points.length>12?new Set([0,Math.floor((points.length-1)/2),points.length-1]):new Set(points.map((_,index)=>index));
+  return <div className={`h-[64px] w-[136px] transition-opacity ${loading?"opacity-55":""}`}><svg className="h-[50px] w-[136px] drop-shadow-[0_0_12px_rgba(24,255,138,.38)]" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
     <defs><linearGradient id="incomeFill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#18ff8a" stopOpacity=".34"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></linearGradient></defs>
-    <polyline points={`0,${height} ${points} ${width},${height}`} fill="url(#incomeFill)" stroke="none" />
-    <polyline points={points} fill="none" stroke="#18ff8a" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
-  </svg>;
+    <polyline points={`0,${height} ${polylinePoints} ${width},${height}`} fill="url(#incomeFill)" stroke="none" />
+    <polyline points={polylinePoints} fill="none" stroke="#18ff8a" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
+  </svg><div className="relative h-[12px] text-[7px] font-bold text-slate-600">{points.map((point,index)=>labelIndexes.has(index)?<span key={`${point.label}-${index}`} className="absolute -translate-x-1/2 whitespace-nowrap" style={{left:`${(index/Math.max(points.length-1,1))*100}%`}}>{point.label}</span>:null)}</div></div>;
 }
 
 function VipTradeRowsCard({ rows, onTradePlaced }: { rows: VipTradeRow[]; onTradePlaced: () => void | Promise<void> }) {
