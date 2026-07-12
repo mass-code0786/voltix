@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, Radio, X } from "lucide-react";
 import { useLiveTickers } from "@/lib/use-market-data";
+import { formatLocalTime } from "@/lib/local-time";
 
 const EXPIRED_MESSAGE = "This trading window has ended. Please wait for the next trading window.";
 const WRONG_PAIR_MESSAGE = "That is not the recommended pair for this trading window. Please select the highlighted pair.";
@@ -108,4 +109,4 @@ function ModalShell({ children, onClose }: { children: React.ReactNode; onClose:
 function ErrorMessage({ text }: { text: string }) { return <p className="mt-4 rounded-xl border border-[#ff4f6d]/25 bg-[#ff4f6d]/10 px-3 py-2.5 text-xs font-bold leading-5 text-[#ff8b9e]">{text}</p>; }
 function formatPrice(value: number) { return value < 1 ? value.toFixed(6) : value.toLocaleString("en-US", { maximumFractionDigits: 2 }); }
 function formatAmount(value: number) { return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 8 }); }
-function formatSettlement(value: string) { return `at ${new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short" }).format(new Date(value))}`; }
+function formatSettlement(value: string) { return `at ${formatLocalTime(value)}`; }

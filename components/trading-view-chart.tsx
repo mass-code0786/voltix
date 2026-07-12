@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { browserTimeZone } from "@/lib/local-time";
 
 const TRADING_VIEW_SCRIPT_ID = "tradingview-widget-script";
 const TRADING_VIEW_SCRIPT_SRC = "https://s3.tradingview.com/tv.js";
@@ -84,7 +85,7 @@ export function TradingViewChart({ baseSymbol, interval = "1" }: TradingViewChar
           height: "100%",
           symbol: tradingViewSymbol,
           interval,
-          timezone: "Asia/Kolkata",
+          timezone: browserTimeZone(),
           theme: "dark",
           style: "1",
           locale: "en",

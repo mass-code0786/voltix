@@ -1,4 +1,5 @@
 import { formatLedgerStatus } from "@/lib/format-ledger-status";
+import { formatLocalDateTime } from "@/lib/local-time";
 
 type LedgerDisplayInput = {
   title?: string | null;
@@ -20,19 +21,7 @@ export function getLedgerDisplay(entry: LedgerDisplayInput) {
 
 export function formatLedgerDateTime(timestamp: string | Date | null | undefined) {
   if (!timestamp) return "Date unavailable";
-  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return "Date unavailable";
-  const parts = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).formatToParts(date);
-  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return `${value.day} ${value.month} ${value.year} • ${value.hour}:${value.minute} ${(value.dayPeriod || "").toUpperCase()} IST`;
+  return formatLocalDateTime(timestamp);
 }
 
 export function tradePlacementTitle(source?: string | null) {

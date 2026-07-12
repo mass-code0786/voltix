@@ -31,6 +31,7 @@ import type { Coin } from "@/lib/market-defaults";
 import { compact, usd } from "@/lib/format";
 import { useLiveTickers } from "@/lib/use-market-data";
 import { getLedgerDisplay } from "@/lib/ledger-display";
+import { formatLocalTimeRange } from "@/lib/local-time";
 import { clearPostLoginSplashFlags } from "@/components/app-launch-splash";
 import { getVipIconPath } from "@/lib/vip-icons";
 import { ManualTradeWizard } from "@/components/manual-trade-wizard";
@@ -57,7 +58,7 @@ type DepositResult = { id: string; amount: number; asset: string; network: strin
 type ActiveCopyTrade = { code?: string; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string };
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
 type CopyTradeCounts = { todaysTradeCount: number; dailyTradeLimit: number };
-type VipTradeRow = { id: string; label: string; vipRange?: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; dailyReturnMin?: number; dailyReturnMax?: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "UPCOMING" | "LIVE" | "CLOSED"; openTime?: string; closeTime?: string; timezone?: string; secondsUntilOpen?: number; secondsUntilClose?: number; canTrade?: boolean; canTradeWhenLive?: boolean; reason?: string | null; message?: string | null };
+type VipTradeRow = { id: string; label: string; vipRange?: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; dailyReturnMin?: number; dailyReturnMax?: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "UPCOMING" | "LIVE" | "CLOSED"; openTime?: string; closeTime?: string; windowStartAt?: string; windowCloseAt?: string; timezone?: string; secondsUntilOpen?: number; secondsUntilClose?: number; canTrade?: boolean; canTradeWhenLive?: boolean; reason?: string | null; message?: string | null };
 type AppCoin = Coin;
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath"|"logoUrl">> & { localLogoPath?: string | null; logoUrl?: string | null };
@@ -1950,11 +1951,11 @@ function tradeDisabledReason(row: VipTradeRow) {
 }
 
 function readableTradeTime(row: VipTradeRow) {
+  if (row.windowStartAt && row.windowCloseAt) return formatLocalTimeRange(row.windowStartAt, row.windowCloseAt);
   const open = row.openTime || row.currentTradeTime || "";
   const close = row.closeTime || "";
-  const timezone = row.timezone || "";
   if (!open || !close) return "";
-  return `${open} - ${close}${timezone ? ` ${timezone}` : ""}`;
+  return `${open} - ${close}`;
 }
 
 function tradeRowsCountdownKey(rows: VipTradeRow[]) {
