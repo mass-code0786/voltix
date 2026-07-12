@@ -55,7 +55,7 @@ type WithdrawalInput = { walletType: "SPOT" | "AI"; amount: number; address: str
 type WithdrawalResult = { ok: boolean; message: string; requiresConfirmation?: boolean; breakdown?: EarlyWithdrawalBreakdown };
 type DepositInput = { amount: number; network: string; payCurrency: string };
 type DepositResult = { id: string; amount: number; asset: string; network: string; networkName: string; providerPaymentId: string | null; providerInvoiceId: string | null; providerPaymentUrl: string | null; payCurrency: string | null; payAddress: string | null; paymentStatus: string | null; actuallyPaid: number | null; outcomeAmount: number | null; status: string; createdAt: string };
-type ActiveCopyTrade = { code?: string; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string };
+type ActiveCopyTrade = { code?: string; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string; creditDueAt?: string };
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
 type CopyTradeCounts = { todaysTradeCount: number; dailyTradeLimit: number };
 type VipTradeRow = { id: string; label: string; vipRange?: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; dailyReturnMin?: number; dailyReturnMax?: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "UPCOMING" | "LIVE" | "CLOSED"; openTime?: string; closeTime?: string; windowStartAt?: string; windowCloseAt?: string; timezone?: string; secondsUntilOpen?: number; secondsUntilClose?: number; canTrade?: boolean; canTradeWhenLive?: boolean; reason?: string | null; message?: string | null };
@@ -468,7 +468,7 @@ export default function AppShell() {
       setCopyTradeHistory([]);
       setVipTradeRows([]);
       setCopyTradeCounts(defaultCopyTradeCounts);
-      return;
+      return false;
     }
     const response = await fetch("/api/copy-trade/status", { cache: "no-store", credentials: "include" });
     if (!response.ok) throw new Error("Copy trade status request failed");
@@ -481,6 +481,7 @@ export default function AppShell() {
       todaysTradeCount: Math.max(0, Number(status?.todaysTradeCount ?? 0)),
       dailyTradeLimit: Math.max(0, Number(status?.dailyTradeLimit ?? defaultCopyTradeCounts.dailyTradeLimit)),
     });
+    return Number(status?.settlement?.settled ?? 0) > 0;
   }, []);
 
   const refreshAiSubscription = useCallback(async (user: CurrentUser | null) => {
@@ -654,10 +655,23 @@ export default function AppShell() {
   useEffect(() => {
     if (!currentUser) return;
     const timer = window.setInterval(() => {
-      refreshCopyTradeStatus(currentUser).catch(() => {});
+      refreshCopyTradeStatus(currentUser).then(settled => {
+        if (settled) void Promise.all([refreshAssets(currentUser), refreshDashboard(currentUser), refreshNotifications(currentUser)]);
+      }).catch(() => {});
     }, 20_000);
     return () => window.clearInterval(timer);
-  }, [currentUser, refreshCopyTradeStatus]);
+  }, [currentUser, refreshAssets, refreshCopyTradeStatus, refreshDashboard, refreshNotifications]);
+
+  useEffect(() => {
+    if (!currentUser || !activeCopyTrade?.creditDueAt) return;
+    const delay = Math.max(0, Number(activeCopyTrade.remainingTime ?? 0) * 1000) + 250;
+    const timer = window.setTimeout(() => {
+      refreshCopyTradeStatus(currentUser)
+        .then(() => Promise.all([refreshAssets(currentUser), refreshDashboard(currentUser), refreshNotifications(currentUser)]))
+        .catch(() => {});
+    }, Math.min(delay, 2_147_483_647));
+    return () => window.clearTimeout(timer);
+  }, [activeCopyTrade?.creditDueAt, currentUser, refreshAssets, refreshCopyTradeStatus, refreshDashboard, refreshNotifications]);
 
   useEffect(() => {
     refreshAiSubscription(currentUser)
@@ -1046,6 +1060,7 @@ function normalizeTrade(raw: ActiveCopyTrade & { startedAt?: string; remainingTi
     profit: Number(raw.profit ?? 0),
     remainingTime: Number(raw.remainingTime ?? 0),
     status: raw.status ?? "Completed",
+    creditDueAt: raw.creditDueAt,
     date: raw.date ?? (raw.startedAt ? new Date(raw.startedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""),
   };
 }

@@ -32,6 +32,7 @@ async function tick() {
       windowStart: result.windowStart,
       windowClose: result.windowClose,
       settlementTime: result.settlementTime,
+      settlement: result.settlement,
       usersScanned: result.usersScanned,
       tradesPlacedThisCycle: result.tradesPlacedThisCycle,
       aiTradesAlreadyExecutedThisWindow: result.aiTradesAlreadyExecutedThisWindow,

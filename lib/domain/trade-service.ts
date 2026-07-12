@@ -111,7 +111,7 @@ function duplicateTradeWindowMessageForSource(source?: string | null) {
 
 export async function getCopyTradeStatus(userId: string, now = new Date()) {
   await ensureRequiredTradeSlots();
-  await settleDueCopyTrades(userId, now);
+  const settlement = await settleDueCopyTrades(userId, now);
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: { vipRank: true, aiWalletBalance: true, aiTradePrincipal: true },
@@ -219,6 +219,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
     todaysRemainingTrades: remaining,
     tradeRows: rows,
     history: history.map(trade => serializeTrade(trade, now)),
+    settlement,
   };
 }
 
@@ -325,6 +326,7 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
 export async function runAiAutoTradeScheduler(now = new Date()) {
   await logAiAutoTradeEvent("scheduler started", { currentUtc: now.toISOString(), currentIst: formatTradeDebugIst(now) });
   await ensureRequiredTradeSlots();
+  const settlement = await settleDueCopyTrades(undefined, now);
   await prisma.aiSubscription.updateMany({ where: { active: true, expiresAt: { lte: now } }, data: { active: false } });
   const slot = await findOpenTradeSlot(now);
   if (!slot) {
@@ -343,6 +345,7 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
       totalTradesForWindow: 0,
       skipped: [] as { userId: string; reason: string }[],
       errors: [] as { userId: string; error: string }[],
+      settlement,
     };
     await logAiAutoTradeEvent("No live trade window.", { ...noLiveSummary, windows: await tradeWindowComparisons(now) });
     return {
@@ -416,6 +419,7 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
     totalTradesForWindow,
     skipped: skipped.length,
     errors: errors.length,
+    settlement,
   };
   await logAiAutoTradeEvent("scheduler complete", summary);
   return {
@@ -440,6 +444,7 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
     totalTradesForWindow: summary.totalTradesForWindow,
     skipped,
     errors,
+    settlement: summary.settlement,
   };
 }
 
