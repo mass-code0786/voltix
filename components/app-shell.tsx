@@ -1819,8 +1819,8 @@ function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,aiW
     </section>
     <AiTopStats balance={aiWalletBalance} todayIncome={todayIncome} currentTrades={currentTrades} allowedTrades={allowedTrades} active={active}/>
     <AiTradeOverviewCard/>
-    <TopCopyTraders/>
     <VipTradeRowsCard rows={tradeRows.slice(0,5)} onTradePlaced={onManualTradePlaced}/>
+    <TopCopyTraders/>
     <AiInfoStrip/>
     <AiSubscriptionPanel currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin} notify={notify}/>
   </div>;
