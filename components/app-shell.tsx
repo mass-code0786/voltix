@@ -6,7 +6,7 @@ import {
   ArrowDownLeft, ArrowDownToLine, ArrowLeftRight, ArrowUpRight, BarChart3, Bell,
   Bot, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Copy, Eye, EyeOff, FileClock, FileText, Grid2X2,
   Headphones, Home, Landmark, LineChart, Menu, Network, Plus, QrCode, Search, SlidersHorizontal,
-  RefreshCw, Send, Settings, Share2, ShieldCheck, Star,
+  Send, Settings, Share2, ShieldCheck, Star,
   Trophy, Users, Wallet, X, Zap,
 } from "lucide-react";
 import { CoinMark } from "./coin-mark";
@@ -2090,7 +2090,7 @@ function WalletScreen({notify,assets,loading,refreshing,onRefresh,spotBalance,fu
  const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const spotAssetsValue=activeAssets.reduce((sum,c)=>sum+c.price*c.balance,0); const total=spotAssetsValue+futuresBalance+aiWalletBalance;
 if(loading)return <div className="wallet-page -mt-1 min-h-screen" aria-busy="true"><WalletHero/><section className="wallet-glass wallet-total-card animate-pulse"><div className="h-16 w-48 rounded-xl bg-white/10"/></section><section className="wallet-type-grid animate-pulse">{[0,1,2].map(item=><div key={item} className="wallet-glass wallet-type-card h-24"><div className="h-4 w-24 rounded bg-white/10"/></div>)}</section></div>;
 return <div className="wallet-page -mt-1 min-h-screen">
-  <WalletHero refreshing={refreshing} onRefresh={onRefresh}/>
+  <WalletHero/>
   <WalletTotalCard total={total} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
   <WalletTypeCards spot={spotBalance} ai={aiWalletBalance} futures={futuresBalance} balanceVisible={balanceVisible}/>
   <WalletQuickActions onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal} onOpenTransfer={onOpenTransfer} onHistory={()=>onSectionChange("ledger")} onAddressBook={()=>notify("Address book unavailable")}/>
@@ -2102,8 +2102,8 @@ return <div className="wallet-page -mt-1 min-h-screen">
 
 function WalletBalanceRow({label,balance}:{label:string;balance:number}) { return <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5"><p className="text-sm font-bold">{label}</p><p className="text-sm font-black">{balance.toFixed(2)} USDT</p></div> }
 
-function WalletHero({refreshing,onRefresh}:{refreshing?:boolean;onRefresh?:()=>void}) {
-  return <section className="wallet-hero"><div className="relative z-10"><h1>Wallet</h1><p>Manage your assets securely</p>{onRefresh&&<button type="button" onClick={onRefresh} disabled={refreshing} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#18ff8a]/25 bg-black/25 px-3 py-2 text-[10px] font-black text-[#18ff8a] disabled:cursor-wait" aria-label="Refresh wallet balances and ledger"><RefreshCw size={13} className={refreshing?"animate-spin":""}/>{refreshing?"Refreshing...":"Refresh"}</button>}</div><WalletHeroSvg/></section>;
+function WalletHero() {
+  return <section className="wallet-hero"><div className="relative z-10"><h1>Wallet</h1><p>Manage your assets securely</p></div><WalletHeroSvg/></section>;
 }
 
 function WalletHeroSvg() {
