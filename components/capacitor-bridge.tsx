@@ -1,15 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getMobileSessionTokenWithBiometric, getNativePlatform, hapticImpact, isVoltixNativeApp, mobileFetchHeaders, savePushToken } from "@/lib/mobile-native";
+import { useEffect, useRef, useState } from "react";
+import { biometricForegroundUnlockKey, clearMobileNativeSession, getMobileSessionTokenWithBiometric, getNativePlatform, hapticImpact, isBiometricAvailable, isBiometricLockEnabled, isVoltixNativeApp, savePushToken } from "@/lib/mobile-native";
 
 const VOLTIX_STATUS_BAR_COLOR = "#050b08";
 const refreshRoutes = ["/dashboard", "/profile"];
 type CapacitorNetwork = typeof import("@capacitor/network").Network;
+type StartupAuthState = "initializing" | "unauthenticated" | "authenticated_locked" | "authenticated_unlocked";
+const AUTH_STARTUP_TIMEOUT_MS = 9000;
 
 export function CapacitorBridge() {
   const [offline, setOffline] = useState(false);
   const [booting, setBooting] = useState(false);
+  const [authState, setAuthState] = useState<StartupAuthState>("initializing");
+  const [unlockMessage, setUnlockMessage] = useState("");
+  const authStateRef = useRef<StartupAuthState>("initializing");
+  const promptInProgress = useRef(false);
+  const attemptedForCurrentResume = useRef(false);
+
+  useEffect(() => {
+    authStateRef.current = authState;
+  }, [authState]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -26,7 +37,7 @@ export function CapacitorBridge() {
         import("@capacitor/network"),
       ]);
 
-      if (!Capacitor.isNativePlatform()) return;
+      if (disposed || !Capacitor.isNativePlatform()) return;
       setBooting(true);
       document.documentElement.classList.add("voltix-capacitor");
       document.body.classList.add("voltix-capacitor");
@@ -38,11 +49,59 @@ export function CapacitorBridge() {
         Keyboard.setResizeMode({ mode: KeyboardResize.Body }),
         Keyboard.setStyle({ style: KeyboardStyle.Dark }),
       ]);
+      if (disposed) return;
 
+      const requestAppUnlock = async () => {
+        if (disposed || promptInProgress.current || attemptedForCurrentResume.current) return;
+        promptInProgress.current = true;
+        attemptedForCurrentResume.current = true;
+        setUnlockMessage("");
+        try {
+          const token = await getMobileSessionTokenWithBiometric("Unlock Voltix");
+          if (!token) throw new Error("Biometric session unavailable");
+          if (!disposed) {
+            window.sessionStorage.setItem(biometricForegroundUnlockKey, "true");
+            setAuthState("authenticated_unlocked");
+          }
+        } catch {
+          if (!disposed) {
+            setAuthState("authenticated_locked");
+            setUnlockMessage("Fingerprint was cancelled or could not be verified.");
+          }
+        } finally {
+          promptInProgress.current = false;
+        }
+      };
+      const initializeAuth = async () => {
+        setAuthState("initializing");
+        const me = await fetchWithTimeout("/api/me", AUTH_STARTUP_TIMEOUT_MS);
+        if (!me?.authenticated || !me.user) {
+          setAuthState("unauthenticated");
+          if (!window.location.pathname.startsWith("/auth")) {
+            window.location.replace("/auth?mode=login&returnTo=%2Fdashboard");
+          }
+          return;
+        }
+        const biometricEnabled = await isBiometricLockEnabled().catch(() => false);
+        const alreadyUnlockedThisForeground = window.sessionStorage.getItem(biometricForegroundUnlockKey) === "true";
+        if (!biometricEnabled || alreadyUnlockedThisForeground) {
+          setAuthState("authenticated_unlocked");
+          return;
+        }
+        const capable = await isBiometricAvailable().catch(() => false);
+        setAuthState("authenticated_locked");
+        if (!capable) {
+          setUnlockMessage("Biometric unlock is unavailable on this device. Use account login instead.");
+          return;
+        }
+        await requestAppUnlock();
+      };
       const runStartupTasks = async () => {
         if (startupTasksDone) return;
         startupTasksDone = true;
-        await Promise.allSettled([restoreMobileSession(), registerPushNotifications(), checkForAppUpdate()]);
+        await initializeAuth();
+        if (disposed) return;
+        await Promise.allSettled([registerPushNotifications(), checkForAppUpdate()]);
       };
       const refreshConnectivity = async () => {
         const reachable = await isNativeOnline(Network);
@@ -67,6 +126,19 @@ export function CapacitorBridge() {
         App.exitApp();
       });
       const urlListener = await App.addListener("appUrlOpen", ({ url }) => handleDeepLink(url));
+      const stateListener = await App.addListener("appStateChange", ({ isActive }) => {
+        if (!isActive) {
+          attemptedForCurrentResume.current = false;
+          window.sessionStorage.removeItem(biometricForegroundUnlockKey);
+          return;
+        }
+        if (authStateRef.current !== "authenticated_unlocked") return;
+        isBiometricLockEnabled().then(async enabled => {
+          if (!enabled || disposed) return;
+          setAuthState("authenticated_locked");
+          await requestAppUnlock();
+        }).catch(() => null);
+      });
       const networkListener = await Network.addListener("networkStatusChange", status => {
         if (!status.connected) {
           setOffline(true);
@@ -94,6 +166,7 @@ export function CapacitorBridge() {
         disposed = true;
         backListener.remove();
         urlListener.remove();
+        stateListener.remove();
         networkListener.remove();
         document.removeEventListener("click", clickHandler);
         window.removeEventListener("voltix:native-reconnect", reconnectHandler);
@@ -114,7 +187,36 @@ export function CapacitorBridge() {
     };
   }, []);
 
+  const retryUnlock = async () => {
+    if (promptInProgress.current) return;
+    attemptedForCurrentResume.current = false;
+    setUnlockMessage("");
+    if (!(await isBiometricAvailable().catch(() => false))) {
+      setUnlockMessage("Biometric unlock is unavailable on this device. Use account login instead.");
+      return;
+    }
+    promptInProgress.current = true;
+    attemptedForCurrentResume.current = true;
+    try {
+      const token = await getMobileSessionTokenWithBiometric("Unlock Voltix");
+      if (!token) throw new Error("Biometric session unavailable");
+      window.sessionStorage.setItem(biometricForegroundUnlockKey, "true");
+      setAuthState("authenticated_unlocked");
+    } catch {
+      setUnlockMessage("Fingerprint was cancelled or could not be verified.");
+    } finally {
+      promptInProgress.current = false;
+    }
+  };
+  const useAccountLogin = async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => null);
+    await clearMobileNativeSession().catch(() => null);
+    setAuthState("unauthenticated");
+    window.location.replace("/auth?mode=login&returnTo=%2Fdashboard");
+  };
+
   if (offline) return <OfflineScreen retry={() => window.dispatchEvent(new CustomEvent("voltix:native-reconnect"))} />;
+  if (authState === "authenticated_locked") return <UnlockScreen message={unlockMessage} retry={retryUnlock} useLogin={useAccountLogin} />;
   if (booting) return <VoltixNativeLoader />;
   return null;
 }
@@ -142,18 +244,17 @@ async function canReachApi() {
   }
 }
 
-async function restoreMobileSession() {
-  const me = await fetch("/api/me", { credentials: "include", cache: "no-store" }).then(response => response.ok ? response.json() : null).catch(() => null);
-  if (me?.authenticated) return;
-  const token = await getMobileSessionTokenWithBiometric("Unlock Voltix");
-  if (!token) return;
-  const response = await fetch("/api/auth/mobile-session", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(await mobileFetchHeaders()) },
-    body: JSON.stringify({ token }),
-  });
-  if (response.ok && !window.location.pathname.startsWith("/dashboard")) window.location.replace("/dashboard");
+async function fetchWithTimeout(url: string, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { credentials: "include", cache: "no-store", signal: controller.signal });
+    return response.ok ? response.json() : null;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 async function registerPushNotifications() {
@@ -230,6 +331,10 @@ function VoltixNativeLoader() {
 
 function OfflineScreen({ retry }: { retry: () => void }) {
   return <div className="voltix-native-overlay" role="alertdialog" aria-modal="true" aria-label="No Internet Connection"><div className="voltix-offline-card"><div className="voltix-native-loader small"><VoltixVLogo /></div><h2>No Internet Connection</h2><p>Please check your connection and try again.</p><button onClick={retry}>Retry</button></div></div>;
+}
+
+function UnlockScreen({ message, retry, useLogin }: { message: string; retry: () => void; useLogin: () => void }) {
+  return <div className="voltix-native-overlay" role="dialog" aria-modal="true" aria-label="Unlock Voltix"><div className="voltix-offline-card"><div className="voltix-native-loader small"><VoltixVLogo /></div><h2>Unlock Voltix</h2><p>{message || "Confirm your fingerprint to continue."}</p><button onClick={retry}>Try fingerprint again</button><button className="voltix-unlock-login" onClick={useLogin}>Use account login instead</button></div></div>;
 }
 
 function VoltixVLogo() {

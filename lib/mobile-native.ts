@@ -2,6 +2,8 @@
 
 const biometricServer = "voltix-mobile-session";
 const fcmTokenKey = "voltix:fcm-token";
+const biometricLockPreferenceKey = "voltix:biometric-lock-enabled";
+export const biometricForegroundUnlockKey = "voltix:biometric-foreground-unlocked";
 
 export async function isVoltixNativeApp() {
   try {
@@ -31,6 +33,21 @@ export async function offerBiometricEnrollment(sessionToken?: string) {
   if (!available) return;
   if (!window.confirm("Enable biometric login?")) return;
   await storeMobileSessionToken(sessionToken);
+  await setBiometricLockEnabled(true);
+  window.sessionStorage.setItem(biometricForegroundUnlockKey, "true");
+}
+
+export async function isBiometricLockEnabled() {
+  if (!(await isVoltixNativeApp())) return false;
+  const { Preferences } = await import("@capacitor/preferences");
+  const result = await Preferences.get({ key: biometricLockPreferenceKey });
+  return result.value === "true";
+}
+
+export async function setBiometricLockEnabled(enabled: boolean) {
+  if (!(await isVoltixNativeApp())) return;
+  const { Preferences } = await import("@capacitor/preferences");
+  await Preferences.set({ key: biometricLockPreferenceKey, value: String(enabled) });
 }
 
 export async function storeMobileSessionToken(sessionToken: string) {
@@ -62,6 +79,7 @@ export async function clearMobileNativeSession() {
   await Promise.allSettled([
     deleteBiometricSession(),
     deletePushToken(),
+    setBiometricLockEnabled(false),
   ]);
 }
 

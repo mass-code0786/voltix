@@ -212,6 +212,11 @@ html.voltix-capacitor .market-fixed-actions {
   font-size: 13px;
   font-weight: 1000;
 }
+.voltix-offline-card .voltix-unlock-login {
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: transparent;
+  color: #d6e2dc;
+}
 .grid-fade {
   background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
   background-size: 28px 28px;
