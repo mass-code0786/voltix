@@ -7,6 +7,8 @@ import { rateLimitByUser } from "@/lib/security";
 import { auditFailure, auditSuccess } from "@/lib/audit";
 import { verifyTransactionPinForUser } from "@/lib/domain/transaction-pin-service";
 import { verifyMobileTransactionToken } from "@/lib/mobile-transaction-token";
+import { ACCOUNT_VERIFICATION_MESSAGE, ACCOUNT_VERIFICATION_REQUIRED, AccountVerificationRequiredError, requireVerifiedAccount } from "@/lib/domain/account-verification";
+import { prisma } from "@/lib/prisma";
 
 const withdrawalSchema = z.object({
   walletType: z.enum(["SPOT", "AI"]),
@@ -27,6 +29,12 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
+  try {
+    await requireVerifiedAccount(prisma, user.id);
+  } catch (error) {
+    if (error instanceof AccountVerificationRequiredError) return NextResponse.json({ code: ACCOUNT_VERIFICATION_REQUIRED, message: ACCOUNT_VERIFICATION_MESSAGE, error: ACCOUNT_VERIFICATION_MESSAGE }, { status: 403 });
+    throw error;
+  }
   const limited = rateLimitByUser(user.id, "withdrawals", 10, 60 * 60 * 1000);
   if (limited) return limited;
   const parsed = withdrawalSchema.safeParse(await request.json().catch(() => null));
@@ -54,6 +62,7 @@ export async function POST(request: Request) {
     if (error instanceof AiWithdrawalConfirmationRequiredError) {
       return NextResponse.json(error.breakdown, { status: 409 });
     }
+    if (error instanceof AccountVerificationRequiredError) return NextResponse.json({ code: ACCOUNT_VERIFICATION_REQUIRED, message: ACCOUNT_VERIFICATION_MESSAGE, error: ACCOUNT_VERIFICATION_MESSAGE }, { status: 403 });
     return NextResponse.json({ error: error instanceof Error ? error.message : "Withdrawal request failed" }, { status: 400 });
   }
 }

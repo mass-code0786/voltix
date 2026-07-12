@@ -1,6 +1,7 @@
 import { DepositStatus, Prisma, WalletType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ensureUserWalletAccounts } from "./user-wallets";
+import { requireVerifiedAccount } from "./account-verification";
 import { postBalancedJournal } from "./ledger";
 import { createNotification } from "./notification-service";
 import { recalculateVipRanksForUserAndUplines } from "./vip-rank-service";
@@ -241,6 +242,7 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
   if (input.walletType !== "SPOT" && input.walletType !== "AI") throw new Error("Only Spot and AI withdrawals are supported");
 
   return prisma.$transaction(async (tx) => {
+    await requireVerifiedAccount(tx, input.userId);
     const existing = await tx.withdrawal.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
       include: { asset: true, network: true },

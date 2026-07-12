@@ -40,6 +40,7 @@ import { getKycDocumentTypes, kycDocumentRequiresBackPhoto } from "@/lib/kyc-doc
 import { displayWalletName } from "@/lib/wallet-labels";
 import { TransactionPinInput } from "./transaction-pin-input";
 import { clearMobileNativeSession, hapticNotification, nativeShareReferral, requestMobileTransactionToken } from "@/lib/mobile-native";
+import { VerificationRequiredDialog } from "@/components/verification-required-dialog";
 
 type Tab = "home" | "markets" | "trade" | "aiTrade" | "team" | "wallet";
 type MobileNavTab = Tab | "profile";
@@ -351,6 +352,7 @@ export default function AppShell() {
   const [p2pOpen, setP2POpen] = useState(false);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
+  const [withdrawalVerificationOpen, setWithdrawalVerificationOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -920,13 +922,19 @@ export default function AppShell() {
     }
   }, [currentUser, unreadNotifications]);
 
+  const openWithdrawal = () => {
+    if (dashboardLoading) { notify("Checking account verification..."); return; }
+    if (!currentUser) { openAuthPage("login"); return; }
+    if (currentUser.kycStatus !== "APPROVED") { setWithdrawalVerificationOpen(true); return; }
+    window.location.href="/wallet/withdraw";
+  };
   const screen = {
-    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenCopyTrade={()=>navigate("aiTrade")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} dashboardLoading={dashboardLoading} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} aiWalletBalance={aiWalletBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} onManualTradePlaced={refreshAfterManualTrade} purchaseAi={purchaseAi} notify={notify} />,
+    home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenWithdrawal={openWithdrawal} onOpenCopyTrade={()=>navigate("aiTrade")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} dashboardLoading={dashboardLoading} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} aiWalletBalance={aiWalletBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} onManualTradePlaced={refreshAfterManualTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} loading={marketCoinsLoading} error={marketCoinsError} />,
     trade: <TradeWorkspace category={tradeCategory} coins={marketCoins} loading={marketCoinsLoading} error={marketCoinsError} />,
     aiTrade: <AiCopyTradePage currentUser={currentUser} subscription={aiSubscription} activeTrade={activeCopyTrade} aiWalletBalance={aiWalletBalance} tradeRows={vipTradeRows} copyTradeCounts={copyTradeCounts} copyTradeHistory={copyTradeHistory} onManualTradePlaced={refreshAfterManualTrade} completeTrade={completeActiveCopyTrade} purchaseAi={purchaseAi} openLogin={()=>openAuthPage("login")} notify={notify} />,
     team: <TeamScreen notify={notify} currentUser={currentUser} />,
-    wallet: <WalletScreen notify={notify} assets={walletAssets} loading={walletLoading} refreshing={walletRefreshing} onRefresh={manualRefreshWallet} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} aiWalletBalance={aiWalletBalance} aiTradeProfitEarned={aiTradeProfitEarned} aiTradeTarget={aiTradePrincipalLocked*.6} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={()=>{window.location.href="/wallet/withdraw";}} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
+    wallet: <WalletScreen notify={notify} assets={walletAssets} loading={walletLoading} refreshing={walletRefreshing} onRefresh={manualRefreshWallet} spotBalance={Number(assetTotals.total?.spot??0)} futuresBalance={futuresBalance} aiWalletBalance={aiWalletBalance} aiTradeProfitEarned={aiTradeProfitEarned} aiTradeTarget={aiTradePrincipalLocked*.6} activity={walletActivity} section={walletSection} action={walletAction} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} onSectionChange={changeWalletSection} onOpenTransfer={()=>setTransferOpen({from:"SPOT",to:"FUTURES"})} onOpenWithdrawal={openWithdrawal} onOpenDeposit={() => { window.location.href="/wallet/deposit"; }} onCloseAction={() => { setWalletAction(null); updateUrl("wallet", walletSection, null, true); }} onCreateDeposit={createDeposit} />,
   }[tab];
 
   return (
@@ -971,6 +979,7 @@ export default function AppShell() {
       {transferOpen&&<WalletTransferModal initialFrom={transferOpen.from} initialTo={transferOpen.to} balances={{SPOT:Number(assetTotals.total?.spot??0),FUTURES:futuresBalance,AI:aiWalletBalance}} close={()=>setTransferOpen(null)} transfer={transferWallet}/>}
       {p2pOpen&&<P2PTransferModal assets={p2pAssets} close={()=>setP2POpen(false)} sendTransfer={sendP2PTransfer}/>}
       {verificationOpen&&<VerificationRequestModal close={()=>setVerificationOpen(false)} notify={notify} user={currentUser}/>} 
+      <VerificationRequiredDialog open={withdrawalVerificationOpen} onCancel={()=>setWithdrawalVerificationOpen(false)} onComplete={()=>{window.location.href="/kyc";}}/>
       {helpOpen&&<HelpCenterModal close={()=>setHelpOpen(false)} notify={notify}/>} 
       {aiPurchaseConfirmOpen&&<AiSubscriptionConfirmDialog confirm={()=>resolveAiPurchaseConfirmation(true)} cancel={()=>resolveAiPurchaseConfirmation(false)} />}
       {toast && <div className="fixed left-1/2 z-[60] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl border border-lime/20 bg-[#17231e] px-4 py-3 text-center text-xs font-bold leading-5 text-white shadow-2xl [bottom:calc(96px+16px+env(safe-area-inset-bottom))] sm:max-w-[24rem] lg:bottom-8">{toast}</div>}
@@ -1029,7 +1038,7 @@ function ProfileMenu({ close,notify,user,openLogin,openRegister,logout,openVerif
   return <><button aria-label="Close menu" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-72 rounded-2xl border border-line bg-[#111c18] p-3 shadow-2xl"><div className="border-b border-line p-3"><p className="font-bold">{user?.name?.trim() || "Account"}</p><div className="mt-1 flex items-center gap-2 text-xs text-slate-500"><span>{uid?`UID ${uid}`:"Not logged in"}</span>{uid&&<button onClick={copyUid} aria-label="Copy UID" className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-lime"><Copy size={13}/></button>}<span>· {user?.vipRank || "Pro"} member</span></div></div>{user?<><Link href="/profile" onClick={close} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Settings size={17}/> Profile & Settings</Link><button onClick={logout} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Logout</button></>:<><button onClick={openLogin} className="mt-2 flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Login</button><button onClick={openRegister} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Users size={17}/> Register</button></>}<button onClick={openVerification} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><ShieldCheck size={17}/> Verification Request</button><button onClick={openHelp} className="flex w-full items-center gap-3 rounded-xl p-3 text-sm text-slate-300 hover:bg-white/5"><Headphones size={17}/> Help Center</button>{isAdminUser && <Link href="/admin" className="flex items-center gap-3 rounded-xl p-3 text-sm text-slate-400 hover:bg-white/5"><Settings size={17} /> Admin console</Link>}</div></>;
 }
 
-function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, onOpenP2P, assets, dashboard, dashboardLoading, balanceVisible, setBalanceVisible, copyTradeHistory, aiWalletBalance, userCountry, aiSubscription, vipTradeRows, onManualTradePlaced, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; dashboardLoading: boolean; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; aiWalletBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; onManualTradePlaced: () => void | Promise<void>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
+function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenWithdrawal, onOpenCopyTrade, onOpenP2P, assets, dashboard, dashboardLoading, balanceVisible, setBalanceVisible, copyTradeHistory, aiWalletBalance, userCountry, aiSubscription, vipTradeRows, onManualTradePlaced, purchaseAi, notify }: { t: ReturnType<typeof getTranslator>; currentUser: CurrentUser | null; onNavigate: (tab: Tab, section?: WalletSection, action?: WalletAction) => void; onOpenAuth: () => void; onOpenWithdrawal: () => void; onOpenCopyTrade: () => void; onOpenP2P: () => void; assets: AppCoin[]; dashboard: DashboardSnapshot | null; dashboardLoading: boolean; balanceVisible: boolean; setBalanceVisible: (v: boolean) => void; activeCopyTrade: ActiveCopyTrade | null; copyTradeHistory: CopyTradeHistory[]; aiWalletBalance: number; userCountry: string; aiSubscription: AiSubscriptionStatus | null; vipTradeRows: VipTradeRow[]; onManualTradePlaced: () => void | Promise<void>; purchaseAi: () => Promise<{ok:boolean;message:string}>; notify: (message: string) => void }) {
   const total = dashboard?.summary?.totalPortfolio ?? 0;
   const todaysProfit = dashboard?.summary?.todaysProfit ?? 0;
   const live=useLiveTickers();
@@ -1044,7 +1053,7 @@ function HomeScreen({ t, currentUser, onNavigate, onOpenAuth, onOpenCopyTrade, o
   const pulseCoins=marketPulseAssets.filter(coin=>["BTC","ETH","BNB","SOL"].includes(coin.symbol)).slice(0,4);
   const shortcuts: { icon: typeof Home; label: string; onClick: () => void }[] = [
     { icon: ArrowDownToLine, label: "Deposit", onClick: () => { window.location.href = "/wallet/deposit"; } },
-    { icon: Send, label: "Withdraw", onClick: () => { window.location.href = "/wallet/withdraw"; } },
+    { icon: Send, label: "Withdraw", onClick: onOpenWithdrawal },
     { icon: Send, label: "P2P", onClick: onOpenP2P },
     { icon: Users, label: "Invite", onClick: () => onNavigate("team") },
   ];

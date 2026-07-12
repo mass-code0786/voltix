@@ -7,6 +7,7 @@ import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { TransactionPinInput } from "@/components/transaction-pin-input";
 import { hapticNotification, requestMobileTransactionToken } from "@/lib/mobile-native";
 import { displayWalletName } from "@/lib/wallet-labels";
+import { VerificationRequiredDialog } from "@/components/verification-required-dialog";
 
 type WalletType = "SPOT" | "AI";
 type AssetTotals = {
@@ -33,15 +34,27 @@ export default function WalletWithdrawPage() {
   const [error,setError]=useState("");
   const [success,setSuccess]=useState("");
   const [earlyBreakdown,setEarlyBreakdown]=useState<EarlyWithdrawalBreakdown|null>(null);
+  const [verificationState,setVerificationState]=useState<"loading"|"verified"|"not_verified">("loading");
+  const [verificationDialogOpen,setVerificationDialogOpen]=useState(false);
 
   useEffect(()=>{
     let active=true;
-    fetch("/api/assets",{cache:"no-store",credentials:"include"}).then(async response=>{
+    fetch("/api/me",{cache:"no-store",credentials:"include"}).then(async response=>{
       const data=await response.json().catch(()=>({}));
-      if(response.status===401){router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/wallet/withdraw")}`);return null;}
+      if(response.status===401||!data.authenticated){router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/wallet/withdraw")}`);return null;}
+      if(!response.ok)throw new Error(data.error||"Account verification check failed");
+      if(data.user?.kycStatus!=="APPROVED"){
+        if(active){setVerificationState("not_verified");setVerificationDialogOpen(true);}
+        return null;
+      }
+      if(active)setVerificationState("verified");
+      return fetch("/api/assets",{cache:"no-store",credentials:"include"});
+    }).then(async response=>{
+      if(!response)return null;
+      const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(data.error||"Wallet request failed");
       return data.totals as AssetTotals;
-    }).then(next=>{if(active&&next)setTotals(next);}).catch(err=>{if(active)setError(err instanceof Error?err.message:"Wallet request failed");}).finally(()=>{if(active)setLoading(false);});
+    }).then(next=>{if(active&&next)setTotals(next);}).catch(err=>{if(active){setVerificationState("not_verified");setError(err instanceof Error?err.message:"Wallet request failed");}}).finally(()=>{if(active)setLoading(false);});
     return()=>{active=false;};
   },[router]);
 
@@ -75,6 +88,15 @@ export default function WalletWithdrawPage() {
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){
+      if(response.status===403&&data.code==="ACCOUNT_VERIFICATION_REQUIRED"){
+        setConfirming(false);
+        setEarlyBreakdown(null);
+        setTransactionPin("");
+        setMobileVerificationToken("");
+        setVerificationState("not_verified");
+        setVerificationDialogOpen(true);
+        return;
+      }
       if(data.requiresConfirmation){
         setEarlyBreakdown(data as EarlyWithdrawalBreakdown);
         return;
@@ -106,7 +128,7 @@ export default function WalletWithdrawPage() {
         <h1 className="text-xl font-black">{confirming?"Confirm Withdrawal":"Withdraw"}</h1>
       </header>
 
-      {loading?<section className="profile-glass mt-2 rounded-[22px] p-5 text-sm text-slate-400">Loading wallet...</section>:confirming?<section className="profile-glass mt-2 rounded-[22px] p-4">
+      {loading||verificationState==="loading"?<section className="profile-glass mt-2 rounded-[22px] p-5 text-sm text-slate-400">Checking account verification...</section>:verificationState==="not_verified"?<section className="profile-glass mt-2 rounded-[22px] p-5"><h2 className="text-lg font-black">Account verification required</h2><p className="mt-2 text-sm leading-6 text-slate-400">Please complete your account verification before making a withdrawal.</p><button type="button" onClick={()=>router.push("/kyc")} className="mt-4 rounded-2xl bg-[#18ff8a] px-4 py-3 text-xs font-black text-[#050608]">Complete Verification</button></section>:confirming?<section className="profile-glass mt-2 rounded-[22px] p-4">
         {earlyBreakdown?<EarlyWithdrawalWarning breakdown={earlyBreakdown}/>:<div className="rounded-2xl border border-[#18ff8a]/20 bg-[#18ff8a]/[.06] p-4">
           <h2 className="text-lg font-black">Confirm Withdrawal</h2>
           <p className="mt-1 text-xs text-slate-500">Enter your 6 digit Transaction PIN to submit this request.</p>
@@ -151,6 +173,7 @@ export default function WalletWithdrawPage() {
         </div>
       </section>}
     </div>
+    <VerificationRequiredDialog open={verificationDialogOpen} onCancel={()=>setVerificationDialogOpen(false)} onComplete={()=>router.push("/kyc")}/>
   </main>;
 }
 
