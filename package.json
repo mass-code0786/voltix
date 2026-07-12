@@ -19,7 +19,8 @@
     "coins:sync-logos": "tsx scripts/sync-coin-logos.ts",
     "vip:backfill": "tsx scripts/backfill-vip-ranks.ts",
     "vip:reward-backfill": "tsx scripts/backfill-vip-achievement-rewards.ts",
-    "vip:test": "tsx scripts/test-vip-system.ts"
+    "vip:test": "tsx scripts/test-vip-system.ts",
+    "settlement:load-test": "tsx scripts/load-test-bulk-settlement.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",

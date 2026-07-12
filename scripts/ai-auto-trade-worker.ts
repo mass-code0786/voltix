@@ -3,10 +3,10 @@ import { loadEnvConfig } from "@next/env";
 loadEnvConfig(process.cwd());
 
 const intervalMs = Number(process.env.AI_AUTO_TRADE_INTERVAL_MS ?? 30_000);
-const configuredSettlementIntervalMs = Number(process.env.TRADE_SETTLEMENT_INTERVAL_MS ?? 10_000);
-const settlementIntervalMs = Number.isFinite(configuredSettlementIntervalMs) && configuredSettlementIntervalMs >= 5_000
-  ? Math.min(configuredSettlementIntervalMs, 15_000)
-  : 10_000;
+const configuredSettlementIntervalMs = Number(process.env.TRADE_SETTLEMENT_INTERVAL_MS ?? 2_000);
+const settlementIntervalMs = Number.isFinite(configuredSettlementIntervalMs) && configuredSettlementIntervalMs >= 1_000
+  ? Math.min(configuredSettlementIntervalMs, 5_000)
+  : 2_000;
 
 let running = false;
 let settlementRunning = false;
@@ -63,7 +63,7 @@ async function settlementTick() {
     const { settleDueCopyTrades } = await import("../lib/domain/trade-service");
     const currentUtc = new Date();
     const result = await settleDueCopyTrades(undefined, currentUtc);
-    if (result.checked || result.failed) log("settlement cycle completed", { currentUtc: currentUtc.toISOString(), ...result });
+    if (result.windowsFound || result.totalFailed) log("settlement cycle completed", { currentUtc: currentUtc.toISOString(), ...result });
   } catch (error) {
     log("settlement cycle failed", { error: error instanceof Error ? error.message : "Unknown settlement failure" });
   } finally {

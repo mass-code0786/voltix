@@ -7,6 +7,7 @@ import { postBalancedJournal } from "./ledger";
 import { createNotification } from "./notification-service";
 import { aiWalletBusinessAmount, isAiWalletActive } from "./user-activation";
 import { ensureUserWalletAccounts } from "./user-wallets";
+import { settleDueTradeWindows } from "./bulk-trade-settlement";
 
 const COPY_TRADE_STAKE_RATE = new Prisma.Decimal("0.01");
 const MIN_COPY_TRADE_STAKE = new Prisma.Decimal(MIN_COPY_TRADE_STAKE_USD);
@@ -687,54 +688,10 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
 }
 
 export async function settleDueCopyTrades(userId?: string, now = new Date()) {
-  const dueTrades = await prisma.copyTrade.findMany({
-    where: { ...(userId ? { userId } : {}), status: { in: [...SETTLEABLE_TRADE_STATUSES] }, creditDueAt: { lte: now } },
-    select: { id: true, userId: true, windowStartAt: true, windowCloseAt: true, creditDueAt: true },
-    orderBy: { creditDueAt: "asc" },
-    take: 100,
-  });
-  let settled = 0;
-  const errors: { tradeId: string; error: string }[] = [];
-  for (const trade of dueTrades) {
-    const settlementStartedAt = new Date();
-    const delaySeconds = Math.max(0, (settlementStartedAt.getTime() - trade.creditDueAt.getTime()) / 1000);
-    const context = {
-      currentUtc: settlementStartedAt.toISOString(),
-      tradeId: trade.id,
-      userId: trade.userId,
-      windowStartAt: trade.windowStartAt?.toISOString() ?? null,
-      windowCloseAt: trade.windowCloseAt?.toISOString() ?? null,
-      settlementDueAt: trade.creditDueAt.toISOString(),
-      currentDelaySeconds: delaySeconds,
-      settlementDelaySeconds: delaySeconds,
-      settlementStartedAt: settlementStartedAt.toISOString(),
-    };
-    try {
-      const result = await creditDueTradeIncome(trade.id, settlementStartedAt);
-      const didSettle = result.status === TradeStatus.INCOME_CREDITED;
-      if (didSettle) settled += 1;
-      console.info("[COPY_TRADE_SETTLEMENT]", {
-        ...context,
-        settlementCompletedAt: new Date().toISOString(),
-        principalReturned: didSettle ? result.principalAmount.toString() : "0",
-        profitCredited: didSettle ? result.incomeAmount?.toString() ?? "0" : "0",
-        result: didSettle ? "SETTLED" : "SKIPPED_ALREADY_SETTLED",
-        error: null,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Settlement failed";
-      errors.push({ tradeId: trade.id, error: message });
-      console.error("[COPY_TRADE_SETTLEMENT]", {
-        ...context,
-        settlementCompletedAt: new Date().toISOString(),
-        principalReturned: "0",
-        profitCredited: "0",
-        result: "FAILED",
-        error: message,
-      });
-    }
-  }
-  return { checked: dueTrades.length, settled, failed: errors.length, errors };
+  // Settlement is deliberately global by due window. A user status request must
+  // never split one window into thousands of per-user transactions.
+  void userId;
+  return settleDueTradeWindows(now);
 }
 
 export async function completeCopyTrade(tradeId: string, now = new Date()) {

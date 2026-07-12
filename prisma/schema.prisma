@@ -22,7 +22,7 @@ enum UserStatus {
 enum WalletType {
   SPOT
   FUTURES
-  AI @map("BITEX")
+  AI      @map("BITEX")
   FEE
 }
 
@@ -80,6 +80,14 @@ enum TradeStatus {
   ACTIVE
   COMPLETED
   INCOME_CREDITED
+  FAILED
+}
+
+enum TradeWindowSettlementStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  PARTIAL
   FAILED
 }
 
@@ -154,61 +162,61 @@ enum VipSalaryPayoutStatus {
 }
 
 model User {
-  id                    String           @id @default(cuid())
-  email                 String           @unique
-  uid                   String           @unique @db.VarChar(12)
-  name                  String
-  country               String           @default("United States")
-  language              String           @default("en")
-  profileImageUrl       String?
-  passwordHash          String
-  transactionPinHash    String?
-  transactionPinSetAt   DateTime?
-  vipRank               String           @default("VIP 0")
-  vipAchievedAt         DateTime?
-  vipUpdatedAt          DateTime?
-  role                  Role             @default(USER)
-  status                UserStatus       @default(ACTIVE)
-  referredById          String?
-  referredBy            User?            @relation("ReferralTree", fields: [referredById], references: [id])
-  referrals             User[]           @relation("ReferralTree")
-  joinedAt              DateTime         @default(now())
-  extraTradeTrialEndsAt DateTime
-  permanentExtraTrade   Boolean          @default(false)
-  spotBalance           Decimal          @default(0) @db.Decimal(36, 18)
-  futuresBalance        Decimal          @default(0) @db.Decimal(36, 18)
-  aiWalletBalance       Decimal          @default(0) @map("bitexBalance") @db.Decimal(36, 18)
-  aiTradePrincipal      Decimal          @default(0) @map("bitexPrincipal") @db.Decimal(36, 18)
-  aiTradeProfitEarned   Decimal          @default(0) @map("bitexIncomeEarned") @db.Decimal(36, 18)
-  aiTradeTargetAmount   Decimal          @default(0) @map("bitexTargetAmount") @db.Decimal(36, 18)
-  aiTradeWithdrawalUnlocked Boolean      @default(false) @map("bitexUnlocked")
-  wallets               WalletAccount[]
-  externalWallets       ExternalWalletBinding[]
-  walletTransfers       WalletTransfer[]
-  p2pTransfersSent      P2PTransfer[]   @relation("P2PSender")
-  p2pTransfersReceived  P2PTransfer[]   @relation("P2PReceiver")
-  deposits              Deposit[]
-  withdrawals           Withdrawal[]
-  walletAdjustments     AdminWalletAdjustment[] @relation("WalletAdjustmentUser")
-  adminWalletAdjustments AdminWalletAdjustment[] @relation("WalletAdjustmentAdmin")
-  packages              UserPackage[]
-  aiSubscriptions       AiSubscription[]
-  assignedCodes         TradeCode[]
-  trades                CopyTrade[]
-  incomes               Income[]
-  vipSalaryPayouts      VipSalaryPayout[]
-  vipAchievementRewards VipAchievementReward[]
-  kycRequests           KycRequest[]
-  reviewedKycRequests   KycRequest[]     @relation("KycReviewer")
-  supportTickets        SupportTicket[]
-  notifications         Notification[]
-  pushDevices           PushDevice[]
-  auditLogs             AuditLog[]       @relation("AuditActor")
-  userAuditLogs         AuditLog[]       @relation("AuditUser")
-  adminAuditLogs        AuditLog[]       @relation("AuditAdmin")
-  sessions              Session[]
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
+  id                        String                  @id @default(cuid())
+  email                     String                  @unique
+  uid                       String                  @unique @db.VarChar(12)
+  name                      String
+  country                   String                  @default("United States")
+  language                  String                  @default("en")
+  profileImageUrl           String?
+  passwordHash              String
+  transactionPinHash        String?
+  transactionPinSetAt       DateTime?
+  vipRank                   String                  @default("VIP 0")
+  vipAchievedAt             DateTime?
+  vipUpdatedAt              DateTime?
+  role                      Role                    @default(USER)
+  status                    UserStatus              @default(ACTIVE)
+  referredById              String?
+  referredBy                User?                   @relation("ReferralTree", fields: [referredById], references: [id])
+  referrals                 User[]                  @relation("ReferralTree")
+  joinedAt                  DateTime                @default(now())
+  extraTradeTrialEndsAt     DateTime
+  permanentExtraTrade       Boolean                 @default(false)
+  spotBalance               Decimal                 @default(0) @db.Decimal(36, 18)
+  futuresBalance            Decimal                 @default(0) @db.Decimal(36, 18)
+  aiWalletBalance           Decimal                 @default(0) @map("bitexBalance") @db.Decimal(36, 18)
+  aiTradePrincipal          Decimal                 @default(0) @map("bitexPrincipal") @db.Decimal(36, 18)
+  aiTradeProfitEarned       Decimal                 @default(0) @map("bitexIncomeEarned") @db.Decimal(36, 18)
+  aiTradeTargetAmount       Decimal                 @default(0) @map("bitexTargetAmount") @db.Decimal(36, 18)
+  aiTradeWithdrawalUnlocked Boolean                 @default(false) @map("bitexUnlocked")
+  wallets                   WalletAccount[]
+  externalWallets           ExternalWalletBinding[]
+  walletTransfers           WalletTransfer[]
+  p2pTransfersSent          P2PTransfer[]           @relation("P2PSender")
+  p2pTransfersReceived      P2PTransfer[]           @relation("P2PReceiver")
+  deposits                  Deposit[]
+  withdrawals               Withdrawal[]
+  walletAdjustments         AdminWalletAdjustment[] @relation("WalletAdjustmentUser")
+  adminWalletAdjustments    AdminWalletAdjustment[] @relation("WalletAdjustmentAdmin")
+  packages                  UserPackage[]
+  aiSubscriptions           AiSubscription[]
+  assignedCodes             TradeCode[]
+  trades                    CopyTrade[]
+  incomes                   Income[]
+  vipSalaryPayouts          VipSalaryPayout[]
+  vipAchievementRewards     VipAchievementReward[]
+  kycRequests               KycRequest[]
+  reviewedKycRequests       KycRequest[]            @relation("KycReviewer")
+  supportTickets            SupportTicket[]
+  notifications             Notification[]
+  pushDevices               PushDevice[]
+  auditLogs                 AuditLog[]              @relation("AuditActor")
+  userAuditLogs             AuditLog[]              @relation("AuditUser")
+  adminAuditLogs            AuditLog[]              @relation("AuditAdmin")
+  sessions                  Session[]
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
 
   @@index([referredById])
 }
@@ -284,36 +292,36 @@ model P2PTransfer {
 }
 
 model AssetConversion {
-  id                    String   @id @default(cuid())
-  userId                String
-  fromAssetId           String
-  toAssetId             String
-  fromSymbol            String
-  toSymbol              String
-  fromAmount            Decimal  @db.Decimal(36, 18)
-  toAmount              Decimal  @db.Decimal(36, 18)
-  price                 Decimal  @db.Decimal(36, 18)
-  idempotencyKey        String   @unique
-  usdtLedgerJournalId   String?  @unique
-  shineLedgerJournalId  String?  @unique
-  status                String   @default("COMPLETED")
-  createdAt             DateTime @default(now())
+  id                   String   @id @default(cuid())
+  userId               String
+  fromAssetId          String
+  toAssetId            String
+  fromSymbol           String
+  toSymbol             String
+  fromAmount           Decimal  @db.Decimal(36, 18)
+  toAmount             Decimal  @db.Decimal(36, 18)
+  price                Decimal  @db.Decimal(36, 18)
+  idempotencyKey       String   @unique
+  usdtLedgerJournalId  String?  @unique
+  shineLedgerJournalId String?  @unique
+  status               String   @default("COMPLETED")
+  createdAt            DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([fromSymbol, toSymbol, createdAt])
 }
 
 model Asset {
-  id             String           @id @default(cuid())
-  symbol         String           @unique
-  name           String
-  decimals       Int
-  enabled        Boolean          @default(true)
-  walletAccounts WalletAccount[]
-  deposits       Deposit[]
-  withdrawals    Withdrawal[]
+  id                String                  @id @default(cuid())
+  symbol            String                  @unique
+  name              String
+  decimals          Int
+  enabled           Boolean                 @default(true)
+  walletAccounts    WalletAccount[]
+  deposits          Deposit[]
+  withdrawals       Withdrawal[]
   walletAdjustments AdminWalletAdjustment[]
-  p2pTransfers   P2PTransfer[]
+  p2pTransfers      P2PTransfer[]
 }
 
 model CoinMetadata {
@@ -346,16 +354,16 @@ model WalletAccount {
 }
 
 model LedgerJournal {
-  id             String        @id @default(cuid())
-  referenceType  String
-  referenceId    String
-  idempotencyKey String        @unique
-  memo           String
-  status         JournalStatus @default(PENDING)
-  entries        LedgerEntry[]
+  id              String           @id @default(cuid())
+  referenceType   String
+  referenceId     String
+  idempotencyKey  String           @unique
+  memo            String
+  status          JournalStatus    @default(PENDING)
+  entries         LedgerEntry[]
   aiSubscriptions AiSubscription[]
-  postedAt       DateTime?
-  createdAt      DateTime      @default(now())
+  postedAt        DateTime?
+  createdAt       DateTime         @default(now())
 
   @@unique([referenceType, referenceId])
 }
@@ -374,43 +382,43 @@ model LedgerEntry {
 }
 
 model ChainNetwork {
-  id                    String           @id @default(cuid())
-  key                   String           @unique
+  id                    String       @id @default(cuid())
+  key                   String       @unique
   name                  String
   requiredConfirmations Int
-  enabled               Boolean          @default(true)
+  enabled               Boolean      @default(true)
   deposits              Deposit[]
   withdrawals           Withdrawal[]
 }
 
 model Deposit {
-  id                String          @id @default(cuid())
-  userId            String
-  user              User            @relation(fields: [userId], references: [id])
-  assetId           String
-  asset             Asset           @relation(fields: [assetId], references: [id])
-  networkId         String
-  network           ChainNetwork    @relation(fields: [networkId], references: [id])
-  provider          DepositProvider @default(NOWPAYMENTS)
-  providerPaymentId String?         @unique
-  providerInvoiceId String?         @unique
+  id                 String          @id @default(cuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id])
+  assetId            String
+  asset              Asset           @relation(fields: [assetId], references: [id])
+  networkId          String
+  network            ChainNetwork    @relation(fields: [networkId], references: [id])
+  provider           DepositProvider @default(NOWPAYMENTS)
+  providerPaymentId  String?         @unique
+  providerInvoiceId  String?         @unique
   providerPaymentUrl String?
-  payCurrency       String?
-  payAddress        String?
-  paymentStatus     String?
-  actuallyPaid      Decimal?        @db.Decimal(36, 18)
-  outcomeAmount     Decimal?        @db.Decimal(36, 18)
-  rawWebhookJson    Json?
-  webhookReceivedAt DateTime?
-  txHash            String?
-  eventIndex        Int             @default(0)
-  amount            Decimal         @db.Decimal(36, 18)
-  blockNumber       BigInt?
-  confirmations     Int             @default(0)
-  status            DepositStatus   @default(PENDING)
-  creditedAt        DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  payCurrency        String?
+  payAddress         String?
+  paymentStatus      String?
+  actuallyPaid       Decimal?        @db.Decimal(36, 18)
+  outcomeAmount      Decimal?        @db.Decimal(36, 18)
+  rawWebhookJson     Json?
+  webhookReceivedAt  DateTime?
+  txHash             String?
+  eventIndex         Int             @default(0)
+  amount             Decimal         @db.Decimal(36, 18)
+  blockNumber        BigInt?
+  confirmations      Int             @default(0)
+  status             DepositStatus   @default(PENDING)
+  creditedAt         DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   @@unique([networkId, txHash, eventIndex])
   @@index([status, createdAt])
@@ -418,61 +426,61 @@ model Deposit {
 }
 
 model Withdrawal {
-  id              String           @id @default(cuid())
-  userId          String
-  user            User             @relation(fields: [userId], references: [id])
-  assetId         String
-  asset           Asset            @relation(fields: [assetId], references: [id])
-  networkId       String
-  network         ChainNetwork     @relation(fields: [networkId], references: [id])
-  walletType      WalletType
-  address         String
-  amount          Decimal          @db.Decimal(36, 18)
-  feeAmount       Decimal          @default(0) @db.Decimal(36, 18)
-  receivableAmount Decimal         @db.Decimal(36, 18)
-  eligibilityStatus String?
-  capitalAmount   Decimal          @default(0) @db.Decimal(36, 18)
-  earnedProfit    Decimal          @default(0) @db.Decimal(36, 18)
-  requiredProfit  Decimal          @default(0) @db.Decimal(36, 18)
-  completedPercentage Decimal      @default(0) @db.Decimal(8, 4)
-  earlyWithdrawal Boolean          @default(false)
-  earlyWithdrawalCharge Decimal    @default(0) @db.Decimal(36, 18)
-  percentageFee   Decimal          @default(0) @db.Decimal(36, 18)
-  fixedFee        Decimal          @default(0) @db.Decimal(36, 18)
-  totalCharges    Decimal          @default(0) @db.Decimal(36, 18)
-  netWithdrawalAmount Decimal      @default(0) @db.Decimal(36, 18)
+  id                         String           @id @default(cuid())
+  userId                     String
+  user                       User             @relation(fields: [userId], references: [id])
+  assetId                    String
+  asset                      Asset            @relation(fields: [assetId], references: [id])
+  networkId                  String
+  network                    ChainNetwork     @relation(fields: [networkId], references: [id])
+  walletType                 WalletType
+  address                    String
+  amount                     Decimal          @db.Decimal(36, 18)
+  feeAmount                  Decimal          @default(0) @db.Decimal(36, 18)
+  receivableAmount           Decimal          @db.Decimal(36, 18)
+  eligibilityStatus          String?
+  capitalAmount              Decimal          @default(0) @db.Decimal(36, 18)
+  earnedProfit               Decimal          @default(0) @db.Decimal(36, 18)
+  requiredProfit             Decimal          @default(0) @db.Decimal(36, 18)
+  completedPercentage        Decimal          @default(0) @db.Decimal(8, 4)
+  earlyWithdrawal            Boolean          @default(false)
+  earlyWithdrawalCharge      Decimal          @default(0) @db.Decimal(36, 18)
+  percentageFee              Decimal          @default(0) @db.Decimal(36, 18)
+  fixedFee                   Decimal          @default(0) @db.Decimal(36, 18)
+  totalCharges               Decimal          @default(0) @db.Decimal(36, 18)
+  netWithdrawalAmount        Decimal          @default(0) @db.Decimal(36, 18)
   earlyWithdrawalConfirmedAt DateTime?
-  idempotencyKey  String           @unique
-  ledgerJournalId String?          @unique
-  txHash          String?
-  status          WithdrawalStatus @default(PENDING)
-  adminActionBy   String?
-  adminActionAt   DateTime?
-  rejectionReason String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  idempotencyKey             String           @unique
+  ledgerJournalId            String?          @unique
+  txHash                     String?
+  status                     WithdrawalStatus @default(PENDING)
+  adminActionBy              String?
+  adminActionAt              DateTime?
+  rejectionReason            String?
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
 }
 
 model AdminWalletAdjustment {
-  id              String   @id @default(cuid())
+  id              String     @id @default(cuid())
   userId          String
-  user            User     @relation("WalletAdjustmentUser", fields: [userId], references: [id])
+  user            User       @relation("WalletAdjustmentUser", fields: [userId], references: [id])
   adminId         String
-  admin           User     @relation("WalletAdjustmentAdmin", fields: [adminId], references: [id])
+  admin           User       @relation("WalletAdjustmentAdmin", fields: [adminId], references: [id])
   assetId         String
-  asset           Asset    @relation(fields: [assetId], references: [id])
+  asset           Asset      @relation(fields: [assetId], references: [id])
   walletType      WalletType
   action          String
-  amount          Decimal  @db.Decimal(36, 18)
+  amount          Decimal    @db.Decimal(36, 18)
   reason          String
-  idempotencyKey  String   @unique
-  status          String   @default("SUCCESS")
-  ledgerJournalId String?  @unique
+  idempotencyKey  String     @unique
+  status          String     @default("SUCCESS")
+  ledgerJournalId String?    @unique
   depositId       String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime   @default(now())
 
   @@index([userId, createdAt])
   @@index([adminId, createdAt])
@@ -510,16 +518,16 @@ model UserPackage {
 }
 
 model AiSubscription {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  amountUsd       Decimal  @db.Decimal(18, 2)
-  startsAt        DateTime @default(now())
+  user            User          @relation(fields: [userId], references: [id])
+  amountUsd       Decimal       @db.Decimal(18, 2)
+  startsAt        DateTime      @default(now())
   expiresAt       DateTime
-  active          Boolean  @default(true)
-  ledgerJournalId String   @unique
+  active          Boolean       @default(true)
+  ledgerJournalId String        @unique
   ledgerJournal   LedgerJournal @relation(fields: [ledgerJournalId], references: [id])
-  createdAt       DateTime @default(now())
+  createdAt       DateTime      @default(now())
 
   @@index([userId, active, expiresAt])
   @@index([expiresAt])
@@ -551,36 +559,37 @@ model KycRequest {
 }
 
 model SupportTicket {
-  id           String              @id @default(cuid())
-  userId       String
-  user         User                @relation(fields: [userId], references: [id])
-  subject      String
-  message      String
-  attachmentUrl String?
+  id             String              @id @default(cuid())
+  userId         String
+  user           User                @relation(fields: [userId], references: [id])
+  subject        String
+  message        String
+  attachmentUrl  String?
   attachmentName String?
   attachmentType String?
   attachmentSize Int?
-  status       SupportTicketStatus @default(OPEN)
-  adminReply   String?
-  repliedById  String?
-  repliedAt    DateTime?
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  status         SupportTicketStatus @default(OPEN)
+  adminReply     String?
+  repliedById    String?
+  repliedAt      DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
 }
 
 model Notification {
-  id        String           @id @default(cuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      NotificationType
-  title     String
-  message   String
-  metadata  Json?
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
+  id            String           @id @default(cuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          NotificationType
+  title         String
+  message       String
+  metadata      Json?
+  settlementKey String?          @unique
+  readAt        DateTime?
+  createdAt     DateTime         @default(now())
 
   @@index([userId, readAt, createdAt])
   @@index([type, createdAt])
@@ -615,22 +624,22 @@ model TradeSlot {
 }
 
 model TradeCode {
-  id             String     @id @default(cuid())
-  code           String     @unique @db.VarChar(6)
-  vipRank        String     @default("NONE")
-  returnPercent  Decimal    @db.Decimal(5, 2)
-  assignedUserId String?
-  assignedUser   User?      @relation(fields: [assignedUserId], references: [id])
-  slotId         String?
-  slot           TradeSlot? @relation(fields: [slotId], references: [id])
-  status         CodeStatus @default(ACTIVE)
-  expiresAt      DateTime?
-  tradeWindowMinutes Int    @default(10)
-  maxUsage       Int        @default(1)
-  usedCount      Int        @default(0)
-  trades         CopyTrade[]
-  createdBy      String
-  createdAt      DateTime   @default(now())
+  id                 String      @id @default(cuid())
+  code               String      @unique @db.VarChar(6)
+  vipRank            String      @default("NONE")
+  returnPercent      Decimal     @db.Decimal(5, 2)
+  assignedUserId     String?
+  assignedUser       User?       @relation(fields: [assignedUserId], references: [id])
+  slotId             String?
+  slot               TradeSlot?  @relation(fields: [slotId], references: [id])
+  status             CodeStatus  @default(ACTIVE)
+  expiresAt          DateTime?
+  tradeWindowMinutes Int         @default(10)
+  maxUsage           Int         @default(1)
+  usedCount          Int         @default(0)
+  trades             CopyTrade[]
+  createdBy          String
+  createdAt          DateTime    @default(now())
 
   @@index([status, expiresAt])
   @@index([createdBy, createdAt])
@@ -667,8 +676,32 @@ model CopyTrade {
   @@index([status, creditDueAt])
   @@index([userId, startedAt])
   @@index([userId, slotId, windowStartAt, windowCloseAt])
+  @@index([slotId, windowStartAt, creditDueAt, status])
   @@index([codeId])
   @@index([source, startedAt])
+}
+
+model TradeWindowSettlement {
+  id                  String                      @id @default(cuid())
+  occurrenceKey       String                      @unique
+  slotId              String
+  windowStartAt       DateTime
+  windowCloseAt       DateTime
+  settlementDueAt     DateTime
+  status              TradeWindowSettlementStatus @default(PENDING)
+  totalTrades         Int                         @default(0)
+  settledTrades       Int                         @default(0)
+  failedTrades        Int                         @default(0)
+  attempts            Int                         @default(0)
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  leaseExpiresAt      DateTime?
+  lastError           String?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  @@index([status, settlementDueAt])
+  @@index([leaseExpiresAt])
 }
 
 model ManualTradeSignal {

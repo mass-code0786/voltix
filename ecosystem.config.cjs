@@ -22,7 +22,8 @@ module.exports = {
         AI_AUTO_TRADE_INTERVAL_MS: "30000",
         // Settlement has its own short loop inside this existing worker process, so
         // a long auto-trade scan cannot postpone due wallet credits.
-        TRADE_SETTLEMENT_INTERVAL_MS: "10000",
+        TRADE_SETTLEMENT_INTERVAL_MS: "2000",
+        TRADE_SETTLEMENT_BATCH_SIZE: "1000",
       },
     },
   ],
