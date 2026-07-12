@@ -123,8 +123,17 @@ export async function getUserWalletHistory(userId: string) {
   const history = [
     ...entries.map(formatLedgerEntry),
     ...trades.map(formatTradePlacement),
-  ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 150);
+  ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
+    || walletEventOrder(b.referenceType) - walletEventOrder(a.referenceType)
+    || b.id.localeCompare(a.id)).slice(0, 150);
   return { history };
+}
+
+function walletEventOrder(referenceType: string) {
+  if (referenceType === "COPY_TRADE_INCOME") return 3;
+  if (referenceType === "COPY_TRADE_PRINCIPAL_RETURN") return 2;
+  if (referenceType === "COPY_TRADE_PLACEMENT") return 1;
+  return 0;
 }
 
 function formatTradePlacement(trade: {

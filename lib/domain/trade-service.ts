@@ -689,20 +689,51 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
 export async function settleDueCopyTrades(userId?: string, now = new Date()) {
   const dueTrades = await prisma.copyTrade.findMany({
     where: { ...(userId ? { userId } : {}), status: { in: [...SETTLEABLE_TRADE_STATUSES] }, creditDueAt: { lte: now } },
-    select: { id: true },
+    select: { id: true, userId: true, windowStartAt: true, windowCloseAt: true, creditDueAt: true },
+    orderBy: { creditDueAt: "asc" },
     take: 100,
   });
   let settled = 0;
   const errors: { tradeId: string; error: string }[] = [];
   for (const trade of dueTrades) {
+    const settlementStartedAt = new Date();
+    const delaySeconds = Math.max(0, (settlementStartedAt.getTime() - trade.creditDueAt.getTime()) / 1000);
+    const context = {
+      currentUtc: settlementStartedAt.toISOString(),
+      tradeId: trade.id,
+      userId: trade.userId,
+      windowStartAt: trade.windowStartAt?.toISOString() ?? null,
+      windowCloseAt: trade.windowCloseAt?.toISOString() ?? null,
+      settlementDueAt: trade.creditDueAt.toISOString(),
+      currentDelaySeconds: delaySeconds,
+      settlementDelaySeconds: delaySeconds,
+      settlementStartedAt: settlementStartedAt.toISOString(),
+    };
     try {
-      const result = await creditDueTradeIncome(trade.id, now);
-      if (result.status === TradeStatus.INCOME_CREDITED) settled += 1;
+      const result = await creditDueTradeIncome(trade.id, settlementStartedAt);
+      const didSettle = result.status === TradeStatus.INCOME_CREDITED;
+      if (didSettle) settled += 1;
+      console.info("[COPY_TRADE_SETTLEMENT]", {
+        ...context,
+        settlementCompletedAt: new Date().toISOString(),
+        principalReturned: didSettle ? result.principalAmount.toString() : "0",
+        profitCredited: didSettle ? result.incomeAmount?.toString() ?? "0" : "0",
+        result: didSettle ? "SETTLED" : "SKIPPED_ALREADY_SETTLED",
+        error: null,
+      });
     } catch (error) {
-      errors.push({ tradeId: trade.id, error: error instanceof Error ? error.message : "Settlement failed" });
+      const message = error instanceof Error ? error.message : "Settlement failed";
+      errors.push({ tradeId: trade.id, error: message });
+      console.error("[COPY_TRADE_SETTLEMENT]", {
+        ...context,
+        settlementCompletedAt: new Date().toISOString(),
+        principalReturned: "0",
+        profitCredited: "0",
+        result: "FAILED",
+        error: message,
+      });
     }
   }
-  if (errors.length && process.env.NODE_ENV !== "production") console.error("COPY_TRADE_SETTLEMENT_ERRORS", errors);
   return { checked: dueTrades.length, settled, failed: errors.length, errors };
 }
 
@@ -717,14 +748,12 @@ export async function completeCopyTrade(tradeId: string, now = new Date()) {
 
 export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
   return prisma.$transaction(async (tx) => {
+    // Serialize settlement attempts for this trade while keeping status unchanged
+    // until every wallet, ledger, income and notification write has succeeded.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${tradeId}))`;
     const trade = await tx.copyTrade.findUniqueOrThrow({ where: { id: tradeId } });
     if (trade.status === "INCOME_CREDITED") return trade;
     if (!isSettleableTradeStatus(trade.status) || trade.creditDueAt > now) throw new Error("Trade income is not due");
-    const claimed = await tx.copyTrade.updateMany({
-      where: { id: trade.id, status: { in: [...SETTLEABLE_TRADE_STATUSES] }, creditDueAt: { lte: now }, incomeCreditedAt: null },
-      data: { status: TradeStatus.INCOME_CREDITED, completedAt: trade.completedAt ?? now, incomeCreditedAt: now },
-    });
-    if (claimed.count !== 1) return tx.copyTrade.findUniqueOrThrow({ where: { id: trade.id } });
     const incomeBase = trade.principalAmount.div(COPY_TRADE_STAKE_RATE);
     const profitAmount = incomeBase.mul(trade.returnPercent).div(100);
     const aiWalletCredit = trade.principalAmount.add(profitAmount);
@@ -739,6 +768,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       referenceId: trade.id,
       idempotencyKey: `copy-trade-principal-return:${trade.id}`,
       memo: "AI Trade Principal Return",
+      occurredAt: now,
       lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: trade.principalAmount }, { accountId: aiWalletAccount.id, direction: "CREDIT", amount: trade.principalAmount }],
     });
     const profitJournal = await postBalancedJournal(tx, {
@@ -746,9 +776,10 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       referenceId: trade.id,
       idempotencyKey: `copy-trade-profit:${trade.id}`,
       memo: "AI Trade Profit",
+      occurredAt: now,
       lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: profitAmount }, { accountId: aiWalletAccount.id, direction: "CREDIT", amount: profitAmount }],
     });
-    await tx.income.create({ data: { userId: trade.userId, type: "COPY_TRADE", sourceType: "COPY_TRADE", sourceId: trade.id, amount: profitAmount, copyTradeId: trade.id, ledgerJournalId: profitJournal.id } });
+    await tx.income.create({ data: { userId: trade.userId, type: "COPY_TRADE", sourceType: "COPY_TRADE", sourceId: trade.id, amount: profitAmount, copyTradeId: trade.id, ledgerJournalId: profitJournal.id, createdAt: now } });
     await createNotification(tx, {
       userId: trade.userId,
       type: "COPY_TRADE_INCOME",
@@ -775,7 +806,10 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
         metadata: { tradeId: trade.id, principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: aiWalletCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id, creditedAt: now.toISOString() },
       },
     });
-    return tx.copyTrade.update({ where: { id: trade.id }, data: { incomeAmount: profitAmount, incomeCreditedAt: now } });
+    return tx.copyTrade.update({
+      where: { id: trade.id },
+      data: { status: TradeStatus.INCOME_CREDITED, incomeAmount: profitAmount, completedAt: now, incomeCreditedAt: now },
+    });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

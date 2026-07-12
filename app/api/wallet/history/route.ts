@@ -97,7 +97,7 @@ export async function GET() {
       amount: Number(row.amount.toString()),
       signedAmount: Number(row.amount.toString()),
       title: incomeTitle(row.type),
-      referenceType: row.sourceType,
+      referenceType: copyTradeIncomeTypes.has(row.type) ? "COPY_TRADE_INCOME" : row.sourceType,
       referenceId: row.sourceId,
       tradeId: copyTradeIncomeTypes.has(row.type) ? row.sourceId : undefined,
       status: "Completed",
@@ -158,8 +158,20 @@ export async function GET() {
       sortAt: row.createdAt,
     }));
 
-  const history = [...historyRows, ...fallbackLedger].sort((a, b) => Date.parse(b.sortAt) - Date.parse(a.sortAt)).slice(0, 150).map(({ sortAt: _sortAt, ...row }) => row);
+  const history = [...historyRows, ...fallbackLedger]
+    .sort((a, b) => Date.parse(b.sortAt) - Date.parse(a.sortAt)
+      || walletEventOrder(b.referenceType) - walletEventOrder(a.referenceType)
+      || b.id.localeCompare(a.id))
+    .slice(0, 150)
+    .map(({ sortAt: _sortAt, ...row }) => row);
   return NextResponse.json({ authenticated: true, assets: [], totals: {}, history });
+}
+
+function walletEventOrder(referenceType: string) {
+  if (referenceType === "COPY_TRADE_INCOME") return 3;
+  if (referenceType === "COPY_TRADE_PRINCIPAL_RETURN") return 2;
+  if (referenceType === "COPY_TRADE_PLACEMENT") return 1;
+  return 0;
 }
 
 function referenceKey(referenceType: string, referenceId: string) {
