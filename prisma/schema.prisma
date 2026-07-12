@@ -645,6 +645,7 @@ model CopyTrade {
   slotId           String
   slot             TradeSlot   @relation(fields: [slotId], references: [id])
   source           String      @default("MANUAL")
+  pair             String?
   idempotencyKey   String?     @unique
   principalAmount  Decimal     @db.Decimal(36, 18)
   returnPercent    Decimal     @db.Decimal(10, 6)

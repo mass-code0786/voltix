@@ -26,9 +26,9 @@ export function formatLedgerDateTime(timestamp: string | Date | null | undefined
 
 export function tradePlacementTitle(source?: string | null) {
   const normalized = source?.trim().toUpperCase();
-  if (normalized === "AI_SUBSCRIPTION_AUTO" || normalized === "AI_SUBSCRIPTION") return "AI Trade Placed Successfully";
-  if (normalized === "MANUAL") return "Manual Trade Placed Successfully";
-  return "Trade Placed Successfully";
+  if (normalized === "AI_SUBSCRIPTION_AUTO" || normalized === "AI_SUBSCRIPTION") return "AI Trade Placed";
+  if (normalized === "MANUAL") return "Manual Trade Placed";
+  return "Trade Placed";
 }
 
 function isTradePlacement(entry: LedgerDisplayInput) {

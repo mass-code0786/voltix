@@ -100,6 +100,7 @@ export async function placeGuidedManualTrade(input: { userId: string; signalId: 
     const trade = await startVipCopyTrade({
       userId: input.userId,
       rowId: row.id,
+      pair: selectedPair,
       now: executionNow,
       ipAddress: input.ipAddress,
       device: input.device,

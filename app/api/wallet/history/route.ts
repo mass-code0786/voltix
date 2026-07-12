@@ -20,7 +20,7 @@ export async function GET() {
     prisma.walletTransfer.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100 }),
     prisma.p2PTransfer.findMany({ where: { OR: [{ senderId: user.id }, { receiverId: user.id }] }, orderBy: { createdAt: "desc" }, take: 100, include: { asset: true, sender: { select: { name: true, uid: true } }, receiver: { select: { name: true, uid: true } } } }),
     prisma.income.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100 }),
-    prisma.copyTrade.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100 }),
+    prisma.copyTrade.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100, include: { slot: { select: { label: true } } } }),
   ]);
   const primaryReferences = new Set<string>();
   const historyRows = [
@@ -99,6 +99,7 @@ export async function GET() {
       title: incomeTitle(row.type),
       referenceType: row.sourceType,
       referenceId: row.sourceId,
+      tradeId: copyTradeIncomeTypes.has(row.type) ? row.sourceId : undefined,
       status: "Completed",
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
@@ -113,11 +114,18 @@ export async function GET() {
       signedAmount: -Number(row.principalAmount.toString()),
       title: tradePlacementTitle(row.source),
       source: row.source,
-      referenceType: "COPY_TRADE",
+      referenceType: "COPY_TRADE_PLACEMENT",
       referenceId: row.id,
-      status: row.status === "FAILED" ? "Failed" : "Completed",
-      createdAt: row.createdAt.toISOString(),
-      sortAt: row.createdAt.toISOString(),
+      tradeId: row.id,
+      tradeType: row.source === "MANUAL" ? "MANUAL" : "AI",
+      pair: displayTradePair(row.pair),
+      tradeAmount: Number(row.principalAmount.toString()),
+      window: row.slot.label,
+      placedAt: row.startedAt.toISOString(),
+      settledAt: row.incomeCreditedAt?.toISOString() ?? null,
+      status: row.status === "FAILED" ? "Failed" : row.incomeCreditedAt ? "Completed" : "Running",
+      createdAt: row.startedAt.toISOString(),
+      sortAt: row.startedAt.toISOString(),
     })),
     ...trades.filter(row => row.incomeCreditedAt).map(row => ({
       id: `${row.id}:principal-return`,
@@ -130,6 +138,7 @@ export async function GET() {
       title: "AI Trade Principal Return",
       referenceType: "COPY_TRADE_PRINCIPAL_RETURN",
       referenceId: row.id,
+      tradeId: row.id,
       status: "Completed",
       createdAt: row.incomeCreditedAt!.toISOString(),
       sortAt: row.incomeCreditedAt!.toISOString(),
@@ -155,6 +164,12 @@ export async function GET() {
 
 function referenceKey(referenceType: string, referenceId: string) {
   return `${referenceType}:${referenceId}`;
+}
+
+function displayTradePair(pair: string | null) {
+  if (!pair) return "Pair unavailable";
+  const normalized = pair.toUpperCase().replace("/", "");
+  return normalized.endsWith("USDT") ? `${normalized.slice(0, -4)}/USDT` : normalized;
 }
 
 function incomeTitle(type: string) {

@@ -223,7 +223,7 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   };
 }
 
-export async function startVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string; idempotencyKey?: string; expectedSlotId?: string }) {
+export async function startVipCopyTrade(input: { userId: string; rowId: string; pair?: string; now?: Date; ipAddress?: string; device?: string; idempotencyKey?: string; expectedSlotId?: string }) {
   return executeVipCopyTrade({ ...input, actorType: "USER", source: "MANUAL" });
 }
 
@@ -448,7 +448,7 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
   };
 }
 
-async function executeVipCopyTrade(input: { userId: string; rowId: string; now?: Date; ipAddress?: string; device?: string; actorType: "USER" | "SYSTEM"; source?: "MANUAL" | "AI_SUBSCRIPTION" | "AI_SUBSCRIPTION_AUTO"; idempotencyKey?: string; expectedSlotId?: string }) {
+async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?: string; now?: Date; ipAddress?: string; device?: string; actorType: "USER" | "SYSTEM"; source?: "MANUAL" | "AI_SUBSCRIPTION" | "AI_SUBSCRIPTION_AUTO"; idempotencyKey?: string; expectedSlotId?: string }) {
   const now = input.now ?? new Date();
   return prisma.$transaction(async (tx) => {
     const isAiAutoTrade = input.source === "AI_SUBSCRIPTION" || input.source === "AI_SUBSCRIPTION_AUTO";
@@ -496,6 +496,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
 
     const dailyPercent = new Prisma.Decimal(getVipDailyIncomePercent(normalizedVipRank));
     const perTradePercent = dailyPercent.div(limit);
+    const pair = input.pair ? normalizeTradePair(input.pair) : await defaultTradePair(tx);
     const timeline = { windowStartAt: slotStart, windowCloseAt: slotEnd, completesAt: slotEnd, creditDueAt };
     const trade = await tx.copyTrade.create({
       data: {
@@ -503,6 +504,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
         codeId: null,
         slotId: slot.id,
         source: input.source ?? "MANUAL",
+        pair,
         idempotencyKey: input.idempotencyKey ?? null,
         principalAmount: tradeAmount,
         returnPercent: perTradePercent,
@@ -527,6 +529,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; now?:
           tradeCode: null,
           tradeAmount: tradeAmount.toString(),
           source: input.source ?? "MANUAL",
+          pair,
           idempotencyKey: input.idempotencyKey ?? null,
           dailyPercent: dailyPercent.toString(),
           perTradePercent: perTradePercent.toString(),
@@ -778,6 +781,20 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
 
 function isSettleableTradeStatus(status: TradeStatus) {
   return status === TradeStatus.PENDING || status === TradeStatus.ACTIVE || status === TradeStatus.COMPLETED;
+}
+
+function normalizeTradePair(value: string) {
+  const normalized = value.trim().toUpperCase().replace("/", "");
+  return normalized.endsWith("USDT") ? normalized : `${normalized}USDT`;
+}
+
+async function defaultTradePair(tx: Prisma.TransactionClient) {
+  const coin = await tx.coinMetadata.findFirst({
+    where: { isActive: true, symbol: { notIn: ["USDT", "SHINE"] } },
+    orderBy: [{ displayOrder: "asc" }, { symbol: "asc" }],
+    select: { pair: true, symbol: true },
+  });
+  return normalizeTradePair(coin?.pair ?? coin?.symbol ?? "BTC");
 }
 
 async function findOpenTradeSlot(now: Date, client: Prisma.TransactionClient | typeof prisma = prisma) {

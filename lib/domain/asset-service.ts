@@ -99,12 +99,19 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
 }
 
 export async function getUserWalletHistory(userId: string) {
-  const accounts = await prisma.walletAccount.findMany({
-    where: { userId, type: { in: userWalletTypes } },
-    select: { id: true },
-  });
-  if (!accounts.length) return { history: [] };
-  const entries = await prisma.ledgerEntry.findMany({
+  const [accounts, trades] = await Promise.all([
+    prisma.walletAccount.findMany({
+      where: { userId, type: { in: userWalletTypes } },
+      select: { id: true },
+    }),
+    prisma.copyTrade.findMany({
+      where: { userId },
+      orderBy: { startedAt: "desc" },
+      take: 100,
+      include: { slot: { select: { label: true } } },
+    }),
+  ]);
+  const entries = accounts.length ? await prisma.ledgerEntry.findMany({
     where: { accountId: { in: accounts.map(account => account.id) } },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -112,8 +119,56 @@ export async function getUserWalletHistory(userId: string) {
       account: { include: { asset: true } },
       journal: true,
     },
-  });
-  return { history: entries.map(formatLedgerEntry) };
+  }) : [];
+  const history = [
+    ...entries.map(formatLedgerEntry),
+    ...trades.map(formatTradePlacement),
+  ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 150);
+  return { history };
+}
+
+function formatTradePlacement(trade: {
+  id: string;
+  source: string;
+  pair: string | null;
+  principalAmount: Prisma.Decimal;
+  status: string;
+  startedAt: Date;
+  incomeCreditedAt: Date | null;
+  failureReason: string | null;
+  slot: { label: string };
+}) {
+  const manual = trade.source === "MANUAL";
+  const status = trade.status === "FAILED" ? "Failed" : trade.incomeCreditedAt ? "Completed" : "Running";
+  return {
+    id: `${trade.id}:placed`,
+    tradeId: trade.id,
+    type: "COPY_TRADE_PLACEMENT",
+    walletType: displayWalletName("AI"),
+    asset: "USDT",
+    direction: "DEBIT" as const,
+    amount: decimalToNumber(trade.principalAmount),
+    signedAmount: decimalToNumber(trade.principalAmount.neg()),
+    title: manual ? "Manual Trade Placed" : "AI Trade Placed",
+    source: trade.source,
+    referenceType: "COPY_TRADE_PLACEMENT",
+    referenceId: trade.id,
+    status,
+    tradeType: manual ? "MANUAL" : "AI",
+    pair: displayTradePair(trade.pair),
+    tradeAmount: decimalToNumber(trade.principalAmount),
+    window: trade.slot.label,
+    placedAt: trade.startedAt.toISOString(),
+    settledAt: trade.incomeCreditedAt?.toISOString() ?? null,
+    failureReason: trade.failureReason,
+    createdAt: trade.startedAt.toISOString(),
+  };
+}
+
+function displayTradePair(pair: string | null) {
+  if (!pair) return "Pair unavailable";
+  const normalized = pair.toUpperCase().replace("/", "");
+  return normalized.endsWith("USDT") ? `${normalized.slice(0, -4)}/USDT` : normalized;
 }
 
 function formatLedgerEntry(entry: {
@@ -135,6 +190,7 @@ function formatLedgerEntry(entry: {
     title: entry.journal.memo,
     referenceType: entry.journal.referenceType,
     referenceId: entry.journal.referenceId,
+    tradeId: entry.journal.referenceType.startsWith("COPY_TRADE") ? entry.journal.referenceId : undefined,
     status: entry.journal.status,
     createdAt: (entry.journal.postedAt ?? entry.createdAt).toISOString(),
   };

@@ -1,0 +1,1 @@
+ALTER TABLE "CopyTrade" ADD COLUMN "pair" TEXT;
