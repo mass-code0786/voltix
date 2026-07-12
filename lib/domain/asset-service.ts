@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient, type WalletType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ensureUserWalletAccounts } from "./user-wallets";
 import { displayWalletName } from "@/lib/wallet-labels";
+import { SHINE_PRICE_USD, SHINE_SYMBOL } from "@/lib/shine-token";
 
 type AssetClient = Pick<PrismaClient, "asset" | "walletAccount" | "ledgerEntry" | "copyTrade" | "user"> | Prisma.TransactionClient;
 
@@ -37,6 +38,17 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
     balanceByAccount.set(entry.accountId, entry.direction === "CREDIT" ? current.add(entry.amount) : current.sub(entry.amount));
   }
 
+  const shineBalance = accounts
+    .filter(account => account.type === "SPOT" && account.asset.symbol === SHINE_SYMBOL)
+    .reduce((sum, account) => sum.add(balanceByAccount.get(account.id) ?? 0), new Prisma.Decimal(0));
+  const shineUsdPrice = new Prisma.Decimal(SHINE_PRICE_USD);
+  const shineUsdValue = shineBalance.mul(shineUsdPrice);
+  const spotWalletUsd = user.spotBalance;
+  const futuresWalletUsd = user.futuresBalance;
+  const aiWalletUsd = user.aiWalletBalance;
+  const otherAssetValueUsd = new Prisma.Decimal(0);
+  const totalBalanceUsd = spotWalletUsd.add(futuresWalletUsd).add(aiWalletUsd).add(shineUsdValue).add(otherAssetValueUsd);
+
   const totals = {
     available: { spot: decimalToNumber(user.spotBalance), futures: decimalToNumber(user.futuresBalance), aiWallet: decimalToNumber(user.aiWalletBalance) },
     locked: { spot: 0, futures: 0, aiWallet: decimalToNumber(activeTrades._sum.principalAmount ?? 0) },
@@ -49,7 +61,19 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
       unlocked: user.aiTradePrincipal.eq(0) || user.aiTradeProfitEarned.gte(user.aiTradePrincipal.mul("0.60")),
     },
   };
-  totals.portfolio = totals.total.spot + totals.total.futures + totals.total.aiWallet;
+  totals.portfolio = decimalToNumber(totalBalanceUsd);
+
+  const walletSummary = {
+    spotWalletUsd: decimalToNumber(spotWalletUsd),
+    aiWalletUsd: decimalToNumber(aiWalletUsd),
+    futuresWalletUsd: decimalToNumber(futuresWalletUsd),
+    shineBalance: decimalToNumber(shineBalance),
+    shineUsdPrice: decimalToNumber(shineUsdPrice),
+    shineUsdValue: decimalToNumber(shineUsdValue),
+    otherAssetValueUsd: decimalToNumber(otherAssetValueUsd),
+    totalBalanceUsd: decimalToNumber(totalBalanceUsd),
+    updatedAt: new Date().toISOString(),
+  };
 
   const assets = accounts
     .map(account => {
@@ -65,11 +89,13 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
         enabled: account.asset.enabled,
         balance: decimalToNumber(availableBalance),
         ledgerBalance: decimalToNumber(ledgerBalance),
+        usdPrice: account.asset.symbol === SHINE_SYMBOL ? decimalToNumber(shineUsdPrice) : account.asset.symbol === "USDT" ? 1 : null,
+        usdValue: account.asset.symbol === SHINE_SYMBOL ? decimalToNumber(availableBalance.mul(shineUsdPrice)) : account.asset.symbol === "USDT" ? decimalToNumber(availableBalance) : null,
       };
     })
     .filter(asset => asset.balance !== 0);
 
-  return { assets, totals };
+  return { assets, totals, walletSummary };
 }
 
 export async function getUserWalletHistory(userId: string) {

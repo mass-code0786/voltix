@@ -40,7 +40,7 @@ export async function getDashboardSnapshot(client: DashboardClient, userId: stri
       vipRank: user.vipRank,
     },
     summary: {
-      totalPortfolio: assets.totals.portfolio,
+      totalPortfolio: assets.walletSummary.totalBalanceUsd,
       todaysProfit: decimalToNumber(todaysProfit._sum?.amount ?? 0),
       totalIncome: decimalToNumber(incomeTotals._sum?.amount ?? 0),
       aiCopyTradingIncome: decimalToNumber(aiCopyTradingIncome._sum?.amount ?? 0),

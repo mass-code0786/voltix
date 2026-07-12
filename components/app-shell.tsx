@@ -103,6 +103,17 @@ type AssetTotals = {
     unlocked?: boolean;
   };
 };
+type WalletSummary = {
+  spotWalletUsd: number;
+  aiWalletUsd: number;
+  futuresWalletUsd: number;
+  shineBalance: number;
+  shineUsdPrice: number;
+  shineUsdValue: number;
+  otherAssetValueUsd: number;
+  totalBalanceUsd: number;
+  updatedAt: string;
+};
 type AssetRecord = {
   accountId: string;
   walletType: UserWallet;
@@ -110,6 +121,8 @@ type AssetRecord = {
   name: string;
   balance: number;
   enabled: boolean;
+  usdPrice?: number | null;
+  usdValue?: number | null;
 };
 type P2PAsset = Pick<AssetRecord, "symbol" | "name" | "balance" | "enabled">;
 type P2PTransferInput = { receiver: string; asset: string; amount: number; note?: string; idempotencyKey: string; transactionPin: string; mobileVerificationToken?: string };
@@ -234,6 +247,7 @@ const mobileTabs: { id: MobileNavTab; label: string; icon: typeof Home; section?
 const card = "premium-card";
 const homeMarketPulseSymbols = ["BTC","ETH","BNB","SOL","SUI","XRP","DOGE","ADA","TRX","AVAX","DOT","LINK","TON","SHIB","LTC","BCH","ATOM","APT","ARB","OP","PEPE","NEAR","INJ","SEI","FIL"];
 const emptyAssetTotals: AssetTotals = { available: { spot: 0, futures: 0, aiWallet: 0 }, locked: { spot: 0, futures: 0, aiWallet: 0 }, total: { spot: 0, futures: 0, aiWallet: 0 }, portfolio: 0, aiWallet: { principal: 0, incomeEarned: 0, targetAmount: 0, unlocked: false } };
+const emptyWalletSummary: WalletSummary = { spotWalletUsd: 0, aiWalletUsd: 0, futuresWalletUsd: 0, shineBalance: 0, shineUsdPrice: 0, shineUsdValue: 0, otherAssetValueUsd: 0, totalBalanceUsd: 0, updatedAt: "" };
 const defaultCopyTradeCounts: CopyTradeCounts = { todaysTradeCount: 0, dailyTradeLimit: 3 };
 const activeAiSubscriptionMessage = "You already have an active AI Subscription. You can buy again after it expires.";
 
@@ -299,6 +313,7 @@ function mergeAssetRecords(baseCoins: AppCoin[], assets: AssetRecord[]): AppCoin
       logoPath,
       localLogoPath: logoPath,
       balance: Number(asset.balance ?? 0),
+      price: typeof asset.usdPrice === "number" ? asset.usdPrice : base?.price ?? 0,
       isActive: asset.enabled,
     };
   }).sort((a,b)=>(a.displayOrder??9999)-(b.displayOrder??9999));
@@ -344,6 +359,7 @@ export default function AppShell() {
   const [walletAssets, setWalletAssets] = useState<AppCoin[]>([]);
   const [p2pAssets, setP2PAssets] = useState<P2PAsset[]>([]);
   const [assetTotals, setAssetTotals] = useState<AssetTotals>(emptyAssetTotals);
+  const [walletSummary, setWalletSummary] = useState<WalletSummary>(emptyWalletSummary);
   const [futuresBalance, setFuturesBalance] = useState(0);
   const [aiWalletBalance, setAiWalletBalance] = useState(0);
   const [aiTradeTransferred, setAiTradeTransferred] = useState(0);
@@ -490,6 +506,7 @@ export default function AppShell() {
       setWalletAssets([]);
       setP2PAssets([]);
       setAssetTotals(emptyAssetTotals);
+      setWalletSummary(emptyWalletSummary);
       setWalletActivity([]);
       setFuturesBalance(0);
       setAiWalletBalance(0);
@@ -503,11 +520,13 @@ export default function AppShell() {
       if (!response.ok) throw new Error(data.error || "Assets request failed");
       const assets = Array.isArray(data.assets) ? data.assets as AssetRecord[] : [];
       const totals = data.totals as AssetTotals;
+      const summary = data.walletSummary as WalletSummary;
       const history = Array.isArray(data.history) ? data.history as WalletHistoryRecord[] : [];
       if (requestId !== walletRequestRef.current || controller.signal.aborted) return;
       setWalletAssets(mergeAssetRecords(marketCoinsRef.current, assets));
       setP2PAssets(assets.filter(asset => asset.walletType === "SPOT" && asset.enabled && Number(asset.balance ?? 0) > 0).map(asset => ({ symbol: asset.symbol, name: asset.name, balance: Number(asset.balance ?? 0), enabled: asset.enabled })));
       setAssetTotals(totals ?? emptyAssetTotals);
+      setWalletSummary(summary ?? emptyWalletSummary);
       setFuturesBalance(Number(totals?.total?.futures ?? 0));
       setAiWalletBalance(Number(totals?.total?.aiWallet ?? 0));
       setAiTradeTransferred(Number(totals?.aiWallet?.principal ?? 0));
@@ -549,6 +568,7 @@ export default function AppShell() {
     setWalletAssets([]);
     setP2PAssets([]);
     setAssetTotals(emptyAssetTotals);
+    setWalletSummary(emptyWalletSummary);
     setWalletActivity([]);
     setActiveCopyTrade(null);
     setCopyTradeHistory([]);
@@ -936,7 +956,7 @@ export default function AppShell() {
     if (currentUser.kycStatus !== "APPROVED") { setWithdrawalVerificationOpen(true); return; }
     window.location.href="/wallet/withdraw";
   };
-  const totalBalance = Number(assetTotals.portfolio ?? 0);
+  const totalBalance = Number(walletSummary.totalBalanceUsd);
   const screen = {
     home: <HomeScreen t={t} currentUser={currentUser} onNavigate={navigate} onOpenAuth={()=>openAuthPage("login")} onOpenWithdrawal={openWithdrawal} onOpenCopyTrade={()=>navigate("aiTrade")} onOpenP2P={()=>currentUser?setP2POpen(true):openAuthPage("login")} assets={marketCoins} dashboard={dashboard} dashboardLoading={dashboardLoading||walletLoading} totalBalance={totalBalance} balanceVisible={balanceVisible} setBalanceVisible={updateBalanceVisible} activeCopyTrade={activeCopyTrade} copyTradeHistory={copyTradeHistory} aiWalletBalance={aiWalletBalance} userCountry={userCountry} aiSubscription={aiSubscription} vipTradeRows={vipTradeRows} onManualTradePlaced={refreshAfterManualTrade} purchaseAi={purchaseAi} notify={notify} />,
     markets: <MarketsScreen t={t} coins={marketCoins} userCountry={userCountry} loading={marketCoinsLoading} error={marketCoinsError} />,
