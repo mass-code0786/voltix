@@ -1104,7 +1104,7 @@ function VoltixPortfolioHero({ currentUser, total, todaysProfit, balanceVisible,
         <p className="text-[12px] font-semibold text-slate-400">Welcome Back,</p>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 pr-1">
           <h2 className="max-w-full text-[19px] font-bold leading-tight text-white">{currentUser.name?.trim() || "Voltix User"}</h2>
-          <span className={`flex h-5 shrink-0 items-center gap-1 rounded-full border px-2 text-[8px] font-black ${kycApproved?"border-[#58a6ff]/25 bg-[#58a6ff]/10 text-[#77b7ff]":"border-[#f6c85f]/25 bg-[#f6c85f]/10 text-[#f6c85f]"}`}>{kycApproved&&<CheckCircle2 size={11} fill="rgba(88,166,255,.18)"/>}{kycApproved?"Verified":"Not Verified"}</span>
+          {kycApproved&&<CheckCircle2 size={14} className="shrink-0 text-[#18ff8a]" fill="rgba(24,255,138,.18)" aria-label="Verified account" role="img"/>}
           <span className="flex h-6 shrink-0 items-center gap-0.5 rounded-full border border-[#18ff8a]/30 bg-[#18ff8a]/10 px-1 pr-1.5 text-[8px] font-black text-[#c9ffe4]"><img src={getVipIconPath(currentUser.vipRank)} alt={`${currentUser.vipRank || "VIP 0"} badge`} className="h-5 w-5 object-contain"/>{currentUser.vipRank || "VIP 0"}</span>
         </div>
         <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Balance</p>
@@ -1248,8 +1248,8 @@ type AiOverviewRange = "today" | "week" | "month";
 type AiOverviewData = { range: AiOverviewRange; totalIncome: number; currency: string; points: { label: string; value: number }[] };
 const overviewRangeLabels: Record<AiOverviewRange, string> = { today: "Today", week: "This Week", month: "This Month" };
 
-function AiOverviewCard({ balanceVisible }: { balanceVisible: boolean }) {
-  const [range,setRange]=useState<AiOverviewRange>("week");
+function useAiTradingOverview() {
+  const [range,setRange]=useState<AiOverviewRange>("today");
   const [data,setData]=useState<AiOverviewData|null>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
@@ -1265,21 +1265,30 @@ function AiOverviewCard({ balanceVisible }: { balanceVisible: boolean }) {
       .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return()=>controller.abort();
   },[range,retryKey]);
+  return {range,setRange,data,loading,error,retry:()=>setRetryKey(value=>value+1)};
+}
+
+function AiOverviewRangeSelector({range,onChange}:{range:AiOverviewRange;onChange:(range:AiOverviewRange)=>void}) {
+  return <label className="relative flex h-7 w-[104px] max-w-full shrink-0 items-center rounded-full border border-[#18ff8a]/15 bg-[#0b1511] text-[10px] font-black text-slate-300">
+    <select aria-label="AI trading overview range" value={range} onChange={event=>onChange(event.target.value as AiOverviewRange)} className="h-full w-full appearance-none rounded-full bg-transparent pl-2.5 pr-6 outline-none">
+      <option value="today">Today</option><option value="week">This Week</option><option value="month">This Month</option>
+    </select>
+    <ChevronDown size={10} className="pointer-events-none absolute right-2"/>
+  </label>;
+}
+
+function AiOverviewCard({ balanceVisible }: { balanceVisible: boolean }) {
+  const {range,setRange,data,loading,error,retry}=useAiTradingOverview();
   return <GlassCard className="home-depth-card h-[126px] rounded-[20px] p-3">
     <div className="flex items-start justify-between gap-3">
       <h3 className="text-[16px] font-bold leading-tight text-white">AI Copy Trading Overview</h3>
-      <label className="relative flex h-7 max-w-[104px] shrink-0 items-center rounded-full border border-[#18ff8a]/15 bg-[#0b1511] text-[10px] font-black text-slate-300">
-        <select aria-label="AI trading overview range" value={range} onChange={event=>setRange(event.target.value as AiOverviewRange)} className="h-full w-full appearance-none rounded-full bg-transparent pl-2.5 pr-6 outline-none">
-          <option value="today">Today</option><option value="week">This Week</option><option value="month">This Month</option>
-        </select>
-        <ChevronDown size={10} className="pointer-events-none absolute right-2"/>
-      </label>
+      <AiOverviewRangeSelector range={range} onChange={setRange}/>
     </div>
     <div className="mt-2 grid grid-cols-[minmax(0,1fr)_136px] items-end gap-2.5">
       <div>
         <p className="text-[9px] font-bold uppercase tracking-[.12em] text-slate-500">Total Income</p>
         <p className={`mt-0.5 text-[24px] font-black leading-none text-[#18ff8a] transition-opacity ${loading&&data?"opacity-55":""}`}>{balanceVisible ? data?usd(data.totalIncome):"—" : BALANCE_MASK}</p>
-        <p className="mt-0.5 text-[9px] font-bold text-slate-500">{error?<button type="button" onClick={()=>setRetryKey(value=>value+1)} className="text-[#f6c85f]">Retry overview</button>:loading?`Loading ${overviewRangeLabels[range].toLowerCase()}…`:data?.totalIncome?`${data.totalIncome>=0?"+":""}${data.totalIncome.toFixed(2)} ${data.currency}`:"No income in this range"}</p>
+        <p className="mt-0.5 text-[9px] font-bold text-slate-500">{error?<button type="button" onClick={retry} className="text-[#f6c85f]">Retry overview</button>:loading?`Loading ${overviewRangeLabels[range].toLowerCase()}…`:data?.totalIncome?`${data.totalIncome>=0?"+":""}${data.totalIncome.toFixed(2)} ${data.currency}`:"No income in this range"}</p>
       </div>
       <IncomeChart points={data?.points??[]} loading={loading} />
     </div>
@@ -1793,7 +1802,7 @@ function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,aiW
       <AiTradeHeroVisual/>
     </section>
     <AiTopStats balance={aiWalletBalance} todayIncome={todayIncome} currentTrades={currentTrades} allowedTrades={allowedTrades} active={active}/>
-    <AiTradeOverviewCard history={creditedHistory} todayIncome={todayIncome}/>
+    <AiTradeOverviewCard/>
     <TopCopyTraders/>
     <VipTradeRowsCard rows={tradeRows.slice(0,5)} onTradePlaced={onManualTradePlaced}/>
     <AiInfoStrip/>
@@ -1851,37 +1860,37 @@ function AiStat({icon:Icon,tone,label,value,trend}:{icon:typeof Home;tone:"green
   </div>;
 }
 
-function AiTradeOverviewCard({history,todayIncome}:{history:CopyTradeHistory[];todayIncome:number}) {
-  const chartData=useMemo(()=>history.slice(0,7).reverse().map(row=>Number(row.profit ?? 0)).filter(Number.isFinite),[history]);
-  const total=history.reduce((sum,row)=>sum+Number(row.profit ?? 0),0);
+function AiTradeOverviewCard() {
+  const {range,setRange,data,loading,error,retry}=useAiTradingOverview();
   return <section className="ai-glass ai-overview-card">
     <div className="flex items-center justify-between gap-3">
       <h2>AI Copy Trading Overview</h2>
-      <button>This Week <ChevronDown size={11}/></button>
+      <AiOverviewRangeSelector range={range} onChange={setRange}/>
     </div>
     <div className="mt-3 grid grid-cols-[105px_minmax(0,1fr)] gap-2.5">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Income</p>
-        <strong className="mt-1 block text-[24px] font-black leading-none text-[#18ff8a]">{usd(total)}</strong>
-        <span className="mt-1 block text-[11px] font-black text-[#18ff8a]">{todayIncome>0?`+${usd(todayIncome)} today`:"No income today"}</span>
+        <strong className={`mt-1 block text-[24px] font-black leading-none text-[#18ff8a] transition-opacity ${loading&&data?"opacity-55":""}`}>{data?usd(data.totalIncome):"—"}</strong>
+        <span className="mt-1 block text-[10px] font-black text-slate-500">{error?<button type="button" onClick={retry} className="text-[#f6c85f]">Retry overview</button>:loading?`Loading ${overviewRangeLabels[range].toLowerCase()}…`:data?.totalIncome?`+${data.totalIncome.toFixed(2)} ${data.currency}`:"No income in this range"}</span>
       </div>
-      <AiIncomeChart data={chartData} todayIncome={todayIncome}/>
+      <AiIncomeChart points={data?.points??[]} totalIncome={data?.totalIncome??0} loading={loading}/>
     </div>
   </section>;
 }
 
-function AiIncomeChart({data,todayIncome}:{data:number[];todayIncome:number}) {
+function AiIncomeChart({points,totalIncome,loading}:{points:{label:string;value:number}[];totalIncome:number;loading:boolean}) {
   const width=210,height=140;
-  const series=data.length?data:[0,0,0,0,0,0,0];
-  const max=Math.max(...series,600), min=0;
-  const points=series.map((value,index)=>`${28+(index/6)*168},${height-28-((value-min)/Math.max(max-min,1))*88}`).join(" ");
-  return <svg viewBox={`0 0 ${width} ${height}`} className="ai-income-chart" preserveAspectRatio="none" aria-hidden="true">
+  const series=points.length?points.map(point=>point.value):[0];
+  const max=Math.max(...series,1), min=0;
+  const polylinePoints=series.map((value,index)=>`${28+(index/Math.max(series.length-1,1))*168},${height-28-((value-min)/Math.max(max-min,1))*88}`).join(" ");
+  const labelIndexes=points.length>12?new Set([0,Math.floor((points.length-1)/2),points.length-1]):new Set(points.map((_,index)=>index));
+  return <svg viewBox={`0 0 ${width} ${height}`} className={`ai-income-chart transition-opacity ${loading?"opacity-55":""}`} preserveAspectRatio="none" aria-hidden="true">
     <defs><linearGradient id="aiIncomeFill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#18ff8a" stopOpacity=".28"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></linearGradient></defs>
-    {[0,200,400,600].map(v=><g key={v}><text x="0" y={height-28-(v/600)*88} fill="#64748b" fontSize="9">${v}</text><line x1="25" x2="205" y1={height-31-(v/600)*88} y2={height-31-(v/600)*88} stroke="#ffffff" strokeOpacity=".06"/></g>)}
-    <path d={`M28 ${height-28} L ${points} L196 ${height-28} Z`} fill="url(#aiIncomeFill)"/>
-    <polyline points={points} fill="none" stroke="#18ff8a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="ai-chart-line"/>
-    {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((day,i)=><text key={day} x={28+(i/6)*168} y="135" textAnchor="middle" fill="#64748b" fontSize="9">{day}</text>)}
-    <g transform="translate(118 12)" className="ai-tooltip"><rect width="78" height="24" rx="10" fill="#0b1712" stroke="#18ff8a" strokeOpacity=".34"/><text x="39" y="15" textAnchor="middle" fill="#18ff8a" fontSize="10" fontWeight="800">{todayIncome?usd(todayIncome):"$0 Today"}</text></g>
+    {[0,.33,.66,1].map(ratio=><g key={ratio}><text x="0" y={height-28-ratio*88} fill="#64748b" fontSize="9">${(max*ratio).toFixed(max<10?1:0)}</text><line x1="25" x2="205" y1={height-31-ratio*88} y2={height-31-ratio*88} stroke="#ffffff" strokeOpacity=".06"/></g>)}
+    <path d={`M28 ${height-28} L ${polylinePoints} L196 ${height-28} Z`} fill="url(#aiIncomeFill)"/>
+    <polyline points={polylinePoints} fill="none" stroke="#18ff8a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="ai-chart-line"/>
+    {points.map((point,index)=>labelIndexes.has(index)?<text key={`${point.label}-${index}`} x={28+(index/Math.max(points.length-1,1))*168} y="135" textAnchor="middle" fill="#64748b" fontSize="8">{point.label}</text>:null)}
+    <g transform="translate(118 12)" className="ai-tooltip"><rect width="78" height="24" rx="10" fill="#0b1712" stroke="#18ff8a" strokeOpacity=".34"/><text x="39" y="15" textAnchor="middle" fill="#18ff8a" fontSize="10" fontWeight="800">{usd(totalIncome)}</text></g>
   </svg>;
 }
 

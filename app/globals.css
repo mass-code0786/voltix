@@ -3487,20 +3487,6 @@ textarea:focus {
   color: #fff;
 }
 
-.ai-overview-card button {
-  display: flex;
-  height: 26px;
-  align-items: center;
-  gap: 4px;
-  border-radius: 999px;
-  border: 1px solid rgba(24,255,138,.16);
-  background: rgba(255,255,255,.045);
-  padding: 0 9px;
-  color: #cbd5e1;
-  font-size: 10px;
-  font-weight: 900;
-}
-
 .ai-income-chart {
   height: 118px;
   width: 100%;
