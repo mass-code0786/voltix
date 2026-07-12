@@ -45,7 +45,7 @@ export async function isBiometricLockEnabled() {
 }
 
 export async function setBiometricLockEnabled(enabled: boolean) {
-  if (!(await isVoltixNativeApp())) return;
+  if (!(await isNativePluginAvailable("Preferences"))) return;
   const { Preferences } = await import("@capacitor/preferences");
   await Preferences.set({ key: biometricLockPreferenceKey, value: String(enabled) });
 }
@@ -76,6 +76,11 @@ export async function getMobileSessionTokenWithBiometric(reason = "Unlock Voltix
 }
 
 export async function clearMobileNativeSession() {
+  try {
+    window.sessionStorage.removeItem(biometricForegroundUnlockKey);
+  } catch {
+    // Session storage is optional in restricted WebViews and browser modes.
+  }
   await Promise.allSettled([
     deleteBiometricSession(),
     deletePushToken(),
@@ -84,9 +89,13 @@ export async function clearMobileNativeSession() {
 }
 
 export async function deleteBiometricSession() {
-  if (!(await isVoltixNativeApp())) return;
-  const { NativeBiometric } = await import("capacitor-native-biometric");
-  await NativeBiometric.deleteCredentials({ server: biometricServer });
+  if (!(await isNativePluginAvailable("NativeBiometric"))) return;
+  try {
+    const { NativeBiometric } = await import("capacitor-native-biometric");
+    await NativeBiometric.deleteCredentials({ server: biometricServer });
+  } catch {
+    return;
+  }
 }
 
 export async function isBiometricAvailable() {
@@ -149,6 +158,20 @@ export async function getSavedPushToken() {
 }
 
 async function deletePushToken() {
-  const { Preferences } = await import("@capacitor/preferences");
-  await Preferences.remove({ key: fcmTokenKey });
+  if (!(await isNativePluginAvailable("Preferences"))) return;
+  try {
+    const { Preferences } = await import("@capacitor/preferences");
+    await Preferences.remove({ key: fcmTokenKey });
+  } catch {
+    return;
+  }
+}
+
+async function isNativePluginAvailable(pluginName: string) {
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable(pluginName);
+  } catch {
+    return false;
+  }
 }

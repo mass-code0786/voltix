@@ -160,9 +160,11 @@ export default function ProfilePage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [logoutInProgress, setLogoutInProgress] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const logoutInProgressRef = useRef(false);
 
   const kycTone = useMemo(() => {
     if (profile?.kycStatus === "APPROVED") return "border-[#18ff8a]/30 bg-[#18ff8a]/10 text-[#18ff8a]";
@@ -384,13 +386,16 @@ export default function ProfilePage() {
   };
 
   const logout = async () => {
+    if (logoutInProgressRef.current) return;
+    logoutInProgressRef.current = true;
+    setLogoutInProgress(true);
     setError("");
     setMessage("");
     try {
       const response = await fetch("/api/auth/logout", { method: "POST", credentials: "include", cache: "no-store" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Logout failed");
-      await clearMobileNativeSession().catch(() => null);
+      await clearMobileNativeSession();
       clearPostLoginSplashFlags();
       setProfile(null);
       setDashboard(null);
@@ -398,9 +403,11 @@ export default function ProfilePage() {
       setAi(null);
       setIncome(null);
       setUnreadNotifications(0);
-      window.location.replace("/");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Logout failed");
+      window.location.replace("/auth?mode=login&returnTo=%2Fdashboard");
+    } catch {
+      setError("Unable to sign out. Please check your connection and try again.");
+      logoutInProgressRef.current = false;
+      setLogoutInProgress(false);
     }
   };
 
@@ -478,7 +485,7 @@ export default function ProfilePage() {
                 <ProfileRow icon={Bell} tone="yellow" title="Notifications" subtitle={`${unreadNotifications} unread`} onClick={() => router.push("/profile/notifications")} />
                 <ProfileRow icon={Settings} tone="gray" title="Settings" subtitle="Language and preferences" onClick={() => router.push("/profile/settings")} />
                 <ProfileRow icon={Headphones} tone="blue" title="Support Center" subtitle="Help, tickets and account support" onClick={() => router.push("/profile/support")} />
-                <ProfileRow icon={LogOut} tone="red" title="Logout" subtitle="End this session" onClick={logout} danger last />
+                <ProfileRow icon={LogOut} tone="red" title={logoutInProgress?"Logging out...":"Logout"} subtitle="End this session" onClick={logout} disabled={logoutInProgress} danger last />
               </div>
             </section>
 
@@ -832,8 +839,8 @@ function VipHex() {
   </svg>;
 }
 
-function ProfileRow({icon:Icon,tone,title,subtitle,pill,pillTone="muted",onClick,danger=false,last=false}:{icon:IconType;tone:"green"|"purple"|"blue"|"yellow"|"gray"|"red";title:string;subtitle:string;pill?:string;pillTone?: "green" | "muted";onClick:()=>void;danger?:boolean;last?:boolean}) {
-  return <button onClick={onClick} className={`profile-row ${last?"border-b-0":""}`}>
+function ProfileRow({icon:Icon,tone,title,subtitle,pill,pillTone="muted",onClick,disabled=false,danger=false,last=false}:{icon:IconType;tone:"green"|"purple"|"blue"|"yellow"|"gray"|"red";title:string;subtitle:string;pill?:string;pillTone?: "green" | "muted";onClick:()=>void;disabled?:boolean;danger?:boolean;last?:boolean}) {
+  return <button onClick={onClick} disabled={disabled} className={`profile-row disabled:opacity-50 ${last?"border-b-0":""}`}>
     <span className={`profile-row-icon profile-icon-${tone}`}><Icon size={18}/></span>
     <span className="min-w-0 flex-1 text-left">
       <span className={`block truncate text-[15px] font-bold ${danger?"text-[#ff4f6d]":"text-white"}`}>{title}</span>
