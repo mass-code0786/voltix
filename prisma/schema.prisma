@@ -62,9 +62,11 @@ enum DepositProvider {
 
 enum WithdrawalStatus {
   PENDING
+  PROCESSING
   COMPLETED
   APPROVED
   REJECTED
+  FAILED
 }
 
 enum CodeStatus {
@@ -197,6 +199,8 @@ model User {
   p2pTransfersSent          P2PTransfer[]           @relation("P2PSender")
   p2pTransfersReceived      P2PTransfer[]           @relation("P2PReceiver")
   deposits                  Deposit[]
+  depositAddresses          DepositAddress[]
+  paymentProviderCustomer   PaymentProviderCustomer?
   withdrawals               Withdrawal[]
   walletAdjustments         AdminWalletAdjustment[] @relation("WalletAdjustmentUser")
   adminWalletAdjustments    AdminWalletAdjustment[] @relation("WalletAdjustmentAdmin")
@@ -320,6 +324,7 @@ model Asset {
   enabled           Boolean                 @default(true)
   walletAccounts    WalletAccount[]
   deposits          Deposit[]
+  depositAddresses  DepositAddress[]
   withdrawals       Withdrawal[]
   walletAdjustments AdminWalletAdjustment[]
   p2pTransfers      P2PTransfer[]
@@ -389,7 +394,44 @@ model ChainNetwork {
   requiredConfirmations Int
   enabled               Boolean      @default(true)
   deposits              Deposit[]
+  depositAddresses      DepositAddress[]
   withdrawals           Withdrawal[]
+}
+
+model PaymentProviderCustomer {
+  id                 String          @id @default(cuid())
+  userId             String          @unique
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider           DepositProvider @default(NOWPAYMENTS)
+  providerCustomerId String          @unique
+  name               String
+  rawJson            Json?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+model DepositAddress {
+  id                 String          @id @default(cuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetId            String
+  asset               Asset           @relation(fields: [assetId], references: [id])
+  networkId          String
+  network             ChainNetwork    @relation(fields: [networkId], references: [id])
+  provider           DepositProvider @default(NOWPAYMENTS)
+  providerCustomerId String
+  providerPaymentId  String          @unique
+  payCurrency        String
+  address            String
+  active             Boolean         @default(true)
+  rawJson            Json?
+  deposits           Deposit[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([userId, assetId, networkId])
+  @@unique([networkId, address])
+  @@index([providerCustomerId])
 }
 
 model Deposit {
@@ -400,8 +442,11 @@ model Deposit {
   asset              Asset           @relation(fields: [assetId], references: [id])
   networkId          String
   network            ChainNetwork    @relation(fields: [networkId], references: [id])
+  depositAddressId   String?
+  depositAddress     DepositAddress? @relation(fields: [depositAddressId], references: [id])
   provider           DepositProvider @default(NOWPAYMENTS)
   providerPaymentId  String?         @unique
+  parentPaymentId    String?
   providerInvoiceId  String?         @unique
   providerPaymentUrl String?
   payCurrency        String?
@@ -424,6 +469,8 @@ model Deposit {
   @@unique([networkId, txHash, eventIndex])
   @@index([status, createdAt])
   @@index([provider, paymentStatus, createdAt])
+  @@index([depositAddressId, createdAt])
+  @@index([parentPaymentId])
 }
 
 model Withdrawal {
@@ -453,11 +500,20 @@ model Withdrawal {
   earlyWithdrawalConfirmedAt DateTime?
   idempotencyKey             String           @unique
   ledgerJournalId            String?          @unique
+  requestJournalId           String?          @unique
+  decisionJournalId          String?          @unique
+  providerPayoutId           String?          @unique
+  providerBatchId            String?
+  providerStatus             String?
+  providerResponse           Json?
   txHash                     String?
   status                     WithdrawalStatus @default(PENDING)
   adminActionBy              String?
   adminActionAt              DateTime?
   rejectionReason            String?
+  failureReason              String?
+  processingAt               DateTime?
+  completedAt                DateTime?
   createdAt                  DateTime         @default(now())
   updatedAt                  DateTime         @updatedAt
 

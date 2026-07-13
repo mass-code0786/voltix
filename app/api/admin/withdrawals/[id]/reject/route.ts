@@ -13,7 +13,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
-    const withdrawal = await rejectWithdrawalRequest({ withdrawalId: id, adminUserId: admin.user.id, reason: typeof body.reason === "string" ? body.reason : undefined });
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (!reason) return NextResponse.json({ error: "Rejection reason is required" }, { status: 400 });
+    const withdrawal = await rejectWithdrawalRequest({ withdrawalId: id, adminUserId: admin.user.id, reason });
     await auditSuccess({ request, adminId: admin.user.id, role: "ADMIN", action: "WITHDRAWAL_REJECT", module: "WITHDRAWAL", description: "Admin rejected withdrawal", newValue: withdrawal, metadata: { reason: typeof body.reason === "string" ? body.reason : null } }).catch(() => null);
     return NextResponse.json({ withdrawal });
   } catch (error) {

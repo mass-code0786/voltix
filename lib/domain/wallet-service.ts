@@ -10,7 +10,7 @@ const WITHDRAWAL_PERCENTAGE_RATE = new Prisma.Decimal("0.05");
 const AI_WITHDRAWAL_ELIGIBILITY_RATE = new Prisma.Decimal("0.60");
 const AI_EARLY_WITHDRAWAL_RATE = new Prisma.Decimal("0.20");
 const allowedRoutes = new Set([
-  "SPOT:FUTURES", "SPOT:AI",
+  "SPOT:FUTURES", "SPOT:AI", "AI:SPOT",
   "FUTURES:SPOT", "FUTURES:AI",
 ]);
 
@@ -32,7 +32,6 @@ export async function transferWallet(input: {
     const existing = await tx.walletTransfer.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) return existing;
 
-    if (input.fromWallet === "AI") throw new Error("AI funds cannot be transferred back to another wallet");
     const receivedAmount = input.amount;
     const reason = `${input.fromWallet}_TO_${input.toWallet}`;
 

@@ -25,10 +25,13 @@ npm run db:push
 
 ## Production boundaries
 
-- Deposits use NOWPayments payment/IPN flow only.
-- Configure `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_IPN_SECRET`, and either `NOWPAYMENTS_IPN_CALLBACK_URL` or `NEXT_PUBLIC_APP_URL`.
-- Credit Spot wallet balances only after a verified NOWPayments IPN marks the payment confirmed or finished.
-- Deposit idempotency is enforced by unique NOWPayments provider payment IDs and ledger journal idempotency.
+- USDT BEP20/TRC20 deposits use permanent NOWPayments Customer Management addresses and signed IPN callbacks.
+- Configure `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_EMAIL`, `NOWPAYMENTS_PASSWORD`, `NOWPAYMENTS_TOTP_SECRET`, `NOWPAYMENTS_IPN_SECRET`, both callback URLs, and `NEXT_PUBLIC_APP_URL` before enabling deposits or payouts.
+- Enable NOWPayments Customer Management and Mass Payouts for the merchant account, whitelist the production server IP, and keep payout 2FA enabled.
+- Spot balances are credited only after a signed final-status IPN includes a blockchain transaction hash and verified paid amount.
+- Deposit and withdrawal idempotency is enforced by provider IDs, transaction hashes, client idempotency keys, and ledger journal idempotency.
+- Spot withdrawals reserve funds atomically before payout submission. Definitive provider failures post a balanced refund; ambiguous provider responses remain processing for reconciliation rather than risking a duplicate payout.
+- AI withdrawal requests do not reserve funds until an admin approves them; rejection leaves the AI balance unchanged.
 - Every value movement posts a balanced ledger journal. Journal idempotency prevents duplicate credits.
 - Copy-code redemption uses a serializable transaction and conditional status update to prevent concurrent reuse.
 - Trade completion and income credit should run as separate retryable workers. `CopyTrade.status`, due timestamps, and journal idempotency make both jobs restart-safe.

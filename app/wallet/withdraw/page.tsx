@@ -34,6 +34,7 @@ export default function WalletWithdrawPage() {
   const [error,setError]=useState("");
   const [success,setSuccess]=useState("");
   const [earlyBreakdown,setEarlyBreakdown]=useState<EarlyWithdrawalBreakdown|null>(null);
+  const [idempotencyKey,setIdempotencyKey]=useState(()=>crypto.randomUUID());
   const [verificationState,setVerificationState]=useState<"loading"|"verified"|"not_verified">("loading");
   const [verificationDialogOpen,setVerificationDialogOpen]=useState(false);
 
@@ -84,7 +85,7 @@ export default function WalletWithdrawPage() {
     resetError();
     if(!mobileVerificationToken&&transactionPin.length!==6){setError("Invalid Transaction PIN.");return;}
     setSubmitting(true);
-    const response=await fetch("/api/withdrawals",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({walletType,amount:value,address,network,transactionPin,mobileVerificationToken,acceptEarlyWithdrawalCharge})});
+    const response=await fetch("/api/withdrawals",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json","Idempotency-Key":idempotencyKey},body:JSON.stringify({walletType,amount:value,address,network,transactionPin,mobileVerificationToken,acceptEarlyWithdrawalCharge})});
     const data=await response.json().catch(()=>({}));
     setSubmitting(false);
     if(!response.ok){
@@ -112,7 +113,8 @@ export default function WalletWithdrawPage() {
     setTransactionPin("");
     setMobileVerificationToken("");
     hapticNotification("success").catch(()=>null);
-    setSuccess("Withdrawal request submitted. Status: pending admin approval.");
+    setSuccess(walletType==="SPOT"?"Spot withdrawal is processing on the blockchain.":"AI withdrawal submitted for admin approval.");
+    setIdempotencyKey(crypto.randomUUID());
   };
   const useBiometric=async()=>{
     resetError();
@@ -160,7 +162,7 @@ export default function WalletWithdrawPage() {
         </div>
         <p className="mt-1 text-[10px] text-slate-500">Available: {available.toFixed(2)} USDT</p>
         <label className="mt-4 block text-xs font-bold text-slate-400">External wallet or exchange address<input value={address} onChange={event=>{setAddress(event.target.value);resetError();}} placeholder="0x... or exchange deposit address" className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"/></label>
-        <label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={event=>{setNetwork(event.target.value);resetError();}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label>
+        <label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={event=>{setNetwork(event.target.value);resetError();}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option></select></label>
         <div className="mt-4 space-y-2 rounded-2xl border border-white/[.08] bg-black/25 p-4">
           <LineItem label="Withdrawal Amount" value={`${value.toFixed(2)} USDT`}/>
           <LineItem label="5% Withdrawal Fee" value={`${percentageFee.toFixed(2)} USDT`}/>

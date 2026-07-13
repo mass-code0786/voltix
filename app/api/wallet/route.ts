@@ -12,6 +12,7 @@ const transferSchema = z.object({
   fromWallet: z.enum(["SPOT", "FUTURES", "AI"]),
   toWallet: z.enum(["SPOT", "FUTURES", "AI"]),
   amount: z.coerce.number().positive(),
+  idempotencyKey: z.string().trim().min(8).max(120),
 });
 
 export async function GET() {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       fromWallet: parsed.data.fromWallet,
       toWallet: parsed.data.toWallet,
       amount: new Prisma.Decimal(parsed.data.amount),
-      idempotencyKey: `${user.id}:${Date.now()}:${crypto.randomUUID()}`,
+      idempotencyKey: `${user.id}:${parsed.data.idempotencyKey}`,
     });
     await auditSuccess({ request, userId: user.id, role: "USER", action: "WALLET_TRANSFER", module: "WALLET", description: "User transferred funds between wallets", newValue: { id: transfer.id, fromWallet: transfer.fromWallet, toWallet: transfer.toWallet, amount: transfer.amount.toString(), status: transfer.status } }).catch(() => null);
     return NextResponse.json({

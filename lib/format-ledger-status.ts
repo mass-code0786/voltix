@@ -7,10 +7,13 @@ export function formatLedgerStatus(status: string) {
     case "INCOME_CREDITED":
       return "Completed";
     case "PENDING":
+      return "Pending";
+    case "PROCESSING":
+      return "Processing";
     case "CONFIRMING":
     case "CONFIRMED":
     case "DETECTED":
-      return "Pending";
+      return "Confirming";
     case "FAILED":
     case "REJECTED":
     case "EXPIRED":

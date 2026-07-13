@@ -6,6 +6,14 @@ import { postBalancedJournal } from "./ledger";
 import { createNotification } from "./notification-service";
 import { recalculateVipRanksForUserAndUplines } from "./vip-rank-service";
 import { displayWalletName } from "@/lib/wallet-labels";
+import {
+  createNowPaymentsCustomer,
+  createNowPaymentsCustomerPayment,
+  createNowPaymentsPayout,
+  NowPaymentsApiError,
+  nowPaymentsCurrencyForNetwork,
+  validateNowPaymentsPayoutAddress,
+} from "./nowpayments-client";
 
 const WITHDRAWAL_FIXED_FEE = new Prisma.Decimal(2);
 const WITHDRAWAL_PERCENTAGE_RATE = new Prisma.Decimal("0.05");
@@ -69,70 +77,111 @@ export async function getUserDeposits(userId: string) {
   return { deposits: deposits.map(formatDeposit) };
 }
 
-export async function createNowPaymentsDeposit(input: { userId: string; amount: Prisma.Decimal; network: string; payCurrency: string }) {
-  if (input.amount.lte(0)) throw new Error("Deposit amount must be positive");
-  const apiKey = process.env.NOWPAYMENTS_API_KEY;
-  if (!apiKey) throw new Error("NOWPayments API key is not configured");
-  const payCurrency = input.payCurrency.trim().toLowerCase();
-  if (!payCurrency) throw new Error("Payment currency is required");
+export async function getOrCreateDepositAddresses(userId: string) {
+  const existing = await prisma.depositAddress.findMany({
+    where: { userId, active: true },
+    include: { asset: true, network: true },
+    orderBy: { network: { key: "asc" } },
+  });
+  const existingNetworks = new Set(existing.map(row => row.network.key.toUpperCase()));
+  const missing = ["BSC", "TRON"].filter(network => !existingNetworks.has(network));
+  if (!missing.length) return { addresses: existing.map(formatDepositAddress) };
 
-  const deposit = await prisma.$transaction(async (tx) => {
-    const asset = await ensureUserWalletAccounts(tx, input.userId);
-    const network = await ensureNetwork(tx, input.network);
-    return tx.deposit.create({
-      data: {
-        userId: input.userId,
-        assetId: asset.id,
-        networkId: network.id,
-        provider: "NOWPAYMENTS",
-        payCurrency,
-        paymentStatus: "created",
-        amount: input.amount,
-        status: "PENDING",
-      },
-      include: { asset: true, network: true },
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { uid: true } });
+  let customer = await prisma.paymentProviderCustomer.findUnique({ where: { userId } });
+  if (!customer) {
+    const name = `voltix-${user.uid}`.slice(0, 30);
+    const remote = await createNowPaymentsCustomer(name);
+    const providerCustomerId = valueAsString(remote.id ?? remote.sub_partner_id ?? remote.user_id);
+    if (!providerCustomerId) throw new Error("NOWPayments customer response did not include an ID");
+    customer = await prisma.paymentProviderCustomer.create({
+      data: { userId, providerCustomerId, name, rawJson: remote as Prisma.InputJsonValue },
     });
-  });
-
-  const callbackUrl = nowPaymentsCallbackUrl();
-  const response = await fetch(`${nowPaymentsApiBase()}/v1/payment`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-    },
-    body: JSON.stringify({
-      price_amount: Number(input.amount.toString()),
-      price_currency: "usd",
-      pay_currency: payCurrency,
-      order_id: deposit.id,
-      order_description: `VOLTIX Spot wallet deposit ${deposit.id}`,
-      ipn_callback_url: callbackUrl,
-    }),
-  });
-
-  const data = await response.json().catch(() => ({})) as NowPaymentsPayload;
-  if (!response.ok) {
-    await prisma.deposit.update({ where: { id: deposit.id }, data: { status: "FAILED", paymentStatus: "create_failed", rawWebhookJson: data as Prisma.InputJsonValue } }).catch(() => null);
-    throw new Error(extractNowPaymentsError(data) ?? "NOWPayments deposit creation failed");
   }
 
-  const updated = await prisma.deposit.update({
-    where: { id: deposit.id },
-    data: {
-      providerPaymentId: valueAsString(data.payment_id),
-      providerInvoiceId: valueAsString(data.invoice_id ?? data.purchase_id),
-      providerPaymentUrl: valueAsString(data.payment_url ?? data.invoice_url),
-      payCurrency: valueAsString(data.pay_currency) ?? payCurrency,
-      payAddress: valueAsString(data.pay_address),
-      paymentStatus: valueAsString(data.payment_status) ?? "waiting",
-      actuallyPaid: decimalOrUndefined(data.actually_paid),
-      outcomeAmount: decimalOrUndefined(data.outcome_amount),
-      rawWebhookJson: data as Prisma.InputJsonValue,
-    },
+  for (const networkKey of missing) {
+    const currency = nowPaymentsCurrencyForNetwork(networkKey);
+    const remote = await createNowPaymentsCustomerPayment({
+      customerId: customer.providerCustomerId,
+      currency,
+      amount: Number(process.env.MIN_DEPOSIT_AMOUNT_USDT || 10),
+    });
+    const providerPaymentId = valueAsString(remote.payment_id ?? remote.id);
+    const address = valueAsString(remote.pay_address ?? remote.address);
+    if (!providerPaymentId || !address) throw new Error(`NOWPayments did not return a ${networkKey} deposit address`);
+
+    await prisma.$transaction(async tx => {
+      const asset = await ensureUserWalletAccounts(tx, userId);
+      const network = await ensureNetwork(tx, networkKey);
+      const depositAddress = await tx.depositAddress.create({
+        data: {
+          userId,
+          assetId: asset.id,
+          networkId: network.id,
+          providerCustomerId: customer!.providerCustomerId,
+          providerPaymentId,
+          payCurrency: currency,
+          address,
+          rawJson: remote as Prisma.InputJsonValue,
+        },
+      });
+      await tx.deposit.create({
+        data: {
+          userId,
+          assetId: asset.id,
+          networkId: network.id,
+          depositAddressId: depositAddress.id,
+          providerPaymentId,
+          payCurrency: currency,
+          payAddress: address,
+          paymentStatus: valueAsString(remote.payment_status) ?? "waiting",
+          amount: decimalOrUndefined(remote.pay_amount ?? remote.amount) ?? new Prisma.Decimal(process.env.MIN_DEPOSIT_AMOUNT_USDT || 10),
+          status: "PENDING",
+          rawWebhookJson: remote as Prisma.InputJsonValue,
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  const addresses = await prisma.depositAddress.findMany({
+    where: { userId, active: true },
     include: { asset: true, network: true },
+    orderBy: { network: { key: "asc" } },
   });
-  return formatDeposit(updated);
+  return { addresses: addresses.map(formatDepositAddress) };
+}
+
+export async function createNowPaymentsDeposit(input: { userId: string; amount: Prisma.Decimal; network: string; payCurrency: string }) {
+  if (input.amount.lte(0)) throw new Error("Deposit amount must be positive");
+  const expectedCurrency = nowPaymentsCurrencyForNetwork(input.network);
+  if (input.payCurrency.trim().toLowerCase() !== expectedCurrency) throw new Error("Payment currency does not match the selected network");
+  const { addresses } = await getOrCreateDepositAddresses(input.userId);
+  const address = addresses.find(row => row.network === input.network.trim().toUpperCase());
+  if (!address) throw new Error("Permanent deposit address is unavailable");
+  return {
+    id: address.id,
+    amount: Number(input.amount.toString()),
+    asset: address.asset,
+    network: address.network,
+    networkName: address.networkName,
+    provider: "NOWPAYMENTS",
+    providerPaymentId: address.providerPaymentId,
+    providerInvoiceId: null,
+    providerPaymentUrl: null,
+    payCurrency: address.payCurrency,
+    payAddress: address.address,
+    paymentStatus: "waiting",
+    actuallyPaid: null,
+    outcomeAmount: null,
+    txHash: null,
+    status: "PENDING",
+    displayStatus: "Pending",
+    confirmations: 0,
+    requiredConfirmations: address.requiredConfirmations,
+    creditedAt: null,
+    webhookReceivedAt: null,
+    createdAt: address.createdAt,
+  };
 }
 
 export async function getUserDepositStatus(input: { userId: string; depositId: string }) {
@@ -146,30 +195,74 @@ export async function getUserDepositStatus(input: { userId: string; depositId: s
 export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
   const paymentId = valueAsString(payload.payment_id);
   const orderId = valueAsString(payload.order_id);
+  const parentPaymentId = valueAsString(payload.parent_payment_id);
   const paymentStatus = valueAsString(payload.payment_status) ?? "unknown";
   const providerInvoiceId = valueAsString(payload.invoice_id ?? payload.purchase_id);
+  const payCurrency = valueAsString(payload.pay_currency)?.toLowerCase();
+  const txHash = valueAsString(payload.payin_hash ?? payload.outcome_hash);
+  const paidAmount = decimalOrUndefined(payload.actually_paid ?? payload.amount_received ?? payload.pay_amount);
+  const payloadConfirmations = Number(payload.confirmations ?? 0);
   const now = new Date();
 
   return prisma.$transaction(async (tx) => {
-    const deposit = paymentId
+    let target = paymentId
       ? await tx.deposit.findUnique({ where: { providerPaymentId: paymentId }, include: { asset: true, network: true } })
       : null;
-    const target = deposit ?? (orderId ? await tx.deposit.findUnique({ where: { id: orderId }, include: { asset: true, network: true } }) : null);
+    target ??= orderId ? await tx.deposit.findUnique({ where: { id: orderId }, include: { asset: true, network: true } }) : null;
+    if (!target && parentPaymentId && paymentId) {
+      const address = await tx.depositAddress.findUnique({ where: { providerPaymentId: parentPaymentId }, include: { asset: true, network: true } });
+      if (address) {
+        if (payCurrency && payCurrency !== address.payCurrency.toLowerCase()) throw new Error("Deposit currency does not match the permanent address");
+        target = await tx.deposit.create({
+          data: {
+            userId: address.userId,
+            assetId: address.assetId,
+            networkId: address.networkId,
+            depositAddressId: address.id,
+            providerPaymentId: paymentId,
+            parentPaymentId,
+            payCurrency: payCurrency ?? address.payCurrency,
+            payAddress: valueAsString(payload.pay_address) ?? address.address,
+            paymentStatus,
+            actuallyPaid: paidAmount,
+            outcomeAmount: decimalOrUndefined(payload.outcome_amount),
+            txHash,
+            amount: paidAmount ?? new Prisma.Decimal(0),
+            status: mapNowPaymentsStatus(paymentStatus),
+            rawWebhookJson: payload as Prisma.InputJsonValue,
+            webhookReceivedAt: now,
+          },
+          include: { asset: true, network: true },
+        });
+      }
+    }
     if (!target) throw new Error("NOWPayments deposit was not found");
+    if (payCurrency && target.payCurrency && payCurrency !== target.payCurrency.toLowerCase()) throw new Error("Deposit currency does not match the selected network");
+    if (txHash) {
+      const duplicateHash = await tx.deposit.findFirst({ where: { networkId: target.networkId, txHash, eventIndex: target.eventIndex, id: { not: target.id } }, select: { id: true } });
+      if (duplicateHash) throw new Error("Deposit transaction hash has already been processed");
+    }
 
     const status = mapNowPaymentsStatus(paymentStatus);
+    const confirmations = Number.isFinite(payloadConfirmations) && payloadConfirmations > 0
+      ? Math.floor(payloadConfirmations)
+      : paymentStatus.toLowerCase() === "finished" ? target.network.requiredConfirmations : target.confirmations;
+    const creditAmount = paidAmount ?? target.actuallyPaid;
     const updated = await tx.deposit.update({
       where: { id: target.id },
       data: {
         providerPaymentId: paymentId ?? target.providerPaymentId,
         providerInvoiceId: providerInvoiceId ?? target.providerInvoiceId,
         providerPaymentUrl: valueAsString(payload.payment_url ?? payload.invoice_url) ?? target.providerPaymentUrl,
-        payCurrency: valueAsString(payload.pay_currency) ?? target.payCurrency,
+        parentPaymentId: parentPaymentId ?? target.parentPaymentId,
+        payCurrency: payCurrency ?? target.payCurrency,
         payAddress: valueAsString(payload.pay_address) ?? target.payAddress,
         paymentStatus,
-        actuallyPaid: decimalOrUndefined(payload.actually_paid),
+        actuallyPaid: paidAmount,
         outcomeAmount: decimalOrUndefined(payload.outcome_amount),
-        txHash: valueAsString(payload.payin_hash ?? payload.outcome_hash) ?? target.txHash,
+        txHash: txHash ?? target.txHash,
+        amount: creditAmount ?? target.amount,
+        confirmations,
         status,
         rawWebhookJson: payload as Prisma.InputJsonValue,
         webhookReceivedAt: now,
@@ -178,6 +271,9 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
     });
 
     if (!isCreditableNowPaymentsStatus(paymentStatus) || updated.creditedAt) return formatDeposit(updated);
+    if (!updated.txHash) throw new Error("Confirmed deposit is missing a blockchain transaction hash");
+    if (updated.confirmations < updated.network.requiredConfirmations) return formatDeposit(updated);
+    if (!creditAmount || creditAmount.lte(0)) throw new Error("Confirmed deposit is missing a verified paid amount");
 
     const [spotAccount, treasuryAccount] = await Promise.all([
       tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: updated.userId, assetId: updated.assetId, type: "SPOT" } } }),
@@ -189,11 +285,11 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
       idempotencyKey: `nowpayments-deposit:${updated.id}`,
       memo: "NOWPayments confirmed Spot wallet deposit",
       lines: [
-        { accountId: treasuryAccount.id, direction: "DEBIT", amount: updated.amount },
-        { accountId: spotAccount.id, direction: "CREDIT", amount: updated.amount },
+        { accountId: treasuryAccount.id, direction: "DEBIT", amount: creditAmount },
+        { accountId: spotAccount.id, direction: "CREDIT", amount: creditAmount },
       ],
     });
-    await tx.user.update({ where: { id: updated.userId }, data: { spotBalance: { increment: updated.amount } } });
+    await tx.user.update({ where: { id: updated.userId }, data: { spotBalance: { increment: creditAmount } } });
     const credited = await tx.deposit.update({
       where: { id: updated.id },
       data: { status: "CREDITED", creditedAt: now },
@@ -204,7 +300,7 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
       userId: updated.userId,
       type: "DEPOSIT_STATUS",
       title: "Deposit credited",
-      message: `${updated.amount.toString()} ${updated.asset.symbol} has been credited to your Spot wallet.`,
+      message: `${creditAmount.toString()} ${updated.asset.symbol} has been credited to your Spot wallet.`,
       metadata: { depositId: updated.id, provider: "NOWPAYMENTS", paymentId, status: "CREDITED", ledgerJournalId: journal.id },
     });
     await tx.auditLog.create({
@@ -218,7 +314,7 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
         userId: updated.userId,
         entityType: "Deposit",
         entityId: updated.id,
-        metadata: { userId: updated.userId, amount: updated.amount.toString(), asset: updated.asset.symbol, paymentId, paymentStatus, ledgerJournalId: journal.id },
+        metadata: { userId: updated.userId, amount: creditAmount.toString(), asset: updated.asset.symbol, paymentId, paymentStatus, txHash: updated.txHash, ledgerJournalId: journal.id },
       },
     });
     return formatDeposit(credited);
@@ -239,15 +335,24 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
   if (!input.idempotencyKey.trim()) throw new Error("Idempotency key is required");
   if (!input.address.trim()) throw new Error("External wallet address is required");
   if (input.amount.lte(0)) throw new Error("Withdrawal amount must be positive");
+  if (input.amount.lt(new Prisma.Decimal(process.env.MIN_WITHDRAWAL_AMOUNT_USDT || 10))) throw new Error(`Minimum withdrawal is ${process.env.MIN_WITHDRAWAL_AMOUNT_USDT || 10} USDT`);
   if (input.walletType !== "SPOT" && input.walletType !== "AI") throw new Error("Only Spot and AI withdrawals are supported");
+  const existing = await prisma.withdrawal.findFirst({
+    where: { idempotencyKey: input.idempotencyKey, userId: input.userId },
+    include: { asset: true, network: true },
+  });
+  if (existing) return formatWithdrawal(existing);
+  const currency = nowPaymentsCurrencyForNetwork(input.network);
+  validateLocalAddress(input.address, input.network);
+  await validateNowPaymentsPayoutAddress(input.address.trim(), currency);
 
-  return prisma.$transaction(async (tx) => {
+  const reserved = await prisma.$transaction(async (tx) => {
     await requireVerifiedAccount(tx, input.userId);
-    const existing = await tx.withdrawal.findUnique({
+    const duplicate = await tx.withdrawal.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
       include: { asset: true, network: true },
     });
-    if (existing) return formatWithdrawal(existing);
+    if (duplicate) return { withdrawal: duplicate, created: false };
 
     const asset = await ensureUserWalletAccounts(tx, input.userId);
     const network = await ensureNetwork(tx, input.network);
@@ -292,12 +397,63 @@ export async function createWithdrawalRequest(input: { userId: string; walletTyp
         netWithdrawalAmount: feeBreakdown.receivableAmount,
         earlyWithdrawalConfirmedAt: input.walletType === "AI" && !feeBreakdown.eligible ? new Date() : null,
         idempotencyKey: input.idempotencyKey,
-        status: "PENDING",
+        status: input.walletType === "SPOT" ? "PROCESSING" : "PENDING",
+        processingAt: input.walletType === "SPOT" ? new Date() : null,
       },
       include: { asset: true, network: true },
     });
-    return formatWithdrawal(withdrawal);
+    if (input.walletType === "AI") {
+      const journal = await postMemoJournal(tx, {
+        referenceType: "AI_WITHDRAWAL_REQUEST",
+        referenceId: withdrawal.id,
+        idempotencyKey: `ai-withdrawal-request:${withdrawal.id}`,
+        memo: "AI withdrawal request submitted",
+      });
+      const updated = await tx.withdrawal.update({ where: { id: withdrawal.id }, data: { requestJournalId: journal.id }, include: { asset: true, network: true } });
+      await createNotification(tx, {
+        userId: input.userId,
+        type: "WITHDRAWAL_STATUS",
+        title: "AI withdrawal submitted",
+        message: `${input.amount.toString()} ${asset.symbol} AI withdrawal is pending admin review.`,
+        metadata: { withdrawalId: withdrawal.id, status: "PENDING", walletType: "AI", requestJournalId: journal.id },
+      });
+      return { withdrawal: updated, created: true };
+    }
+
+    const debit = await tx.user.updateMany({
+      where: { id: input.userId, spotBalance: { gte: input.amount } },
+      data: { spotBalance: { decrement: input.amount } },
+    });
+    if (debit.count !== 1) throw new Error("Insufficient Spot wallet balance");
+    const [spotAccount, externalPayable, feeAccount] = await Promise.all([
+      tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: input.userId, assetId: asset.id, type: "SPOT" } } }),
+      tx.walletAccount.findFirstOrThrow({ where: { userId: null, assetId: asset.id, type: "SPOT" } }),
+      tx.walletAccount.findFirstOrThrow({ where: { userId: null, assetId: asset.id, type: "FEE" } }),
+    ]);
+    const journal = await postBalancedJournal(tx, {
+      referenceType: "SPOT_WITHDRAWAL",
+      referenceId: withdrawal.id,
+      idempotencyKey: `spot-withdrawal:${withdrawal.id}`,
+      memo: "Spot withdrawal processing",
+      lines: [
+        { accountId: spotAccount.id, direction: "DEBIT", amount: input.amount },
+        { accountId: externalPayable.id, direction: "CREDIT", amount: feeBreakdown.receivableAmount },
+        { accountId: feeAccount.id, direction: "CREDIT", amount: feeBreakdown.totalFees },
+      ],
+    });
+    const updated = await tx.withdrawal.update({ where: { id: withdrawal.id }, data: { ledgerJournalId: journal.id }, include: { asset: true, network: true } });
+    return { withdrawal: updated, created: true };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+  if (!reserved.created || reserved.withdrawal.walletType === "AI") return formatWithdrawal(reserved.withdrawal);
+  try {
+    return await submitWithdrawalPayout(reserved.withdrawal.id);
+  } catch (error) {
+    if (error instanceof NowPaymentsApiError && error.definitiveRejection) return failWithdrawalAndRefund(reserved.withdrawal.id, error.message);
+    await prisma.withdrawal.update({ where: { id: reserved.withdrawal.id }, data: { failureReason: error instanceof Error ? error.message : "Payout submission response is unknown" } }).catch(() => null);
+    const pending = await prisma.withdrawal.findUniqueOrThrow({ where: { id: reserved.withdrawal.id }, include: { asset: true, network: true } });
+    return formatWithdrawal(pending);
+  }
 }
 
 export function calculateWithdrawalFee(walletType: WithdrawalWallet, amount: Prisma.Decimal) {
@@ -457,17 +613,15 @@ export async function rejectDepositRequest(input: { depositId: string; adminUser
 }
 
 export async function approveWithdrawalRequest(input: { withdrawalId: string; adminUserId: string }) {
-  return prisma.$transaction(async (tx) => {
+  const approved = await prisma.$transaction(async (tx) => {
     const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: input.withdrawalId }, include: { asset: true, network: true } });
     if (withdrawal.status !== "PENDING") throw new Error("Withdrawal has already been actioned");
-    if (withdrawal.walletType !== "SPOT" && withdrawal.walletType !== "AI") throw new Error("Only Spot and AI withdrawals are supported");
+    if (withdrawal.walletType !== "AI") throw new Error("Only AI Wallet withdrawals require admin approval");
     const feeAmount = withdrawal.feeAmount;
     const receivableAmount = withdrawal.receivableAmount;
     if (receivableAmount.lte(0)) throw new Error("Withdrawal amount must exceed the total fee");
 
-    const debit = withdrawal.walletType === "AI"
-      ? await tx.user.updateMany({ where: { id: withdrawal.userId, aiWalletBalance: { gte: withdrawal.amount } }, data: { aiWalletBalance: { decrement: withdrawal.amount } } })
-      : await tx.user.updateMany({ where: { id: withdrawal.userId, spotBalance: { gte: withdrawal.amount } }, data: { spotBalance: { decrement: withdrawal.amount } } });
+    const debit = await tx.user.updateMany({ where: { id: withdrawal.userId, aiWalletBalance: { gte: withdrawal.amount } }, data: { aiWalletBalance: { decrement: withdrawal.amount } } });
     if (debit.count !== 1) throw new Error(`Insufficient ${displayWalletName(withdrawal.walletType)} balance`);
 
     const [sourceAccount, externalPayable, feeAccount] = await Promise.all([
@@ -489,7 +643,7 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
     });
     const updated = await tx.withdrawal.update({
       where: { id: withdrawal.id },
-      data: { status: "APPROVED", feeAmount, receivableAmount, totalCharges: feeAmount, netWithdrawalAmount: receivableAmount, adminActionBy: input.adminUserId, adminActionAt: new Date(), ledgerJournalId: journal.id },
+      data: { status: "PROCESSING", feeAmount, receivableAmount, totalCharges: feeAmount, netWithdrawalAmount: receivableAmount, adminActionBy: input.adminUserId, adminActionAt: new Date(), processingAt: new Date(), ledgerJournalId: journal.id, decisionJournalId: journal.id },
       include: { asset: true, network: true },
     });
     await createNotification(tx, {
@@ -497,7 +651,7 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
       type: "WITHDRAWAL_STATUS",
       title: "Withdrawal approved",
       message: `${receivableAmount.toString()} ${withdrawal.asset.symbol} withdrawal has been approved.`,
-      metadata: { withdrawalId: withdrawal.id, status: "APPROVED", walletType: withdrawal.walletType, amount: withdrawal.amount.toString(), receivableAmount: receivableAmount.toString(), asset: withdrawal.asset.symbol },
+      metadata: { withdrawalId: withdrawal.id, status: "APPROVED", walletType: withdrawal.walletType, amount: withdrawal.amount.toString(), receivableAmount: receivableAmount.toString(), asset: withdrawal.asset.symbol, ledgerJournalId: journal.id },
     });
     await tx.auditLog.create({
       data: {
@@ -509,14 +663,23 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
         metadata: { userId: withdrawal.userId, walletType: withdrawal.walletType, amount: withdrawal.amount.toString(), feeAmount: feeAmount.toString(), receivableAmount: receivableAmount.toString(), ledgerJournalId: journal.id },
       },
     });
-    return formatWithdrawal(updated);
+    return updated;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  try {
+    return await submitWithdrawalPayout(approved.id);
+  } catch (error) {
+    if (error instanceof NowPaymentsApiError && error.definitiveRejection) return failWithdrawalAndRefund(approved.id, error.message);
+    await prisma.withdrawal.update({ where: { id: approved.id }, data: { failureReason: error instanceof Error ? error.message : "Payout submission response is unknown" } }).catch(() => null);
+    const pending = await prisma.withdrawal.findUniqueOrThrow({ where: { id: approved.id }, include: { asset: true, network: true } });
+    return formatWithdrawal(pending);
+  }
 }
 
 export async function rejectWithdrawalRequest(input: { withdrawalId: string; adminUserId: string; reason?: string }) {
   return prisma.$transaction(async (tx) => {
     const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: input.withdrawalId }, include: { asset: true, network: true } });
     if (withdrawal.status !== "PENDING") throw new Error("Withdrawal has already been actioned");
+    if (withdrawal.walletType !== "AI") throw new Error("Only AI Wallet withdrawals require admin rejection");
     const journal = await postMemoJournal(tx, {
       referenceType: "WITHDRAWAL_REJECTION",
       referenceId: withdrawal.id,
@@ -525,13 +688,13 @@ export async function rejectWithdrawalRequest(input: { withdrawalId: string; adm
     });
     const updated = await tx.withdrawal.update({
       where: { id: withdrawal.id },
-      data: { status: "REJECTED", adminActionBy: input.adminUserId, adminActionAt: new Date(), rejectionReason: input.reason?.trim() || null },
+      data: { status: "REJECTED", adminActionBy: input.adminUserId, adminActionAt: new Date(), rejectionReason: input.reason?.trim() || null, decisionJournalId: journal.id },
       include: { asset: true, network: true },
     });
     await createNotification(tx, {
       userId: withdrawal.userId,
       type: "WITHDRAWAL_STATUS",
-      title: "Withdrawal rejected",
+      title: "AI withdrawal rejected",
       message: `${withdrawal.amount.toString()} ${withdrawal.asset.symbol} withdrawal request was rejected.`,
       metadata: { withdrawalId: withdrawal.id, status: "REJECTED", walletType: withdrawal.walletType, amount: withdrawal.amount.toString(), asset: withdrawal.asset.symbol, reason: input.reason ?? null },
     });
@@ -549,8 +712,119 @@ export async function rejectWithdrawalRequest(input: { withdrawalId: string; adm
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
+export async function processNowPaymentsPayoutIpn(payload: NowPaymentsPayload) {
+  const payoutId = valueAsString(payload.id ?? payload.payout_id);
+  const withdrawalId = valueAsString(payload.unique_external_id ?? payload.order_id);
+  const providerStatus = (valueAsString(payload.status) ?? "unknown").toLowerCase();
+  const txHash = valueAsString(payload.hash ?? payload.tx_hash);
+  const withdrawal = payoutId
+    ? await prisma.withdrawal.findUnique({ where: { providerPayoutId: payoutId } })
+    : withdrawalId ? await prisma.withdrawal.findUnique({ where: { id: withdrawalId } }) : null;
+  if (!withdrawal) throw new Error("NOWPayments withdrawal was not found");
+
+  await prisma.withdrawal.update({
+    where: { id: withdrawal.id },
+    data: { providerPayoutId: payoutId ?? withdrawal.providerPayoutId, providerStatus, txHash: txHash ?? withdrawal.txHash, providerResponse: payload as Prisma.InputJsonValue },
+  });
+  if (providerStatus === "finished") return completeWithdrawal(withdrawal.id, txHash);
+  if (providerStatus === "failed" || providerStatus === "rejected") {
+    return failWithdrawalAndRefund(withdrawal.id, valueAsString(payload.error) ?? `NOWPayments payout ${providerStatus}`);
+  }
+  const current = await prisma.withdrawal.findUniqueOrThrow({ where: { id: withdrawal.id }, include: { asset: true, network: true } });
+  return formatWithdrawal(current);
+}
+
+async function submitWithdrawalPayout(withdrawalId: string) {
+  const withdrawal = await prisma.withdrawal.findUniqueOrThrow({ where: { id: withdrawalId }, include: { asset: true, network: true } });
+  if (withdrawal.providerPayoutId) return formatWithdrawal(withdrawal);
+  const payout = await createNowPaymentsPayout({
+    withdrawalId,
+    address: withdrawal.address,
+    currency: nowPaymentsCurrencyForNetwork(withdrawal.network.key),
+    amount: Number(withdrawal.receivableAmount.toString()),
+  });
+  const updated = await prisma.withdrawal.update({
+    where: { id: withdrawalId },
+    data: {
+      providerPayoutId: payout.payoutId,
+      providerBatchId: payout.batchId,
+      providerStatus: payout.status,
+      providerResponse: payout.raw as Prisma.InputJsonValue,
+      txHash: payout.txHash,
+      failureReason: null,
+    },
+    include: { asset: true, network: true },
+  });
+  if (payout.status.toLowerCase() === "finished") return completeWithdrawal(withdrawalId, payout.txHash);
+  return formatWithdrawal(updated);
+}
+
+async function completeWithdrawal(withdrawalId: string, txHash?: string | null) {
+  return prisma.$transaction(async tx => {
+    const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: withdrawalId }, include: { asset: true, network: true } });
+    if (withdrawal.status === "COMPLETED") return formatWithdrawal(withdrawal);
+    if (withdrawal.status !== "PROCESSING") throw new Error("Withdrawal is not processing");
+    const updated = await tx.withdrawal.update({
+      where: { id: withdrawal.id },
+      data: { status: "COMPLETED", providerStatus: "finished", txHash: txHash ?? withdrawal.txHash, completedAt: new Date(), failureReason: null },
+      include: { asset: true, network: true },
+    });
+    await createNotification(tx, {
+      userId: withdrawal.userId,
+      type: "WITHDRAWAL_STATUS",
+      title: "Withdrawal completed",
+      message: `${withdrawal.receivableAmount.toString()} ${withdrawal.asset.symbol} was sent successfully.`,
+      metadata: { withdrawalId: withdrawal.id, status: "COMPLETED", walletType: withdrawal.walletType, txHash: updated.txHash, network: withdrawal.network.key.toUpperCase() },
+    });
+    return formatWithdrawal(updated);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+async function failWithdrawalAndRefund(withdrawalId: string, reason: string) {
+  return prisma.$transaction(async tx => {
+    const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: withdrawalId }, include: { asset: true, network: true } });
+    if (withdrawal.status === "FAILED") return formatWithdrawal(withdrawal);
+    if (withdrawal.status !== "PROCESSING") throw new Error("Withdrawal is not processing");
+    const [sourceAccount, externalPayable, feeAccount] = await Promise.all([
+      tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: withdrawal.userId, assetId: withdrawal.assetId, type: withdrawal.walletType } } }),
+      tx.walletAccount.findFirstOrThrow({ where: { userId: null, assetId: withdrawal.assetId, type: "SPOT" } }),
+      tx.walletAccount.findFirstOrThrow({ where: { userId: null, assetId: withdrawal.assetId, type: "FEE" } }),
+    ]);
+    const lines = [
+      { accountId: externalPayable.id, direction: "DEBIT" as const, amount: withdrawal.receivableAmount },
+      { accountId: sourceAccount.id, direction: "CREDIT" as const, amount: withdrawal.amount },
+    ];
+    if (withdrawal.feeAmount.gt(0)) lines.splice(1, 0, { accountId: feeAccount.id, direction: "DEBIT", amount: withdrawal.feeAmount });
+    const refund = await postBalancedJournal(tx, {
+      referenceType: "WITHDRAWAL_REFUND",
+      referenceId: withdrawal.id,
+      idempotencyKey: `withdrawal-refund:${withdrawal.id}`,
+      memo: `${displayWalletName(withdrawal.walletType)} withdrawal failed and was refunded`,
+      lines,
+    });
+    await tx.user.update({
+      where: { id: withdrawal.userId },
+      data: withdrawal.walletType === "AI" ? { aiWalletBalance: { increment: withdrawal.amount } } : { spotBalance: { increment: withdrawal.amount } },
+    });
+    const updated = await tx.withdrawal.update({
+      where: { id: withdrawal.id },
+      data: { status: "FAILED", providerStatus: "failed", failureReason: reason, completedAt: new Date(), decisionJournalId: withdrawal.decisionJournalId ?? refund.id },
+      include: { asset: true, network: true },
+    });
+    await createNotification(tx, {
+      userId: withdrawal.userId,
+      type: "WITHDRAWAL_STATUS",
+      title: "Withdrawal failed",
+      message: `Your ${withdrawal.amount.toString()} ${withdrawal.asset.symbol} withdrawal failed and the balance was restored.`,
+      metadata: { withdrawalId: withdrawal.id, status: "FAILED", walletType: withdrawal.walletType, reason, refundJournalId: refund.id },
+    });
+    return formatWithdrawal(updated);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
 async function ensureNetwork(client: Prisma.TransactionClient, rawNetwork: string) {
   const key = (rawNetwork || "BSC").trim().toLowerCase();
+  if (key !== "bsc" && key !== "tron") throw new Error("Only USDT BEP20 and USDT TRC20 are supported");
   return client.chainNetwork.upsert({
     where: { key },
     update: {},
@@ -562,7 +836,28 @@ async function ensureNetwork(client: Prisma.TransactionClient, rawNetwork: strin
   });
 }
 
-function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: string | null; status: string; createdAt: Date; creditedAt?: Date | null; provider?: string; providerPaymentId?: string | null; providerInvoiceId?: string | null; providerPaymentUrl?: string | null; payCurrency?: string | null; payAddress?: string | null; paymentStatus?: string | null; actuallyPaid?: Prisma.Decimal | null; outcomeAmount?: Prisma.Decimal | null; webhookReceivedAt?: Date | null; asset: { symbol: string }; network: { key: string; name: string } }) {
+function validateLocalAddress(address: string, network: string) {
+  const normalizedNetwork = network.trim().toUpperCase();
+  const value = address.trim();
+  if (normalizedNetwork === "BSC" && !/^0x[a-fA-F0-9]{40}$/.test(value)) throw new Error("Invalid BEP20 wallet address");
+  if (normalizedNetwork === "TRON" && !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(value)) throw new Error("Invalid TRC20 wallet address");
+}
+
+function formatDepositAddress(address: { id: string; address: string; payCurrency: string; providerPaymentId: string; createdAt: Date; asset: { symbol: string }; network: { key: string; name: string; requiredConfirmations: number } }) {
+  return {
+    id: address.id,
+    asset: address.asset.symbol,
+    network: address.network.key.toUpperCase(),
+    networkName: address.network.name,
+    address: address.address,
+    payCurrency: address.payCurrency.toUpperCase(),
+    providerPaymentId: address.providerPaymentId,
+    requiredConfirmations: address.network.requiredConfirmations,
+    createdAt: address.createdAt.toISOString(),
+  };
+}
+
+function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: string | null; status: string; confirmations?: number; createdAt: Date; creditedAt?: Date | null; provider?: string; providerPaymentId?: string | null; providerInvoiceId?: string | null; providerPaymentUrl?: string | null; payCurrency?: string | null; payAddress?: string | null; paymentStatus?: string | null; actuallyPaid?: Prisma.Decimal | null; outcomeAmount?: Prisma.Decimal | null; webhookReceivedAt?: Date | null; asset: { symbol: string }; network: { key: string; name: string; requiredConfirmations?: number } }) {
   return {
     id: deposit.id,
     amount: Number(deposit.amount.toString()),
@@ -580,13 +875,16 @@ function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: st
     outcomeAmount: deposit.outcomeAmount ? Number(deposit.outcomeAmount.toString()) : null,
     txHash: deposit.txHash,
     status: deposit.status,
+    displayStatus: deposit.status === "CREDITED" || deposit.status === "APPROVED" ? "Completed" : deposit.status === "CONFIRMING" || deposit.status === "CONFIRMED" || deposit.status === "DETECTED" ? "Confirming" : deposit.status === "FAILED" || deposit.status === "REJECTED" || deposit.status === "EXPIRED" ? "Failed" : "Pending",
+    confirmations: deposit.confirmations ?? 0,
+    requiredConfirmations: deposit.network.requiredConfirmations ?? 0,
     creditedAt: deposit.creditedAt?.toISOString() ?? null,
     webhookReceivedAt: deposit.webhookReceivedAt?.toISOString() ?? null,
     createdAt: deposit.createdAt.toISOString(),
   };
 }
 
-function formatWithdrawal(withdrawal: { id: string; walletType: WalletType; amount: Prisma.Decimal; feeAmount: Prisma.Decimal; receivableAmount: Prisma.Decimal; address: string; txHash: string | null; status: string; rejectionReason: string | null; createdAt: Date; asset: { symbol: string }; network: { key: string; name: string }; eligibilityStatus?: string | null; capitalAmount?: Prisma.Decimal; earnedProfit?: Prisma.Decimal; requiredProfit?: Prisma.Decimal; completedPercentage?: Prisma.Decimal; earlyWithdrawal?: boolean; earlyWithdrawalCharge?: Prisma.Decimal; percentageFee?: Prisma.Decimal; fixedFee?: Prisma.Decimal; totalCharges?: Prisma.Decimal; netWithdrawalAmount?: Prisma.Decimal; earlyWithdrawalConfirmedAt?: Date | null }) {
+function formatWithdrawal(withdrawal: { id: string; walletType: WalletType; amount: Prisma.Decimal; feeAmount: Prisma.Decimal; receivableAmount: Prisma.Decimal; address: string; txHash: string | null; status: string; rejectionReason: string | null; createdAt: Date; asset: { symbol: string }; network: { key: string; name: string }; eligibilityStatus?: string | null; capitalAmount?: Prisma.Decimal; earnedProfit?: Prisma.Decimal; requiredProfit?: Prisma.Decimal; completedPercentage?: Prisma.Decimal; earlyWithdrawal?: boolean; earlyWithdrawalCharge?: Prisma.Decimal; percentageFee?: Prisma.Decimal; fixedFee?: Prisma.Decimal; totalCharges?: Prisma.Decimal; netWithdrawalAmount?: Prisma.Decimal; earlyWithdrawalConfirmedAt?: Date | null; providerPayoutId?: string | null; providerStatus?: string | null; failureReason?: string | null; processingAt?: Date | null; completedAt?: Date | null; adminActionAt?: Date | null }) {
   return {
     id: withdrawal.id,
     walletType: displayWalletName(withdrawal.walletType),
@@ -611,7 +909,13 @@ function formatWithdrawal(withdrawal: { id: string; walletType: WalletType; amou
     networkName: withdrawal.network.name,
     txHash: withdrawal.txHash,
     status: withdrawal.status,
+    providerPayoutId: withdrawal.providerPayoutId ?? null,
+    providerStatus: withdrawal.providerStatus ?? null,
     rejectionReason: withdrawal.rejectionReason,
+    failureReason: withdrawal.failureReason ?? null,
+    processingAt: withdrawal.processingAt?.toISOString() ?? null,
+    completedAt: withdrawal.completedAt?.toISOString() ?? null,
+    adminApprovedAt: withdrawal.adminActionAt?.toISOString() ?? null,
     createdAt: withdrawal.createdAt.toISOString(),
   };
 }
@@ -667,7 +971,7 @@ function decimalOrUndefined(value: unknown) {
 
 function mapNowPaymentsStatus(status: string) {
   const normalized = status.toLowerCase();
-  if (normalized === "finished") return DepositStatus.CREDITED;
+  if (normalized === "finished") return DepositStatus.CONFIRMED;
   if (normalized === "confirmed") return DepositStatus.CONFIRMED;
   if (normalized === "confirming" || normalized === "sending" || normalized === "partially_paid") return DepositStatus.CONFIRMING;
   if (normalized === "failed" || normalized === "refunded") return DepositStatus.FAILED;
@@ -677,5 +981,5 @@ function mapNowPaymentsStatus(status: string) {
 
 function isCreditableNowPaymentsStatus(status: string) {
   const normalized = status.toLowerCase();
-  return normalized === "finished" || normalized === "confirmed";
+  return normalized === "finished";
 }

@@ -209,8 +209,11 @@ export async function getAdminWithdrawals() {
     withdrawal.earlyWithdrawal ? "Early Withdrawal" : withdrawal.walletType === "AI" ? "Eligible Withdrawal" : "Spot Withdrawal",
     `${money(withdrawal.totalCharges)} (${money(withdrawal.earlyWithdrawalCharge)} early, ${money(withdrawal.percentageFee)} 5%, ${money(withdrawal.fixedFee)} fixed)`,
     money(withdrawal.netWithdrawalAmount.gt(0) ? withdrawal.netWithdrawalAmount : withdrawal.receivableAmount),
-    withdrawal.status,
+    withdrawal.walletType === "AI" ? withdrawal.status === "REJECTED" ? "REJECTED" : withdrawal.adminActionAt ? "APPROVED" : "PENDING" : withdrawal.status,
     withdrawal.rejectionReason ?? "",
+    formatDate(withdrawal.createdAt),
+    withdrawal.providerStatus ?? "",
+    withdrawal.txHash ?? "",
     withdrawal.id,
   ]);
   return {

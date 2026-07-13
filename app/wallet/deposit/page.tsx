@@ -38,7 +38,7 @@ export default function WalletDepositPage() {
 
   const changeNetwork=(next:string)=>{
     setNetwork(next);
-    setPayCurrency(next==="TRON"?"usdttrc20":next==="ETH"?"usdterc20":"usdtbsc");
+    setPayCurrency(next==="TRON"?"usdttrc20":"usdtbsc");
     setError("");
     setMessage("");
   };
@@ -90,11 +90,11 @@ export default function WalletDepositPage() {
             <span className="min-w-0 flex-1 break-all text-xs text-slate-300">{payAddress||"Payment address unavailable"}</span>
             <Copy size={16} className="shrink-0 text-[#18ff8a]"/>
           </button>
-          <div className="mt-4 rounded-2xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Deposit will credit to Spot Wallet only after NOWPayments marks the payment confirmed or finished.</div>
+          <div className="mt-4 rounded-2xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">This permanent address can be reused. Deposits credit to Spot Wallet after the required blockchain confirmations and final provider status.</div>
         </>:<>
           <label className="block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={event=>{setAmount(event.target.value);setError("");setMessage("");}} placeholder="0.00" className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"/></label>
-          <label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={event=>changeNetwork(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option><option value="ETH">Ethereum (ERC20)</option></select></label>
-          <label className="mt-4 block text-xs font-bold text-slate-400">Payment currency<select value={payCurrency} onChange={event=>{setPayCurrency(event.target.value);setError("");setMessage("");}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="usdtbsc">USDT BSC</option><option value="usdttrc20">USDT TRC20</option><option value="usdterc20">USDT ERC20</option><option value="btc">BTC</option><option value="eth">ETH</option></select></label>
+          <label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={event=>changeNetwork(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option></select></label>
+          <label className="mt-4 block text-xs font-bold text-slate-400">Payment currency<select value={payCurrency} onChange={event=>{setPayCurrency(event.target.value);setError("");setMessage("");}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="usdtbsc">USDT BSC</option><option value="usdttrc20">USDT TRC20</option></select></label>
           <div className="mt-4 rounded-2xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. Send only the selected coin/network via NOWPayments. Manual tx hashes are not accepted.</div>
         </>}
         {error&&<p className="mt-3 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs font-bold text-[#ff8aa0]">{error}</p>}

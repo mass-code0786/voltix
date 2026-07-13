@@ -14,7 +14,7 @@ const withdrawalSchema = z.object({
   walletType: z.enum(["SPOT", "AI"]),
   amount: z.coerce.number().positive(),
   address: z.string().trim().min(1),
-  network: z.string().trim().min(1).default("BSC"),
+  network: z.enum(["BSC", "TRON"]).default("BSC"),
   transactionPin: z.string().trim().optional(),
   mobileVerificationToken: z.string().trim().optional(),
   acceptEarlyWithdrawalCharge: z.boolean().optional(),
@@ -41,6 +41,8 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid withdrawal request" }, { status: 400 });
   }
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+  if (!idempotencyKey || idempotencyKey.length > 120) return NextResponse.json({ error: "A valid Idempotency-Key header is required" }, { status: 400 });
   try {
     const pinLimited = rateLimitByUser(user.id, "transaction-pin-withdrawal", 8, 15 * 60 * 1000);
     if (pinLimited) return pinLimited;
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
       address: parsed.data.address,
       network: parsed.data.network,
       acceptEarlyWithdrawalCharge: parsed.data.acceptEarlyWithdrawalCharge === true,
-      idempotencyKey: `${user.id}:${Date.now()}:${crypto.randomUUID()}`,
+      idempotencyKey: `${user.id}:${idempotencyKey}`,
     });
     await auditSuccess({ request, userId: user.id, role: "USER", action: "WITHDRAWAL_REQUESTED", module: "WITHDRAWAL", description: "User requested withdrawal", newValue: withdrawal }).catch(() => null);
     return NextResponse.json({ withdrawal }, { status: 201 });
