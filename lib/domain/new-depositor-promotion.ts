@@ -27,6 +27,9 @@ type PlacedPromotionTrade = {
   pair: string | null;
   principalAmount: Prisma.Decimal;
   returnPercent: Prisma.Decimal;
+  walletSnapshotAtTrade: Prisma.Decimal;
+  selectedRate: Prisma.Decimal;
+  calculatedProfit: Prisma.Decimal;
   promotionDay: number | null;
 };
 
@@ -298,7 +301,9 @@ async function placePromotionBatch(input: {
     ), candidates AS MATERIALIZED (
       SELECT
         u.id AS "userId",
+        u."bitexBalance"::decimal(36,18) AS "walletSnapshotAtTrade",
         (u."bitexBalance" * 0.01)::decimal(36,18) AS amount,
+        (0.32 + floor(random() * 5) / 100)::decimal(10,6) AS "selectedRate",
         (
           (${input.occurrenceDate})::date -
           (
@@ -334,19 +339,23 @@ async function placePromotionBatch(input: {
     ), inserted AS (
       INSERT INTO "CopyTrade" (
         id, "userId", "slotId", source, pair, "promotionDay", "idempotencyKey",
-        "principalAmount", "returnPercent", status, "startedAt", "windowStartAt",
+        "principalAmount", "returnPercent", "walletSnapshotAtTrade", "selectedRate", "calculatedProfit",
+        status, "startedAt", "windowStartAt",
         "windowCloseAt", "completesAt", "creditDueAt", "createdAt", "updatedAt"
       )
       SELECT
         gen_random_uuid()::text, c."userId", ${input.slotId}, ${NEW_DEPOSITOR_EXTRA_SOURCE}, ${input.pair}, c."promotionDay",
         'new-depositor-extra:' || c."userId" || ':' || c."promotionDay"::text,
         c.amount,
-        (0.32 + floor(random() * 5) / 100)::decimal(10,6),
+        c."selectedRate",
+        c."walletSnapshotAtTrade",
+        c."selectedRate",
+        (c."walletSnapshotAtTrade" * c."selectedRate" / 100)::decimal(36,18),
         'PENDING'::"TradeStatus", CURRENT_TIMESTAMP, ${input.windowStartAt},
         ${input.windowCloseAt}, ${input.windowCloseAt}, ${input.settlementDueAt}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM candidates c
       ON CONFLICT DO NOTHING
-      RETURNING id, "userId", pair, "principalAmount", "returnPercent", "promotionDay"
+      RETURNING id, "userId", pair, "principalAmount", "returnPercent", "walletSnapshotAtTrade", "selectedRate", "calculatedProfit", "promotionDay"
     ), debited AS (
       UPDATE "User" u
       SET "bitexBalance" = u."bitexBalance" - i."principalAmount", "updatedAt" = CURRENT_TIMESTAMP
@@ -371,9 +380,11 @@ async function createPlacementNotifications(trades: PlacedPromotionTrade[], sett
         tradeId: trade.id,
         pair: displayPair(trade.pair),
         tradeAmount: trade.principalAmount.toString(),
+        walletSnapshotAtTrade: trade.walletSnapshotAtTrade.toString(),
         promotionDay: trade.promotionDay,
         totalPromotionDays: NEW_DEPOSITOR_PROMOTION_DAYS,
-        profitPercent: trade.returnPercent.toString(),
+        profitPercent: trade.selectedRate.toString(),
+        calculatedProfit: trade.calculatedProfit.toString(),
         settlementDueAt: settlementDueAt.toISOString(),
       },
     })),
@@ -394,9 +405,11 @@ async function syncMissingPlacementNotifications(windowStartAt: Date) {
         'tradeId', t.id,
         'pair', CASE WHEN t.pair IS NULL THEN NULL ELSE regexp_replace(t.pair, 'USDT$', '/USDT') END,
         'tradeAmount', t."principalAmount"::text,
+        'walletSnapshotAtTrade', t."walletSnapshotAtTrade"::text,
         'promotionDay', t."promotionDay",
         'totalPromotionDays', ${NEW_DEPOSITOR_PROMOTION_DAYS},
-        'profitPercent', t."returnPercent"::text,
+        'profitPercent', COALESCE(t."selectedRate", t."returnPercent")::text,
+        'calculatedProfit', COALESCE(t."calculatedProfit", t."incomeAmount")::text,
         'settlementDueAt', t."creditDueAt"
       ),
       'placement:' || t.id,

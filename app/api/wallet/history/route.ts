@@ -129,6 +129,8 @@ export async function GET() {
       tradeAmount: Number(row.principalAmount.toString()),
       window: row.slot.label,
       promotionDay: row.promotionDay,
+      walletSnapshotAtTrade: row.source === "NEW_DEPOSITOR_EXTRA" && row.walletSnapshotAtTrade ? Number(row.walletSnapshotAtTrade.toString()) : undefined,
+      profitPercent: row.source === "NEW_DEPOSITOR_EXTRA" && row.selectedRate ? Number(row.selectedRate.toString()) : undefined,
       placedAt: row.startedAt.toISOString(),
       settledAt: row.incomeCreditedAt?.toISOString() ?? null,
       status: row.status === "FAILED" ? "Failed" : row.incomeCreditedAt ? "Completed" : "Running",

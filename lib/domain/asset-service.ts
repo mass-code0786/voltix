@@ -142,6 +142,8 @@ function formatTradePlacement(trade: {
   source: string;
   pair: string | null;
   promotionDay: number | null;
+  walletSnapshotAtTrade: Prisma.Decimal | null;
+  selectedRate: Prisma.Decimal | null;
   principalAmount: Prisma.Decimal;
   status: string;
   startedAt: Date;
@@ -171,6 +173,8 @@ function formatTradePlacement(trade: {
     tradeAmount: decimalToNumber(trade.principalAmount),
     window: trade.slot.label,
     promotionDay: trade.promotionDay,
+    walletSnapshotAtTrade: promotion && trade.walletSnapshotAtTrade ? decimalToNumber(trade.walletSnapshotAtTrade) : undefined,
+    profitPercent: promotion && trade.selectedRate ? decimalToNumber(trade.selectedRate) : undefined,
     placedAt: trade.startedAt.toISOString(),
     settledAt: trade.incomeCreditedAt?.toISOString() ?? null,
     failureReason: trade.failureReason,

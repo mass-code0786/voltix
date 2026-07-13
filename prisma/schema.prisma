@@ -657,6 +657,9 @@ model CopyTrade {
   source           String      @default("MANUAL")
   pair             String?
   promotionDay     Int?
+  walletSnapshotAtTrade Decimal?    @db.Decimal(36, 18)
+  selectedRate     Decimal?    @db.Decimal(10, 6)
+  calculatedProfit Decimal?    @db.Decimal(36, 18)
   idempotencyKey   String?     @unique
   principalAmount  Decimal     @db.Decimal(36, 18)
   returnPercent    Decimal     @db.Decimal(10, 6)

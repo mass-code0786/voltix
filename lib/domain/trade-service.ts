@@ -37,6 +37,9 @@ const copyTradeStatusSelect = {
   pair: true,
   source: true,
   promotionDay: true,
+  walletSnapshotAtTrade: true,
+  selectedRate: true,
+  calculatedProfit: true,
   principalAmount: true,
   returnPercent: true,
   status: true,
@@ -767,8 +770,10 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
     if (trade.status === "INCOME_CREDITED") return trade;
     if (!isSettleableTradeStatus(trade.status) || trade.creditDueAt > now) throw new Error("Trade income is not due");
     const promotion = trade.source === NEW_DEPOSITOR_EXTRA_SOURCE;
-    const incomeBase = promotion ? trade.principalAmount : trade.principalAmount.div(COPY_TRADE_STAKE_RATE);
-    const profitAmount = incomeBase.mul(trade.returnPercent).div(100);
+    if (promotion && trade.calculatedProfit === null) throw new Error("Promotional trade is missing its stored calculated profit.");
+    const profitAmount = promotion
+      ? trade.calculatedProfit!
+      : trade.principalAmount.div(COPY_TRADE_STAKE_RATE).mul(trade.returnPercent).div(100);
     const aiWalletCredit = trade.principalAmount.add(profitAmount);
     await ensureUserWalletAccounts(tx, trade.userId);
     const asset = await tx.asset.findUniqueOrThrow({ where: { symbol: "USDT" } });
@@ -798,7 +803,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       type: promotion ? "NEW_DEPOSITOR_EXTRA_TRADE" : "COPY_TRADE_INCOME",
       title: promotion ? "Extra Trade Settled" : "AI trade settled",
       message: promotion ? "Your principal has been returned and promotional profit has been credited." : "AI trade settled: principal returned and profit credited.",
-      metadata: { tradeId: trade.id, pair: trade.pair, promotionDay: trade.promotionDay, profitPercent: trade.returnPercent.toString(), principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: aiWalletCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id },
+      metadata: { tradeId: trade.id, pair: trade.pair, promotionDay: trade.promotionDay, profitPercent: (trade.selectedRate ?? trade.returnPercent).toString(), walletSnapshotAtTrade: trade.walletSnapshotAtTrade?.toString(), principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: aiWalletCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id },
     });
     const progress = await tx.user.update({
       where: { id: trade.userId },
@@ -1158,13 +1163,17 @@ type CopyTradeStatusRecord = Prisma.CopyTradeGetPayload<{ select: typeof copyTra
 function serializeTrade(trade: CopyTradeStatusRecord, now: Date) {
   const amount = Number(trade.principalAmount.toString());
   const returnPercent = Number(trade.returnPercent.toString());
-  const profitBase = trade.source === NEW_DEPOSITOR_EXTRA_SOURCE ? amount : amount / Number(COPY_TRADE_STAKE_RATE.toString());
-  const profit = Number(((profitBase * returnPercent) / 100).toFixed(8));
+  const profit = trade.source === NEW_DEPOSITOR_EXTRA_SOURCE && trade.calculatedProfit
+    ? Number(trade.calculatedProfit.toString())
+    : Number((((trade.source === NEW_DEPOSITOR_EXTRA_SOURCE ? amount : amount / Number(COPY_TRADE_STAKE_RATE.toString())) * returnPercent) / 100).toFixed(8));
   return {
     id: trade.id,
     pair: trade.pair,
     source: trade.source,
     promotionDay: trade.promotionDay,
+    walletSnapshotAtTrade: trade.walletSnapshotAtTrade ? Number(trade.walletSnapshotAtTrade.toString()) : null,
+    selectedRate: trade.selectedRate ? Number(trade.selectedRate.toString()) : null,
+    calculatedProfit: trade.calculatedProfit ? Number(trade.calculatedProfit.toString()) : null,
     code: trade.code?.code ?? "",
     amount,
     returnPercent,

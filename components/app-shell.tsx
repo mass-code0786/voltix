@@ -148,6 +148,8 @@ type WalletHistoryRecord = {
   placedAt?: string;
   settledAt?: string | null;
   promotionDay?: number | null;
+  walletSnapshotAtTrade?: number;
+  profitPercent?: number;
 };
 type TeamMember = {
   id: string;
@@ -349,6 +351,8 @@ function mapLedgerHistory(rows: WalletHistoryRecord[]): WalletActivity[] {
       details: placement ? [
         `Pair: ${row.pair || "Pair unavailable"}`,
         `Trade Amount: ${Number(row.tradeAmount ?? row.amount).toFixed(2)} ${row.asset}`,
+        ...(row.tradeType === "PROMOTION" && row.walletSnapshotAtTrade != null ? [`Wallet Snapshot: ${Number(row.walletSnapshotAtTrade).toFixed(2)} ${row.asset}`] : []),
+        ...(row.tradeType === "PROMOTION" && row.profitPercent != null ? [`Profit Rate: ${Number(row.profitPercent).toFixed(2)}%`] : []),
         row.tradeType === "AI" ? "AI Subscription" : row.tradeType === "PROMOTION" ? "New Depositor Promotion" : row.window || "Window unavailable",
         ...(row.tradeType === "PROMOTION" && row.promotionDay ? [`Promotion Day: ${row.promotionDay} of 10`] : []),
         ...(row.tradeType === "AI" && row.window ? [row.window] : []),

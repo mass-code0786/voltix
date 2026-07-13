@@ -290,7 +290,7 @@ async function settleWindowBatch(window: DueWindow, tradeIds: string[], settledA
         t."userId",
         t."principalAmount",
         (CASE WHEN t.source = 'NEW_DEPOSITOR_EXTRA'
-          THEN t."principalAmount" * t."returnPercent" / 100
+          THEN t."calculatedProfit"
           ELSE t."principalAmount" * t."returnPercent"
         END)::decimal(36,18) AS profit,
         t.source,
@@ -394,7 +394,9 @@ async function syncMissingSettlementNotifications(limit: number, createdAt: Date
   ` : Prisma.empty;
   return prisma.$executeRaw(Prisma.sql`
     WITH missing AS (
-      SELECT t.id, t."userId", t."principalAmount", t."incomeAmount", t.source, t.pair, t."returnPercent", t."promotionDay", t."creditDueAt"
+      SELECT t.id, t."userId", t."principalAmount", t."incomeAmount", t.source, t.pair,
+        COALESCE(t."selectedRate", t."returnPercent") AS "profitPercent",
+        t."walletSnapshotAtTrade", t."promotionDay", t."creditDueAt"
       FROM "CopyTrade" t
       WHERE t.status = 'INCOME_CREDITED'::"TradeStatus"
         AND t."incomeCreditedAt" IS NOT NULL
@@ -417,7 +419,8 @@ async function syncMissingSettlementNotifications(limit: number, createdAt: Date
         'pair', CASE WHEN m.pair IS NULL THEN NULL ELSE regexp_replace(m.pair, 'USDT$', '/USDT') END,
         'principalReturned', m."principalAmount"::text,
         'incomeAmount', m."incomeAmount"::text,
-        'profitPercent', m."returnPercent"::text,
+        'profitPercent', m."profitPercent"::text,
+        'walletSnapshotAtTrade', m."walletSnapshotAtTrade"::text,
         'promotionDay', m."promotionDay",
         'settlementDueAt', m."creditDueAt"
       ),
