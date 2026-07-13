@@ -1,9 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Link2, Trash2, WalletCards } from "lucide-react";
+import { Link2, Trash2, WalletCards } from "lucide-react";
+import { ProfilePageHeader } from "@/components/profile-page-header";
 import {
   type ExternalWalletNetwork,
   externalWalletNetworkLabel,
@@ -85,14 +85,7 @@ export default function BindWalletPage() {
 
   return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-4 text-white sm:px-6">
     <div className="mx-auto max-w-2xl">
-      <header className="profile-glass rounded-[22px] p-4">
-        <div className="flex items-center justify-between">
-          <Link href="/profile" className="grid h-10 w-10 place-items-center rounded-xl border border-white/[.08] bg-black/25 text-[#18ff8a]" aria-label="Back to profile"><ArrowLeft size={18}/></Link>
-          <div className="grid h-10 w-10 place-items-center rounded-xl border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]"><WalletCards size={18}/></div>
-        </div>
-        <h1 className="mt-5 text-2xl font-black">Bind Your Wallet</h1>
-        <p className="mt-1 text-sm text-slate-500">Connect your external crypto wallet</p>
-      </header>
+      <ProfilePageHeader title="Bind Your Wallet" icon={WalletCards} subtitle="Connect your external crypto wallet"/>
 
       <section className="profile-glass mt-4 rounded-[22px] p-4">
         <div className="flex items-center gap-3">

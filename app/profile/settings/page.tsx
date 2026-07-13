@@ -1,9 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
+import { ProfilePageHeader } from "@/components/profile-page-header";
 import { SearchableSelect } from "@/components/searchable-select";
 import { languageOptions } from "@/lib/profile-options";
 
@@ -17,4 +17,4 @@ export default function SettingsPage(){
   return <Frame><form onSubmit={save} className="profile-glass rounded-[22px] p-4"><div className="space-y-3"><SearchableSelect label="Language" options={languageOptions} value={language} onChange={setLanguage} placeholder="Search language"/><div className="rounded-2xl border border-white/[.08] bg-black/25 p-3"><p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Theme preference</p><p className="mt-1 text-sm font-bold text-slate-200">Voltix dark green</p></div><div className="rounded-2xl border border-white/[.08] bg-black/25 p-3"><p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Account preferences</p><p className="mt-1 text-sm text-slate-400">Core account preferences are synced with your profile.</p></div></div>{(error||message)&&<p className={`mt-3 text-xs font-bold ${error?"text-[#ff4f6d]":"text-[#18ff8a]"}`}>{error||message}</p>}<button disabled={saving||!profile} className="mt-4 w-full rounded-2xl bg-[#18ff8a] py-3.5 text-sm font-black text-[#050608] disabled:opacity-60">{saving?"Saving...":"Save Settings"}</button></form></Frame>;
 }
 
-function Frame({children}:{children:React.ReactNode}){return <main className="profile-page min-h-screen px-4 py-4 text-white sm:px-6"><div className="mx-auto max-w-2xl"><header className="profile-glass rounded-[22px] p-4"><div className="flex items-center justify-between"><Link href="/profile" className="grid h-10 w-10 place-items-center rounded-xl border border-white/[.08] bg-black/25 text-[#18ff8a]"><ArrowLeft size={18}/></Link><div className="grid h-10 w-10 place-items-center rounded-xl border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]"><Settings size={18}/></div></div><h1 className="mt-5 text-2xl font-black">Settings</h1></header><div className="mt-4">{children}</div></div></main>}
+function Frame({children}:{children:React.ReactNode}){return <main className="profile-page min-h-screen px-4 py-4 text-white sm:px-6"><div className="mx-auto max-w-2xl"><ProfilePageHeader title="Settings" icon={Settings}/><div className="mt-4">{children}</div></div></main>}

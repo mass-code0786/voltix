@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock3, ImagePlus, ShieldCheck, X } from "lucide-react";
+import { CheckCircle2, Clock3, ImagePlus, ShieldCheck, X } from "lucide-react";
+import { ProfilePageHeader } from "@/components/profile-page-header";
 import { SearchableSelect } from "@/components/searchable-select";
 import { countryOptions } from "@/lib/profile-options";
 import { getKycDocumentTypes, kycDocumentRequiresBackPhoto } from "@/lib/kyc-document-types";
@@ -100,13 +101,7 @@ export default function KycPage() {
 
   return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-4 text-white sm:px-6">
     <div className="mx-auto max-w-2xl">
-      <header className="profile-glass rounded-[22px] p-4">
-        <div className="flex items-center justify-between">
-          <Link href="/profile" className="grid h-10 w-10 place-items-center rounded-xl border border-white/[.08] bg-black/25 text-[#18ff8a]" aria-label="Back to profile"><ArrowLeft size={18}/></Link>
-          <div className="grid h-10 w-10 place-items-center rounded-xl border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]"><ShieldCheck size={18}/></div>
-        </div>
-        <h1 className="mt-5 text-2xl font-black">KYC Verification</h1>
-      </header>
+      <ProfilePageHeader title="KYC Verification" icon={ShieldCheck}/>
       {success&&<div className="mt-4 rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 p-4 text-sm font-bold text-[#18ff8a]">{success}</div>}
 
       {loading?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-slate-400">Loading verification...</section>:error&&!snapshot?<section className="profile-glass mt-4 rounded-[22px] p-5 text-sm text-[#ff4f6d]">{error}</section>:isUnderReview(snapshot?.status)?<StatusCard icon={Clock3} title="Your KYC is under review" text="Manual admin approval is pending." tone="pending"/>:snapshot?.status==="APPROVED"?<StatusCard icon={CheckCircle2} title="Status: Verified" text={`Approval Date: ${formatReviewDate(snapshot.request?.approvedAt??snapshot.request?.reviewedAt)}${snapshot.request?.approvedBy?` | Approved By: ${snapshot.request.approvedBy}`:""}`} tone="approved"/>:<form onSubmit={submit} className="profile-glass mt-4 rounded-[22px] p-4">

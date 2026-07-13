@@ -1,9 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, LockKeyhole, ShieldCheck } from "lucide-react";
+import { LockKeyhole, ShieldCheck } from "lucide-react";
+import { ProfilePageHeader } from "@/components/profile-page-header";
 import { TransactionPinInput } from "@/components/transaction-pin-input";
 import { clearPostLoginSplashFlags } from "@/components/app-launch-splash";
 import { clearMobileNativeSession } from "@/lib/mobile-native";
@@ -153,8 +153,8 @@ function TransactionPinSection({ status, refreshed }: { status: TransactionPinSt
   </section>;
 }
 
-function Frame({ title, icon: Icon, children }: { title: string; icon: typeof LockKeyhole; children: React.ReactNode }) {
-  return <main className="profile-page min-h-screen px-4 py-4 text-white sm:px-6"><div className="mx-auto max-w-2xl"><header className="profile-glass rounded-[22px] p-4"><div className="flex items-center justify-between"><Link href="/profile" className="grid h-10 w-10 place-items-center rounded-xl border border-white/[.08] bg-black/25 text-[#18ff8a]"><ArrowLeft size={18} /></Link><div className="grid h-10 w-10 place-items-center rounded-xl border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]"><Icon size={18} /></div></div><h1 className="mt-5 text-2xl font-black">{title}</h1></header><div className="mt-4">{children}</div></div></main>;
+function Frame({ title, icon, children }: { title: string; icon: typeof LockKeyhole; children: React.ReactNode }) {
+  return <main className="profile-page min-h-screen px-4 py-4 text-white sm:px-6"><div className="mx-auto max-w-2xl"><ProfilePageHeader title={title} icon={icon}/><div className="mt-4">{children}</div></div></main>;
 }
 
 function Password({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {

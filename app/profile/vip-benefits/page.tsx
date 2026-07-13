@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Crown, Lock } from "lucide-react";
+import { Crown, Lock } from "lucide-react";
+import { ProfilePageHeader } from "@/components/profile-page-header";
 import { getVipIconPath, getVipRankNumber } from "@/lib/vip-icons";
 
 type Profile = { vipRank: string; nextRank: string | null; nextRankProgress: number; missingConditions: string[] };
@@ -32,7 +32,7 @@ export default function VipBenefitsPage() {
   const next = useMemo(() => profile?.nextRank ?? "Max level", [profile?.nextRank]);
 
   return <main className="profile-page min-h-screen px-4 py-4 text-white sm:px-6"><div className="mx-auto max-w-2xl">
-    <header className="profile-glass rounded-[22px] p-4"><div className="flex items-center justify-between"><Link href="/profile" className="grid h-10 w-10 place-items-center rounded-xl border border-white/[.08] bg-black/25 text-[#18ff8a]"><ArrowLeft size={18}/></Link><div className="grid h-10 w-10 place-items-center rounded-xl border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]"><Crown size={18}/></div></div><h1 className="mt-5 text-2xl font-black">VIP & Benefits</h1></header>
+    <ProfilePageHeader title="VIP & Benefits" icon={Crown}/>
     {error && <p className="profile-glass mt-4 rounded-[22px] p-4 text-sm text-[#ff4f6d]">{error}</p>}
     <section className="profile-glass mt-4 rounded-[22px] p-4">
       <div className="mb-4 flex items-center gap-3 rounded-2xl border border-[#18ff8a]/25 bg-[#18ff8a]/10 p-3 shadow-[0_0_24px_rgba(24,255,138,.12)]"><img src={getVipIconPath(currentRank)} alt={`VIP ${currentRank} badge`} className="h-20 w-20 object-contain"/><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Achieved rank</p><p className="mt-1 text-xl font-black text-white">{current}</p></div></div>
