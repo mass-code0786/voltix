@@ -373,7 +373,7 @@ async function createPlacementNotifications(trades: PlacedPromotionTrade[], sett
     data: trades.map(trade => ({
       userId: trade.userId,
       type: "NEW_DEPOSITOR_EXTRA_TRADE",
-      title: "Extra Trade Placed",
+      title: "Additional Trade Placed",
       message: "Your new depositor promotional trade has been placed successfully.",
       settlementKey: `placement:${trade.id}`,
       metadata: {
@@ -399,7 +399,7 @@ async function syncMissingPlacementNotifications(windowStartAt: Date) {
       gen_random_uuid()::text,
       t."userId",
       'NEW_DEPOSITOR_EXTRA_TRADE'::"NotificationType",
-      'Extra Trade Placed',
+      'Additional Trade Placed',
       'Your new depositor promotional trade has been placed successfully.',
       jsonb_build_object(
         'tradeId', t.id,

@@ -163,7 +163,7 @@ function formatTradePlacement(trade: {
     direction: "DEBIT" as const,
     amount: decimalToNumber(trade.principalAmount),
     signedAmount: decimalToNumber(trade.principalAmount.neg()),
-    title: manual ? "Manual Trade Placed" : promotion ? "Extra Trade Placed" : "AI Trade Placed",
+    title: manual ? "Manual Trade Placed" : promotion ? "Additional Trade Placed" : "AI Trade Placed",
     source: trade.source,
     referenceType: "COPY_TRADE_PLACEMENT",
     referenceId: trade.id,

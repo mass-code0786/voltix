@@ -26,7 +26,7 @@ export function formatLedgerDateTime(timestamp: string | Date | null | undefined
 
 export function tradePlacementTitle(source?: string | null) {
   const normalized = source?.trim().toUpperCase();
-  if (normalized === "NEW_DEPOSITOR_EXTRA") return "Extra Trade Placed";
+  if (normalized === "NEW_DEPOSITOR_EXTRA") return "Additional Trade Placed";
   if (normalized === "AI_SUBSCRIPTION_AUTO" || normalized === "AI_SUBSCRIPTION") return "AI Trade Placed";
   if (normalized === "MANUAL") return "Manual Trade Placed";
   return "Trade Placed";

@@ -194,8 +194,8 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
   const promotionRow = {
     id: "new-depositor-extra",
     kind: "PROMOTION" as const,
-    label: "Extra Trade",
-    vipRange: "Extra Trade",
+    label: "Additional Trade",
+    vipRange: "Additional Trade",
     vipRanks: [] as string[],
     dailyPercentMin: NEW_DEPOSITOR_PROFIT_MIN_PERCENT,
     dailyPercentMax: NEW_DEPOSITOR_PROFIT_MAX_PERCENT,
@@ -785,7 +785,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       referenceType: "COPY_TRADE_PRINCIPAL_RETURN",
       referenceId: trade.id,
       idempotencyKey: `copy-trade-principal-return:${trade.id}`,
-      memo: promotion ? "Extra Trade Principal Return" : "AI Trade Principal Return",
+      memo: promotion ? "Additional Trade Principal Return" : "AI Trade Principal Return",
       occurredAt: now,
       lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: trade.principalAmount }, { accountId: aiWalletAccount.id, direction: "CREDIT", amount: trade.principalAmount }],
     });
@@ -793,7 +793,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       referenceType: "COPY_TRADE_INCOME",
       referenceId: trade.id,
       idempotencyKey: `copy-trade-profit:${trade.id}`,
-      memo: promotion ? "Extra Trade Profit" : "AI Trade Profit",
+      memo: promotion ? "Additional Trade Profit" : "AI Trade Profit",
       occurredAt: now,
       lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: profitAmount }, { accountId: aiWalletAccount.id, direction: "CREDIT", amount: profitAmount }],
     });
@@ -801,7 +801,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
     await createNotification(tx, {
       userId: trade.userId,
       type: promotion ? "NEW_DEPOSITOR_EXTRA_TRADE" : "COPY_TRADE_INCOME",
-      title: promotion ? "Extra Trade Settled" : "AI trade settled",
+      title: promotion ? "Additional Trade Settled" : "AI trade settled",
       message: promotion ? "Your principal has been returned and promotional profit has been credited." : "AI trade settled: principal returned and profit credited.",
       metadata: { tradeId: trade.id, pair: trade.pair, promotionDay: trade.promotionDay, profitPercent: (trade.selectedRate ?? trade.returnPercent).toString(), walletSnapshotAtTrade: trade.walletSnapshotAtTrade?.toString(), principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: aiWalletCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id },
     });

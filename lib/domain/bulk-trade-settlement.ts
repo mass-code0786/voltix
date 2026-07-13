@@ -312,7 +312,7 @@ async function settleWindowBatch(window: DueWindow, tradeIds: string[], settledA
       INSERT INTO "LedgerJournal" (id, "referenceType", "referenceId", "idempotencyKey", memo, status, "postedAt", "createdAt")
       SELECT gen_random_uuid()::text, 'COPY_TRADE_PRINCIPAL_RETURN', e.id,
         'principal-return:' || e.id,
-        CASE WHEN e.source = 'NEW_DEPOSITOR_EXTRA' THEN 'Extra Trade Principal Return' ELSE 'AI Trade Principal Return' END,
+        CASE WHEN e.source = 'NEW_DEPOSITOR_EXTRA' THEN 'Additional Trade Principal Return' ELSE 'AI Trade Principal Return' END,
         'POSTED'::"JournalStatus", ${settledAt}, ${settledAt}
       FROM eligible e
       ON CONFLICT ("referenceType", "referenceId") DO NOTHING
@@ -321,7 +321,7 @@ async function settleWindowBatch(window: DueWindow, tradeIds: string[], settledA
       INSERT INTO "LedgerJournal" (id, "referenceType", "referenceId", "idempotencyKey", memo, status, "postedAt", "createdAt")
       SELECT gen_random_uuid()::text, 'COPY_TRADE_INCOME', e.id,
         'profit-credit:' || e.id,
-        CASE WHEN e.source = 'NEW_DEPOSITOR_EXTRA' THEN 'Extra Trade Profit' ELSE 'AI Trade Profit' END,
+        CASE WHEN e.source = 'NEW_DEPOSITOR_EXTRA' THEN 'Additional Trade Profit' ELSE 'AI Trade Profit' END,
         'POSTED'::"JournalStatus", ${settledAt}, ${settledAt}
       FROM eligible e
       ON CONFLICT ("referenceType", "referenceId") DO NOTHING
@@ -410,7 +410,7 @@ async function syncMissingSettlementNotifications(limit: number, createdAt: Date
     INSERT INTO "Notification" (id, "userId", type, title, message, metadata, "settlementKey", "createdAt")
     SELECT gen_random_uuid()::text, m."userId",
       CASE WHEN m.source = 'NEW_DEPOSITOR_EXTRA' THEN 'NEW_DEPOSITOR_EXTRA_TRADE'::"NotificationType" ELSE 'COPY_TRADE_INCOME'::"NotificationType" END,
-      CASE WHEN m.source = 'NEW_DEPOSITOR_EXTRA' THEN 'Extra Trade Settled' ELSE 'AI trade settled' END,
+      CASE WHEN m.source = 'NEW_DEPOSITOR_EXTRA' THEN 'Additional Trade Settled' ELSE 'AI trade settled' END,
       CASE WHEN m.source = 'NEW_DEPOSITOR_EXTRA'
         THEN 'Your principal has been returned and promotional profit has been credited.'
         ELSE 'AI trade settled: principal returned and profit credited.' END,
