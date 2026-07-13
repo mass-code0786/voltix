@@ -660,13 +660,13 @@ model CopyTrade {
   returnPercent    Decimal     @db.Decimal(10, 6)
   incomeAmount     Decimal?    @db.Decimal(36, 18)
   status           TradeStatus @default(PENDING)
-  startedAt        DateTime
-  windowStartAt    DateTime?
-  windowCloseAt    DateTime?
-  completesAt      DateTime
-  creditDueAt      DateTime
-  completedAt      DateTime?
-  incomeCreditedAt DateTime?
+  startedAt        DateTime    @db.Timestamptz(3)
+  windowStartAt    DateTime?   @db.Timestamptz(3)
+  windowCloseAt    DateTime?   @db.Timestamptz(3)
+  completesAt      DateTime    @db.Timestamptz(3)
+  creditDueAt      DateTime    @db.Timestamptz(3)
+  completedAt      DateTime?   @db.Timestamptz(3)
+  incomeCreditedAt DateTime?   @db.Timestamptz(3)
   failureReason    String?
   income           Income?
   createdAt        DateTime    @default(now())
@@ -685,17 +685,17 @@ model TradeWindowSettlement {
   id                  String                      @id @default(cuid())
   occurrenceKey       String                      @unique
   slotId              String
-  windowStartAt       DateTime
-  windowCloseAt       DateTime
-  settlementDueAt     DateTime
+  windowStartAt       DateTime                     @db.Timestamptz(3)
+  windowCloseAt       DateTime                     @db.Timestamptz(3)
+  settlementDueAt     DateTime                     @db.Timestamptz(3)
   status              TradeWindowSettlementStatus @default(PENDING)
   totalTrades         Int                         @default(0)
   settledTrades       Int                         @default(0)
   failedTrades        Int                         @default(0)
   attempts            Int                         @default(0)
-  processingStartedAt DateTime?
-  completedAt         DateTime?
-  leaseExpiresAt      DateTime?
+  processingStartedAt DateTime?                    @db.Timestamptz(3)
+  completedAt         DateTime?                    @db.Timestamptz(3)
+  leaseExpiresAt      DateTime?                    @db.Timestamptz(3)
   lastError           String?
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
@@ -709,9 +709,9 @@ model ManualTradeSignal {
   occurrenceKey   String   @unique
   slotId          String
   windowLabel     String
-  windowStartAt   DateTime
-  windowCloseAt   DateTime
-  settlementDueAt DateTime
+  windowStartAt   DateTime @db.Timestamptz(3)
+  windowCloseAt   DateTime @db.Timestamptz(3)
+  settlementDueAt DateTime @db.Timestamptz(3)
   pairs           Json
   recommendedPair String
   createdAt       DateTime @default(now())

@@ -691,6 +691,9 @@ export async function settleDueCopyTrades(userId?: string, now = new Date()) {
   // Settlement is deliberately global by due window. A user status request must
   // never split one window into thousands of per-user transactions.
   void userId;
+  if (process.env.TRADE_SETTLEMENT_ENABLED === "false") {
+    return { windowsFound: 0, windowsSettled: 0, totalSettled: 0, totalFailed: 0, summaries: [] };
+  }
   return settleDueTradeWindows(now);
 }
 

@@ -21,6 +21,11 @@ type BatchResult = {
   profitTotal: Prisma.Decimal | null;
 };
 
+type RecoveringBatchResult = BatchResult & {
+  failedTradeIds: string[];
+  errors: string[];
+};
+
 export type WindowSettlementSummary = {
   occurrenceKey: string;
   settlementDueAt: string;
@@ -30,16 +35,21 @@ export type WindowSettlementSummary = {
   totalClaimed: number;
   totalSettled: number;
   totalFailed: number;
+  batchCount: number;
   batches: number;
   durationMs: number;
   throughputPerSecond: number;
   financialBatchDurationMs: number;
   principalReturnedTotal: string;
   profitCreditedTotal: string;
+  retryCount: number;
   result: "COMPLETED" | "PARTIAL" | "FAILED" | "LEASED_BY_ANOTHER_WORKER";
 };
 
 export async function settleDueTradeWindows(now = new Date()) {
+  await syncMissingSettlementNotifications(SETTLEMENT_BATCH_SIZE, now).catch(error => {
+    console.error("[TRADE_SETTLEMENT_NOTIFICATION_RETRY_FAILURE]", { error: errorMessage(error) });
+  });
   const windows = await findDueWindowOccurrences(now);
   const summaries: WindowSettlementSummary[] = [];
   for (const window of windows) summaries.push(await settleWindowOccurrence(window, now));
@@ -139,29 +149,40 @@ async function settleWindowOccurrence(window: DueWindow, _detectedAt: Date): Pro
   let profitTotal = new Prisma.Decimal(0);
   let lastError: string | null = null;
   let financialBatchDurationMs = 0;
+  const failedTradeIds = new Set<string>();
+  const dataErrors: string[] = [];
   try {
     await ensureSettlementAccounts(window);
     while (true) {
+      const tradeIds = await findEligibleTradeIds(window, SETTLEMENT_BATCH_SIZE, [...failedTradeIds]);
+      if (!tradeIds.length) break;
       const batchStartedAt = performance.now();
-      const batch = await settleWindowBatch(window, SETTLEMENT_BATCH_SIZE, new Date());
+      const settledAt = new Date();
+      const batch = await settleWindowBatchRecovering(window, tradeIds, settledAt);
       financialBatchDurationMs += performance.now() - batchStartedAt;
       const claimed = Number(batch.claimed);
       if (!claimed) break;
       batches += 1;
       totalClaimed += claimed;
       totalSettled += Number(batch.settled);
+      for (const tradeId of batch.failedTradeIds) failedTradeIds.add(tradeId);
+      dataErrors.push(...batch.errors);
       principalTotal = principalTotal.add(batch.principalTotal ?? 0);
       profitTotal = profitTotal.add(batch.profitTotal ?? 0);
+      await syncMissingSettlementNotifications(SETTLEMENT_BATCH_SIZE, settledAt, window).catch(error => {
+        console.error("[TRADE_SETTLEMENT_NOTIFICATION_FAILURE]", { occurrenceKey, error: errorMessage(error) });
+      });
       await prisma.tradeWindowSettlement.update({
         where: { id: coordinator.id },
         data: { leaseExpiresAt: new Date(Date.now() + WINDOW_LEASE_MS), settledTrades: coordinator.settledTrades + totalSettled },
       });
     }
   } catch (error) {
-    lastError = error instanceof Error ? error.message : "Bulk settlement failed";
+    lastError = errorMessage(error);
   }
 
   const [remaining, occurrenceSettled] = await Promise.all([countEligible(window), countSettled(window)]);
+  if (!lastError && failedTradeIds.size) lastError = `${failedTradeIds.size} trade(s) failed data-safe settlement isolation: ${dataErrors[0] ?? "database data exception"}`;
   const totalFailed = lastError ? remaining : 0;
   const result = lastError ? (totalSettled ? "PARTIAL" : "FAILED") : "COMPLETED";
   const completedAt = new Date();
@@ -187,12 +208,14 @@ async function settleWindowOccurrence(window: DueWindow, _detectedAt: Date): Pro
     totalClaimed,
     totalSettled,
     totalFailed,
+    batchCount: batches,
     batches,
     durationMs,
     throughputPerSecond: durationMs ? Math.round((totalSettled * 1_000_000) / durationMs) / 1_000 : totalSettled,
     financialBatchDurationMs: Math.round(financialBatchDurationMs),
     principalReturnedTotal: principalTotal.toString(),
     profitCreditedTotal: profitTotal.toString(),
+    retryCount: Math.max(0, coordinator.attempts),
     result,
   };
   console.info("[TRADE_WINDOW_SETTLEMENT]", summary);
@@ -217,7 +240,48 @@ async function ensureSettlementAccounts(window: DueWindow) {
   if (!feeAccounts) throw new Error("USDT settlement revenue account is missing");
 }
 
-async function settleWindowBatch(window: DueWindow, batchSize: number, settledAt: Date) {
+async function findEligibleTradeIds(window: DueWindow, batchSize: number, excludedTradeIds: string[]) {
+  const excluded = excludedTradeIds.length ? Prisma.sql`AND t.id NOT IN (${Prisma.join(excludedTradeIds)})` : Prisma.empty;
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT t.id FROM "CopyTrade" t
+    WHERE ${windowPredicate(window)} ${excluded}
+    ORDER BY t.id
+    LIMIT ${batchSize}
+  `);
+  return rows.map(row => row.id);
+}
+
+async function settleWindowBatchRecovering(window: DueWindow, tradeIds: string[], settledAt: Date): Promise<RecoveringBatchResult> {
+  try {
+    const result = await settleWindowBatch(window, tradeIds, settledAt);
+    return { ...result, failedTradeIds: [], errors: [] };
+  } catch (error) {
+    if (!isDataException(error)) throw error;
+    if (tradeIds.length === 1) {
+      return {
+        claimed: BigInt(1),
+        settled: BigInt(0),
+        principalTotal: new Prisma.Decimal(0),
+        profitTotal: new Prisma.Decimal(0),
+        failedTradeIds: tradeIds,
+        errors: [errorMessage(error)],
+      };
+    }
+    const midpoint = Math.ceil(tradeIds.length / 2);
+    const first = await settleWindowBatchRecovering(window, tradeIds.slice(0, midpoint), settledAt);
+    const second = await settleWindowBatchRecovering(window, tradeIds.slice(midpoint), settledAt);
+    return {
+      claimed: first.claimed + second.claimed,
+      settled: first.settled + second.settled,
+      principalTotal: new Prisma.Decimal(first.principalTotal ?? 0).add(second.principalTotal ?? 0),
+      profitTotal: new Prisma.Decimal(first.profitTotal ?? 0).add(second.profitTotal ?? 0),
+      failedTradeIds: [...first.failedTradeIds, ...second.failedTradeIds],
+      errors: [...first.errors, ...second.errors],
+    };
+  }
+}
+
+async function settleWindowBatch(window: DueWindow, tradeIds: string[], settledAt: Date) {
   return prisma.$transaction(async tx => {
     const rows = await tx.$queryRaw<BatchResult[]>(Prisma.sql`
     WITH eligible AS MATERIALIZED (
@@ -237,8 +301,8 @@ async function settleWindowBatch(window: DueWindow, batchSize: number, settledAt
         ORDER BY wa.id LIMIT 1
       ) fee
       WHERE ${windowPredicate(window)}
+        AND t.id IN (${Prisma.join(tradeIds)})
       ORDER BY t.id
-      LIMIT ${batchSize}
       FOR UPDATE OF t SKIP LOCKED
     ), principal_journals AS (
       INSERT INTO "LedgerJournal" (id, "referenceType", "referenceId", "idempotencyKey", memo, status, "postedAt", "createdAt")
@@ -289,15 +353,6 @@ async function settleWindowBatch(window: DueWindow, batchSize: number, settledAt
       FROM per_user p
       WHERE u.id = p."userId"
       RETURNING u.id
-    ), notifications AS (
-      INSERT INTO "Notification" (id, "userId", type, title, message, metadata, "settlementKey", "createdAt")
-      SELECT gen_random_uuid()::text, e."userId", 'COPY_TRADE_INCOME'::"NotificationType",
-        'AI trade settled', 'AI trade settled: principal returned and profit credited.',
-        jsonb_build_object('tradeId', e.id, 'principalReturned', e."principalAmount"::text, 'incomeAmount', e.profit::text),
-        'settlement:' || e.id, ${settledAt}
-      FROM eligible e
-      ON CONFLICT ("settlementKey") DO NOTHING
-      RETURNING id
     ), settled AS (
       UPDATE "CopyTrade" t
       SET status = 'INCOME_CREDITED'::"TradeStatus", "incomeAmount" = e.profit,
@@ -308,7 +363,6 @@ async function settleWindowBatch(window: DueWindow, batchSize: number, settledAt
         AND (SELECT COUNT(*) FROM principal_entries) = (SELECT COUNT(*) * 2 FROM eligible)
         AND (SELECT COUNT(*) FROM profit_entries) = (SELECT COUNT(*) * 2 FROM eligible)
         AND (SELECT COUNT(*) FROM incomes) = (SELECT COUNT(*) FROM eligible)
-        AND (SELECT COUNT(*) FROM notifications) = (SELECT COUNT(*) FROM eligible)
       RETURNING t.id
     )
     SELECT
@@ -321,6 +375,36 @@ async function settleWindowBatch(window: DueWindow, batchSize: number, settledAt
     if (result.claimed !== result.settled) throw new Error(`Atomic settlement invariant failed: claimed ${result.claimed}, settled ${result.settled}`);
     return result;
   }, { timeout: 60_000 });
+}
+
+async function syncMissingSettlementNotifications(limit: number, createdAt: Date, window?: DueWindow) {
+  const occurrence = window ? Prisma.sql`
+    AND t."slotId" = ${window.slotId}
+    AND t."windowStartAt" = ${window.windowStartAt}
+    AND t."windowCloseAt" = ${window.windowCloseAt}
+    AND t."creditDueAt" = ${window.settlementDueAt}
+  ` : Prisma.empty;
+  return prisma.$executeRaw(Prisma.sql`
+    WITH missing AS (
+      SELECT t.id, t."userId", t."principalAmount", t."incomeAmount"
+      FROM "CopyTrade" t
+      WHERE t.status = 'INCOME_CREDITED'::"TradeStatus"
+        AND t."incomeCreditedAt" IS NOT NULL
+        ${occurrence}
+        AND NOT EXISTS (
+          SELECT 1 FROM "Notification" n WHERE n."settlementKey" = 'settlement:' || t.id
+        )
+      ORDER BY t."incomeCreditedAt", t.id
+      LIMIT ${limit}
+    )
+    INSERT INTO "Notification" (id, "userId", type, title, message, metadata, "settlementKey", "createdAt")
+    SELECT gen_random_uuid()::text, m."userId", 'COPY_TRADE_INCOME'::"NotificationType",
+      'AI trade settled', 'AI trade settled: principal returned and profit credited.',
+      jsonb_build_object('tradeId', m.id, 'principalReturned', m."principalAmount"::text, 'incomeAmount', m."incomeAmount"::text),
+      'settlement:' || m.id, ${createdAt}
+    FROM missing m
+    ON CONFLICT ("settlementKey") DO NOTHING
+  `);
 }
 
 async function countEligible(window: DueWindow) {
@@ -370,14 +454,27 @@ function emptySummary(window: DueWindow, occurrenceKey: string, startedAt: Date,
     totalClaimed: 0,
     totalSettled: 0,
     totalFailed: 0,
+    batchCount: 0,
     batches: 0,
     durationMs: 0,
     throughputPerSecond: 0,
     financialBatchDurationMs: 0,
     principalReturnedTotal: "0",
     profitCreditedTotal: "0",
+    retryCount: 0,
     result,
   };
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Bulk settlement failed";
+}
+
+function isDataException(error: unknown) {
+  const candidate = error as { code?: string; meta?: { code?: string; message?: string }; message?: string };
+  const databaseCode = candidate.meta?.code ?? candidate.code ?? "";
+  const message = `${candidate.message ?? ""} ${candidate.meta?.message ?? ""}`.toLowerCase();
+  return databaseCode.startsWith("22") || /numeric field overflow|out of range|invalid input syntax/.test(message);
 }
 
 function boundedInteger(value: string | undefined, fallback: number, min: number, max: number) {
