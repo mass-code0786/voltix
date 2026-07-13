@@ -22,8 +22,12 @@ async function tick() {
   }
   running = true;
   try {
-    const { runAiAutoTradeScheduler } = await import("../lib/domain/trade-service");
+    const [{ runAiAutoTradeScheduler }, { runNewDepositorExtraTradeScheduler }] = await Promise.all([
+      import("../lib/domain/trade-service"),
+      import("../lib/domain/new-depositor-promotion"),
+    ]);
     log("scheduler started");
+    const promotion = await runNewDepositorExtraTradeScheduler(new Date());
     const result = await runAiAutoTradeScheduler(new Date());
     log("scheduler completed", {
       currentUtc: result.currentUtc,
@@ -40,6 +44,7 @@ async function tick() {
       totalTradesForWindow: result.totalTradesForWindow,
       skipped: result.skipped,
       errors: result.errors,
+      newDepositorPromotion: promotion,
     });
   } catch (error) {
     log("scheduler failed", {

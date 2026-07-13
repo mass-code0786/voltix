@@ -8,6 +8,8 @@ import { createNotification } from "./notification-service";
 import { aiWalletBusinessAmount, isAiWalletActive } from "./user-activation";
 import { ensureUserWalletAccounts } from "./user-wallets";
 import { settleDueTradeWindows } from "./bulk-trade-settlement";
+import { getOrCreateTradeWindowSignal } from "./trade-window-signal";
+import { getNewDepositorPromotionStatus, NEW_DEPOSITOR_EXTRA_SOURCE, NEW_DEPOSITOR_PROFIT_MAX_PERCENT, NEW_DEPOSITOR_PROFIT_MIN_PERCENT } from "./new-depositor-promotion";
 
 const COPY_TRADE_STAKE_RATE = new Prisma.Decimal("0.01");
 const MIN_COPY_TRADE_STAKE = new Prisma.Decimal(MIN_COPY_TRADE_STAKE_USD);
@@ -32,6 +34,9 @@ const REQUIRED_TRADE_SLOTS = [
 const AI_AUTO_TRADE_LOG_FILE = path.join(process.cwd(), "logs", "ai-auto-trade.log");
 const copyTradeStatusSelect = {
   id: true,
+  pair: true,
+  source: true,
+  promotionDay: true,
   principalAmount: true,
   returnPercent: true,
   status: true,
@@ -125,8 +130,8 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
       select: copyTradeStatusSelect,
       orderBy: { startedAt: "desc" },
     }),
-    prisma.copyTrade.count({ where: { userId, status: TradeStatus.INCOME_CREDITED, incomeCreditedAt: { gte: dayStart } } }),
-    prisma.copyTrade.count({ where: { userId, startedAt: { gte: dayStart } } }),
+    prisma.copyTrade.count({ where: { userId, source: { not: NEW_DEPOSITOR_EXTRA_SOURCE }, status: TradeStatus.INCOME_CREDITED, incomeCreditedAt: { gte: dayStart } } }),
+    prisma.copyTrade.count({ where: { userId, source: { not: NEW_DEPOSITOR_EXTRA_SOURCE }, startedAt: { gte: dayStart } } }),
     prisma.copyTrade.findMany({
       where: { userId, status: TradeStatus.INCOME_CREDITED },
       select: copyTradeStatusSelect,
@@ -182,6 +187,42 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
     };
   });
   const currentRow = rows.find(row => row.eligible) ?? rows[0];
+  const promotion = await getNewDepositorPromotionStatus(userId, now);
+  const promotionRow = {
+    id: "new-depositor-extra",
+    kind: "PROMOTION" as const,
+    label: "Extra Trade",
+    vipRange: "Extra Trade",
+    vipRanks: [] as string[],
+    dailyPercentMin: NEW_DEPOSITOR_PROFIT_MIN_PERCENT,
+    dailyPercentMax: NEW_DEPOSITOR_PROFIT_MAX_PERCENT,
+    dailyReturnMin: NEW_DEPOSITOR_PROFIT_MIN_PERCENT,
+    dailyReturnMax: NEW_DEPOSITOR_PROFIT_MAX_PERCENT,
+    eligible: promotion.eligible,
+    available: promotion.tradeStatus === "LIVE",
+    tradeAmount: Number(tradeAmount.toString()),
+    perTradePercent: NEW_DEPOSITOR_PROFIT_MIN_PERCENT,
+    currentTradeTime: "",
+    tradeStatus: promotion.tradeStatus,
+    openTime: "",
+    closeTime: "",
+    windowStartAt: promotion.windowStartAt,
+    windowCloseAt: promotion.windowCloseAt,
+    timezone: null,
+    secondsUntilOpen: promotion.secondsUntilOpen,
+    secondsUntilClose: promotion.secondsUntilClose,
+    canTrade: false,
+    canTradeWhenLive: false,
+    reason: promotion.reason,
+    message: promotion.reason,
+    promotionState: promotion.state,
+    promotionDay: promotion.promotionDay,
+    totalPromotionDays: promotion.totalPromotionDays,
+    extraTradesUsed: promotion.extraTradesUsed,
+    extraTradesRemaining: promotion.extraTradesRemaining,
+    nextExtraTradeAt: promotion.nextExtraTradeAt,
+    promotionEndsAt: promotion.promotionEndsAt,
+  };
   debugAiTradeStatus({
     serverNow: now.toISOString(),
     slot: tradeWindow.slot,
@@ -218,7 +259,8 @@ export async function getCopyTradeStatus(userId: string, now = new Date()) {
     dailyTradeLimit: limit,
     todaysCompletedTrades: completedToday,
     todaysRemainingTrades: remaining,
-    tradeRows: rows,
+    tradeRows: [...rows, promotionRow],
+    newDepositorPromotion: promotion,
     history: history.map(trade => serializeTrade(trade, now)),
     settlement,
   };
@@ -482,7 +524,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
 
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
-    const tradesToday = await tx.copyTrade.count({ where: { userId: input.userId, startedAt: { gte: dayStart } } });
+    const tradesToday = await tx.copyTrade.count({ where: { userId: input.userId, source: { not: NEW_DEPOSITOR_EXTRA_SOURCE }, startedAt: { gte: dayStart } } });
     const limit = dailyTradeLimit();
     if (tradesToday >= limit) throw new Error("Daily trade limit reached");
     if (user.aiWalletBalance.lte(0)) throw new Error("Please transfer funds to AI Wallet before starting copy trade.");
@@ -497,8 +539,18 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
 
     const dailyPercent = new Prisma.Decimal(getVipDailyIncomePercent(normalizedVipRank));
     const perTradePercent = dailyPercent.div(limit);
-    const pair = input.pair ? normalizeTradePair(input.pair) : await defaultTradePair(tx);
     const timeline = { windowStartAt: slotStart, windowCloseAt: slotEnd, completesAt: slotEnd, creditDueAt };
+    const pair = input.pair
+      ? normalizeTradePair(input.pair)
+      : isAiAutoTrade
+        ? normalizeTradePair((await getOrCreateTradeWindowSignal({
+            slotId: slot.id,
+            windowLabel: slot.label,
+            windowStartAt: timeline.windowStartAt,
+            windowCloseAt: timeline.windowCloseAt,
+            settlementDueAt: timeline.creditDueAt,
+          }, tx)).recommendedPair)
+        : await defaultTradePair(tx);
     const trade = await tx.copyTrade.create({
       data: {
         userId: input.userId,
@@ -551,7 +603,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
         type: "AI_AUTO_TRADE",
         title: "AI auto trade placed",
         message: AI_AUTO_TRADE_NOTIFICATION_MESSAGE,
-        metadata: { tradeId: trade.id, slotId: slot.id, slotOpenTime: slotStart.toISOString(), slotCloseTime: slotEnd.toISOString(), settlementTime: creditDueAt.toISOString(), idempotencyKey: input.idempotencyKey ?? null, tradeCode: null, selectedRow: row.label, vipRank: normalizedVipRank },
+        metadata: { tradeId: trade.id, pair: trade.pair, slotId: slot.id, slotOpenTime: slotStart.toISOString(), slotCloseTime: slotEnd.toISOString(), settlementTime: creditDueAt.toISOString(), idempotencyKey: input.idempotencyKey ?? null, tradeCode: null, selectedRow: row.label, vipRank: normalizedVipRank },
       });
     }
     return trade;
@@ -618,7 +670,7 @@ export async function debugAiAutoTradeForUser(input: { userId?: string; uid?: st
   const dayStart = new Date(now);
   dayStart.setUTCHours(0, 0, 0, 0);
   const [dailyTradesUsed, existingWindowTrade] = await Promise.all([
-    prisma.copyTrade.count({ where: { userId: user.id, startedAt: { gte: dayStart } } }),
+    prisma.copyTrade.count({ where: { userId: user.id, source: { not: NEW_DEPOSITOR_EXTRA_SOURCE }, startedAt: { gte: dayStart } } }),
     slot && slotStart && slotEnd
       ? prisma.copyTrade.findFirst({ where: { userId: user.id, slotId: slot.id, windowStartAt: slotStart, windowCloseAt: slotEnd }, select: { source: true } })
       : Promise.resolve(null),
@@ -714,7 +766,8 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
     const trade = await tx.copyTrade.findUniqueOrThrow({ where: { id: tradeId } });
     if (trade.status === "INCOME_CREDITED") return trade;
     if (!isSettleableTradeStatus(trade.status) || trade.creditDueAt > now) throw new Error("Trade income is not due");
-    const incomeBase = trade.principalAmount.div(COPY_TRADE_STAKE_RATE);
+    const promotion = trade.source === NEW_DEPOSITOR_EXTRA_SOURCE;
+    const incomeBase = promotion ? trade.principalAmount : trade.principalAmount.div(COPY_TRADE_STAKE_RATE);
     const profitAmount = incomeBase.mul(trade.returnPercent).div(100);
     const aiWalletCredit = trade.principalAmount.add(profitAmount);
     await ensureUserWalletAccounts(tx, trade.userId);
@@ -727,7 +780,7 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       referenceType: "COPY_TRADE_PRINCIPAL_RETURN",
       referenceId: trade.id,
       idempotencyKey: `copy-trade-principal-return:${trade.id}`,
-      memo: "AI Trade Principal Return",
+      memo: promotion ? "Extra Trade Principal Return" : "AI Trade Principal Return",
       occurredAt: now,
       lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: trade.principalAmount }, { accountId: aiWalletAccount.id, direction: "CREDIT", amount: trade.principalAmount }],
     });
@@ -735,17 +788,17 @@ export async function creditDueTradeIncome(tradeId: string, now = new Date()) {
       referenceType: "COPY_TRADE_INCOME",
       referenceId: trade.id,
       idempotencyKey: `copy-trade-profit:${trade.id}`,
-      memo: "AI Trade Profit",
+      memo: promotion ? "Extra Trade Profit" : "AI Trade Profit",
       occurredAt: now,
       lines: [{ accountId: revenueAccount.id, direction: "DEBIT", amount: profitAmount }, { accountId: aiWalletAccount.id, direction: "CREDIT", amount: profitAmount }],
     });
     await tx.income.create({ data: { userId: trade.userId, type: "COPY_TRADE", sourceType: "COPY_TRADE", sourceId: trade.id, amount: profitAmount, copyTradeId: trade.id, ledgerJournalId: profitJournal.id, createdAt: now } });
     await createNotification(tx, {
       userId: trade.userId,
-      type: "COPY_TRADE_INCOME",
-      title: "AI trade settled",
-      message: "AI trade settled: principal returned and profit credited.",
-      metadata: { tradeId: trade.id, principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: aiWalletCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id },
+      type: promotion ? "NEW_DEPOSITOR_EXTRA_TRADE" : "COPY_TRADE_INCOME",
+      title: promotion ? "Extra Trade Settled" : "AI trade settled",
+      message: promotion ? "Your principal has been returned and promotional profit has been credited." : "AI trade settled: principal returned and profit credited.",
+      metadata: { tradeId: trade.id, pair: trade.pair, promotionDay: trade.promotionDay, profitPercent: trade.returnPercent.toString(), principalReturned: trade.principalAmount.toString(), incomeAmount: profitAmount.toString(), totalCredit: aiWalletCredit.toString(), principalLedgerJournalId: principalJournal.id, profitLedgerJournalId: profitJournal.id },
     });
     const progress = await tx.user.update({
       where: { id: trade.userId },
@@ -788,7 +841,8 @@ async function defaultTradePair(tx: Prisma.TransactionClient) {
     orderBy: [{ displayOrder: "asc" }, { symbol: "asc" }],
     select: { pair: true, symbol: true },
   });
-  return normalizeTradePair(coin?.pair ?? coin?.symbol ?? "BTC");
+  if (!coin) throw new Error("No active trading pair is configured.");
+  return normalizeTradePair(coin.pair ?? coin.symbol);
 }
 
 async function findOpenTradeSlot(now: Date, client: Prisma.TransactionClient | typeof prisma = prisma) {
@@ -1104,9 +1158,13 @@ type CopyTradeStatusRecord = Prisma.CopyTradeGetPayload<{ select: typeof copyTra
 function serializeTrade(trade: CopyTradeStatusRecord, now: Date) {
   const amount = Number(trade.principalAmount.toString());
   const returnPercent = Number(trade.returnPercent.toString());
-  const profit = Number(((((amount / Number(COPY_TRADE_STAKE_RATE.toString())) * returnPercent) / 100)).toFixed(8));
+  const profitBase = trade.source === NEW_DEPOSITOR_EXTRA_SOURCE ? amount : amount / Number(COPY_TRADE_STAKE_RATE.toString());
+  const profit = Number(((profitBase * returnPercent) / 100).toFixed(8));
   return {
     id: trade.id,
+    pair: trade.pair,
+    source: trade.source,
+    promotionDay: trade.promotionDay,
     code: trade.code?.code ?? "",
     amount,
     returnPercent,

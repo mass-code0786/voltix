@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { AI_ACTIVE_PRINCIPAL_THRESHOLD, isAiWalletActive } from "@/lib/domain/user-activation";
 import { displayWalletName } from "@/lib/wallet-labels";
 import { displayVipRank } from "@/lib/domain/vip-rank-service";
+import { getNewDepositorPromotionStatuses } from "@/lib/domain/new-depositor-promotion";
 
 export async function getAdminOverview() {
   const [
@@ -62,18 +63,55 @@ export async function getAdminOverview() {
 
 export async function getAdminUsers() {
   const users = await prisma.user.findMany({ orderBy: { joinedAt: "desc" }, take: 100 });
-  const depositedUserIds = await creditedDepositUserIds(users.map(user => user.id));
+  const userIds = users.map(user => user.id);
+  const [depositedUserIds, promotions, promotionTrades] = await Promise.all([
+    creditedDepositUserIds(userIds),
+    getNewDepositorPromotionStatuses(userIds),
+    prisma.copyTrade.findMany({
+      where: { source: "NEW_DEPOSITOR_EXTRA" },
+      orderBy: { startedAt: "desc" },
+      take: 100,
+      include: { user: { select: { name: true, uid: true, email: true } } },
+    }),
+  ]);
   return {
-    rows: users.map(user => [
-      `${user.name} / ${user.email}`,
-      user.uid,
-      displayVipRank(user, depositedUserIds.has(user.id)),
-      money(user.spotBalance),
-      money(user.futuresBalance),
-      money(user.aiWalletBalance),
-      `${money(user.aiTradeProfitEarned)} / ${money(user.aiTradePrincipal.mul("0.60"))}`,
-      isAiWalletActive(user) ? "AI Active" : "Inactive",
-    ]),
+    rows: users.map(user => {
+      const promotion = promotions.get(user.id);
+      return [
+        `${user.name} / ${user.email}`,
+        user.uid,
+        displayVipRank(user, depositedUserIds.has(user.id)),
+        money(user.spotBalance),
+        money(user.futuresBalance),
+        money(user.aiWalletBalance),
+        `${money(user.aiTradeProfitEarned)} / ${money(user.aiTradePrincipal.mul("0.60"))}`,
+        isAiWalletActive(user) ? "AI Active" : "Inactive",
+        promotion ? `${promotion.state} · ${promotion.extraTradesUsed}/10 used` : "Not Eligible",
+      ];
+    }),
+    users: users.map(user => ({
+      id: user.id,
+      uid: user.uid,
+      name: user.name,
+      email: user.email,
+      newDepositorPromotion: promotions.get(user.id) ?? null,
+    })),
+    promotionTrades: promotionTrades.map(trade => ({
+      id: trade.id,
+      userId: trade.userId,
+      user: `${trade.user.name} / ${trade.user.uid}`,
+      email: trade.user.email,
+      promotionDay: trade.promotionDay,
+      pair: trade.pair,
+      amount: decimalToNumber(trade.principalAmount),
+      profitPercent: decimalToNumber(trade.returnPercent),
+      status: trade.status,
+      failureReason: trade.failureReason,
+      failed: trade.status === "FAILED" || Boolean(trade.failureReason),
+      awaitingRetry: trade.status === "FAILED" || (!trade.incomeCreditedAt && trade.creditDueAt <= new Date()),
+      windowStartAt: trade.windowStartAt?.toISOString() ?? null,
+      settlementDueAt: trade.creditDueAt.toISOString(),
+    })),
   };
 }
 

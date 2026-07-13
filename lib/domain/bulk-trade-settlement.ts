@@ -289,7 +289,11 @@ async function settleWindowBatch(window: DueWindow, tradeIds: string[], settledA
         t.id,
         t."userId",
         t."principalAmount",
-        (t."principalAmount" * t."returnPercent")::decimal(36,18) AS profit,
+        (CASE WHEN t.source = 'NEW_DEPOSITOR_EXTRA'
+          THEN t."principalAmount" * t."returnPercent" / 100
+          ELSE t."principalAmount" * t."returnPercent"
+        END)::decimal(36,18) AS profit,
+        t.source,
         ai.id AS "aiAccountId",
         fee.id AS "feeAccountId"
       FROM "CopyTrade" t
@@ -307,14 +311,18 @@ async function settleWindowBatch(window: DueWindow, tradeIds: string[], settledA
     ), principal_journals AS (
       INSERT INTO "LedgerJournal" (id, "referenceType", "referenceId", "idempotencyKey", memo, status, "postedAt", "createdAt")
       SELECT gen_random_uuid()::text, 'COPY_TRADE_PRINCIPAL_RETURN', e.id,
-        'principal-return:' || e.id, 'AI Trade Principal Return', 'POSTED'::"JournalStatus", ${settledAt}, ${settledAt}
+        'principal-return:' || e.id,
+        CASE WHEN e.source = 'NEW_DEPOSITOR_EXTRA' THEN 'Extra Trade Principal Return' ELSE 'AI Trade Principal Return' END,
+        'POSTED'::"JournalStatus", ${settledAt}, ${settledAt}
       FROM eligible e
       ON CONFLICT ("referenceType", "referenceId") DO NOTHING
       RETURNING id, "referenceId"
     ), profit_journals AS (
       INSERT INTO "LedgerJournal" (id, "referenceType", "referenceId", "idempotencyKey", memo, status, "postedAt", "createdAt")
       SELECT gen_random_uuid()::text, 'COPY_TRADE_INCOME', e.id,
-        'profit-credit:' || e.id, 'AI Trade Profit', 'POSTED'::"JournalStatus", ${settledAt}, ${settledAt}
+        'profit-credit:' || e.id,
+        CASE WHEN e.source = 'NEW_DEPOSITOR_EXTRA' THEN 'Extra Trade Profit' ELSE 'AI Trade Profit' END,
+        'POSTED'::"JournalStatus", ${settledAt}, ${settledAt}
       FROM eligible e
       ON CONFLICT ("referenceType", "referenceId") DO NOTHING
       RETURNING id, "referenceId"
@@ -386,7 +394,7 @@ async function syncMissingSettlementNotifications(limit: number, createdAt: Date
   ` : Prisma.empty;
   return prisma.$executeRaw(Prisma.sql`
     WITH missing AS (
-      SELECT t.id, t."userId", t."principalAmount", t."incomeAmount"
+      SELECT t.id, t."userId", t."principalAmount", t."incomeAmount", t.source, t.pair, t."returnPercent", t."promotionDay", t."creditDueAt"
       FROM "CopyTrade" t
       WHERE t.status = 'INCOME_CREDITED'::"TradeStatus"
         AND t."incomeCreditedAt" IS NOT NULL
@@ -398,9 +406,21 @@ async function syncMissingSettlementNotifications(limit: number, createdAt: Date
       LIMIT ${limit}
     )
     INSERT INTO "Notification" (id, "userId", type, title, message, metadata, "settlementKey", "createdAt")
-    SELECT gen_random_uuid()::text, m."userId", 'COPY_TRADE_INCOME'::"NotificationType",
-      'AI trade settled', 'AI trade settled: principal returned and profit credited.',
-      jsonb_build_object('tradeId', m.id, 'principalReturned', m."principalAmount"::text, 'incomeAmount', m."incomeAmount"::text),
+    SELECT gen_random_uuid()::text, m."userId",
+      CASE WHEN m.source = 'NEW_DEPOSITOR_EXTRA' THEN 'NEW_DEPOSITOR_EXTRA_TRADE'::"NotificationType" ELSE 'COPY_TRADE_INCOME'::"NotificationType" END,
+      CASE WHEN m.source = 'NEW_DEPOSITOR_EXTRA' THEN 'Extra Trade Settled' ELSE 'AI trade settled' END,
+      CASE WHEN m.source = 'NEW_DEPOSITOR_EXTRA'
+        THEN 'Your principal has been returned and promotional profit has been credited.'
+        ELSE 'AI trade settled: principal returned and profit credited.' END,
+      jsonb_build_object(
+        'tradeId', m.id,
+        'pair', CASE WHEN m.pair IS NULL THEN NULL ELSE regexp_replace(m.pair, 'USDT$', '/USDT') END,
+        'principalReturned', m."principalAmount"::text,
+        'incomeAmount', m."incomeAmount"::text,
+        'profitPercent', m."returnPercent"::text,
+        'promotionDay', m."promotionDay",
+        'settlementDueAt', m."creditDueAt"
+      ),
       'settlement:' || m.id, ${createdAt}
     FROM missing m
     ON CONFLICT ("settlementKey") DO NOTHING

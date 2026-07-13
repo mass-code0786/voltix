@@ -22,6 +22,7 @@ export async function GET() {
     prisma.income.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100 }),
     prisma.copyTrade.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100, include: { slot: { select: { label: true } } } }),
   ]);
+  const tradesById = new Map(trades.map(trade => [trade.id, trade]));
   const primaryReferences = new Set<string>();
   const historyRows = [
     ...deposits.map(row => ({
@@ -88,7 +89,9 @@ export async function GET() {
         sortAt: row.createdAt.toISOString(),
       };
     }),
-    ...incomes.map(row => ({
+    ...incomes.map(row => {
+      const trade = copyTradeIncomeTypes.has(row.type) ? tradesById.get(row.sourceId) : undefined;
+      return ({
       id: row.id,
       type: "INCOME",
       walletType: displayWalletName(copyTradeIncomeTypes.has(row.type) ? "AI" : "SPOT"),
@@ -96,14 +99,18 @@ export async function GET() {
       direction: "CREDIT",
       amount: Number(row.amount.toString()),
       signedAmount: Number(row.amount.toString()),
-      title: incomeTitle(row.type),
+      title: trade?.source === "NEW_DEPOSITOR_EXTRA" ? "Extra Trade Profit" : incomeTitle(row.type),
       referenceType: copyTradeIncomeTypes.has(row.type) ? "COPY_TRADE_INCOME" : row.sourceType,
       referenceId: row.sourceId,
       tradeId: copyTradeIncomeTypes.has(row.type) ? row.sourceId : undefined,
+      pair: trade ? displayTradePair(trade.pair) : undefined,
+      window: trade?.slot.label,
+      promotionDay: trade?.promotionDay,
       status: "Completed",
       createdAt: row.createdAt.toISOString(),
       sortAt: row.createdAt.toISOString(),
-    })),
+      });
+    }),
     ...trades.map(row => ({
       id: row.id,
       type: "COPY_TRADE",
@@ -117,10 +124,11 @@ export async function GET() {
       referenceType: "COPY_TRADE_PLACEMENT",
       referenceId: row.id,
       tradeId: row.id,
-      tradeType: row.source === "MANUAL" ? "MANUAL" : "AI",
+      tradeType: row.source === "MANUAL" ? "MANUAL" : row.source === "NEW_DEPOSITOR_EXTRA" ? "PROMOTION" : "AI",
       pair: displayTradePair(row.pair),
       tradeAmount: Number(row.principalAmount.toString()),
       window: row.slot.label,
+      promotionDay: row.promotionDay,
       placedAt: row.startedAt.toISOString(),
       settledAt: row.incomeCreditedAt?.toISOString() ?? null,
       status: row.status === "FAILED" ? "Failed" : row.incomeCreditedAt ? "Completed" : "Running",
@@ -135,10 +143,13 @@ export async function GET() {
       direction: "CREDIT" as const,
       amount: Number(row.principalAmount.toString()),
       signedAmount: Number(row.principalAmount.toString()),
-      title: "AI Trade Principal Return",
+      title: row.source === "NEW_DEPOSITOR_EXTRA" ? "Extra Trade Principal Return" : "AI Trade Principal Return",
       referenceType: "COPY_TRADE_PRINCIPAL_RETURN",
       referenceId: row.id,
       tradeId: row.id,
+      pair: displayTradePair(row.pair),
+      window: row.slot.label,
+      promotionDay: row.promotionDay,
       status: "Completed",
       createdAt: row.incomeCreditedAt!.toISOString(),
       sortAt: row.incomeCreditedAt!.toISOString(),

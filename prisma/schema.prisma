@@ -128,6 +128,7 @@ enum NotificationType {
   REFERRAL_INCOME
   AI_SUBSCRIPTION_PURCHASE
   AI_AUTO_TRADE
+  NEW_DEPOSITOR_EXTRA_TRADE
   P2P_TRANSFER
   KYC_STATUS
   ADMIN_TRADE_CODE
@@ -655,6 +656,7 @@ model CopyTrade {
   slot             TradeSlot   @relation(fields: [slotId], references: [id])
   source           String      @default("MANUAL")
   pair             String?
+  promotionDay     Int?
   idempotencyKey   String?     @unique
   principalAmount  Decimal     @db.Decimal(36, 18)
   returnPercent    Decimal     @db.Decimal(10, 6)
@@ -679,6 +681,7 @@ model CopyTrade {
   @@index([slotId, windowStartAt, creditDueAt, status])
   @@index([codeId])
   @@index([source, startedAt])
+  @@index([source, promotionDay, status])
 }
 
 model TradeWindowSettlement {

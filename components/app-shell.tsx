@@ -42,6 +42,7 @@ import { displayWalletName } from "@/lib/wallet-labels";
 import { TransactionPinInput } from "./transaction-pin-input";
 import { clearMobileNativeSession, hapticNotification, nativeShareReferral, requestMobileTransactionToken } from "@/lib/mobile-native";
 import { VerificationRequiredDialog } from "@/components/verification-required-dialog";
+import { promotionNotificationDetails } from "@/lib/notification-display";
 
 type Tab = "home" | "markets" | "trade" | "aiTrade" | "team" | "wallet";
 type MobileNavTab = Tab | "profile";
@@ -55,10 +56,10 @@ type WithdrawalInput = { walletType: "SPOT" | "AI"; amount: number; address: str
 type WithdrawalResult = { ok: boolean; message: string; requiresConfirmation?: boolean; breakdown?: EarlyWithdrawalBreakdown };
 type DepositInput = { amount: number; network: string; payCurrency: string };
 type DepositResult = { id: string; amount: number; asset: string; network: string; networkName: string; providerPaymentId: string | null; providerInvoiceId: string | null; providerPaymentUrl: string | null; payCurrency: string | null; payAddress: string | null; paymentStatus: string | null; actuallyPaid: number | null; outcomeAmount: number | null; status: string; createdAt: string };
-type ActiveCopyTrade = { id?: string; code?: string; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string; creditDueAt?: string };
+type ActiveCopyTrade = { id?: string; code?: string; pair?: string | null; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string; creditDueAt?: string };
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
 type CopyTradeCounts = { todaysTradeCount: number; dailyTradeLimit: number };
-type VipTradeRow = { id: string; label: string; vipRange?: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; dailyReturnMin?: number; dailyReturnMax?: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "UPCOMING" | "LIVE" | "CLOSED"; openTime?: string; closeTime?: string; windowStartAt?: string; windowCloseAt?: string; timezone?: string; secondsUntilOpen?: number; secondsUntilClose?: number; canTrade?: boolean; canTradeWhenLive?: boolean; reason?: string | null; message?: string | null };
+type VipTradeRow = { id: string; kind?: "PROMOTION"; label: string; vipRange?: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; dailyReturnMin?: number; dailyReturnMax?: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "UPCOMING" | "LIVE" | "CLOSED"; openTime?: string; closeTime?: string; windowStartAt?: string | null; windowCloseAt?: string | null; timezone?: string | null; secondsUntilOpen?: number; secondsUntilClose?: number; canTrade?: boolean; canTradeWhenLive?: boolean; reason?: string | null; message?: string | null; promotionState?: "DEPOSIT_TO_UNLOCK" | "UPCOMING" | "LIVE" | "TRADE_PLACED" | "COMPLETED" | "PROMOTION_COMPLETED" | "NOT_ELIGIBLE" | "INSUFFICIENT_BALANCE"; promotionDay?: number | null; totalPromotionDays?: number; extraTradesUsed?: number; extraTradesRemaining?: number; nextExtraTradeAt?: string | null; promotionEndsAt?: string | null };
 type AppCoin = Coin;
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath"|"logoUrl">> & { localLogoPath?: string | null; logoUrl?: string | null };
@@ -140,12 +141,13 @@ type WalletHistoryRecord = {
   type?: string;
   source?: string;
   tradeId?: string;
-  tradeType?: "MANUAL" | "AI";
+  tradeType?: "MANUAL" | "AI" | "PROMOTION";
   pair?: string;
   tradeAmount?: number;
   window?: string;
   placedAt?: string;
   settledAt?: string | null;
+  promotionDay?: number | null;
 };
 type TeamMember = {
   id: string;
@@ -337,6 +339,7 @@ function mapLedgerHistory(rows: WalletHistoryRecord[]): WalletActivity[] {
   return rows.map(row => {
     const display=getLedgerDisplay(row);
     const placement = row.type === "COPY_TRADE_PLACEMENT";
+    const tradeLinked = Boolean(row.tradeId && row.pair);
     return {
       icon: row.direction === "CREDIT" ? ArrowDownLeft : ArrowUpRight,
       title: display.title || `${row.walletType} movement`,
@@ -346,8 +349,13 @@ function mapLedgerHistory(rows: WalletHistoryRecord[]): WalletActivity[] {
       details: placement ? [
         `Pair: ${row.pair || "Pair unavailable"}`,
         `Trade Amount: ${Number(row.tradeAmount ?? row.amount).toFixed(2)} ${row.asset}`,
-        row.tradeType === "AI" ? "AI Subscription" : row.window || "Window unavailable",
+        row.tradeType === "AI" ? "AI Subscription" : row.tradeType === "PROMOTION" ? "New Depositor Promotion" : row.window || "Window unavailable",
+        ...(row.tradeType === "PROMOTION" && row.promotionDay ? [`Promotion Day: ${row.promotionDay} of 10`] : []),
         ...(row.tradeType === "AI" && row.window ? [row.window] : []),
+      ] : tradeLinked ? [
+        `Pair: ${row.pair}`,
+        ...(row.promotionDay ? [`Promotion Day: ${row.promotionDay} of 10`] : []),
+        ...(row.window ? [row.window] : []),
       ] : [],
     };
   });
@@ -1074,6 +1082,7 @@ function normalizeTrade(raw: ActiveCopyTrade & { startedAt?: string; remainingTi
   return {
     id: raw.id,
     code: raw.code ?? "",
+    pair: raw.pair,
     rowLabel: raw.rowLabel,
     amount: Number(raw.amount ?? 0),
     returnPercent: Number(raw.returnPercent ?? 0),
@@ -1086,7 +1095,7 @@ function normalizeTrade(raw: ActiveCopyTrade & { startedAt?: string; remainingTi
 }
 
 function NotificationMenu({ close, notifications, unreadCount, markRead }: { close: () => void; notifications: NotificationItem[]; unreadCount: number; markRead: () => void }) {
-  return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => { const target=notificationTarget(notification); return <div key={notification.id} onClick={()=>{if(target){close();window.location.href=target;}}} className={`rounded-xl p-3 ${target?"cursor-pointer":""} ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p><p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div></div></div>}) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
+  return <><button aria-label="Close notifications" onClick={close} className="fixed inset-0 z-30 bg-black/30" /><div className="fixed right-4 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-[#111c18] shadow-2xl"><div className="flex items-center justify-between border-b border-line p-4"><div><p className="font-bold">Notifications</p><p className="mt-1 text-[10px] text-slate-500">{unreadCount ? `${unreadCount} unread` : "All caught up"}</p></div>{unreadCount > 0 && <button onClick={markRead} className="rounded-lg border border-line px-3 py-1.5 text-[10px] font-bold text-lime hover:bg-white/5">Mark read</button>}</div><div className="max-h-[60vh] overflow-y-auto p-2">{notifications.length ? notifications.map(notification => { const target=notificationTarget(notification); const details=promotionNotificationDetails(notification.metadata); return <div key={notification.id} onClick={()=>{if(target){close();window.location.href=target;}}} className={`rounded-xl p-3 ${target?"cursor-pointer":""} ${notification.unread ? "bg-lime/[.06]" : "hover:bg-white/[.03]"}`}><div className="flex items-start gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${notification.unread ? "bg-lime" : "bg-slate-700"}`} /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{notification.message}</p>{details.length>0&&<div className="mt-2 space-y-0.5 text-[10px] text-slate-500">{details.map(detail=><p key={detail}>{detail}</p>)}</div>}<p className="mt-2 text-[10px] text-slate-600">{new Date(notification.createdAt).toLocaleString()}</p></div></div></div>}) : <p className="p-8 text-center text-xs text-slate-500">No records available</p>}</div></div></>;
 }
 
 function notificationTarget(notification: NotificationItem) {
@@ -1396,6 +1405,7 @@ function VipTradeRowsCard({ rows, onTradePlaced }: { rows: VipTradeRow[]; onTrad
   const nextTime=nextRow ? readableTradeTime(nextRow) : "";
   const start=(row:VipTradeRow)=>{
     setError("");
+    if(row.kind==="PROMOTION")return;
     if(!isTradeButtonEnabled(row,nowTick)){setError(row.reason || row.message || "Trade not available.");return;}
     if(!row.eligible){setError(row.message || "You are not eligible for this trade.");return;}
     setWizardOpen(true);
@@ -1422,6 +1432,7 @@ function vipAccent(row: VipTradeRow) {
 }
 
 function VipTradeRowItem({ row, tick, start }: { row: VipTradeRow; tick: number; start: () => void }) {
+  if(row.kind==="PROMOTION")return <ExtraTradeRowItem row={row} tick={tick}/>;
   const accent=vipAccent(row);
   const status=localTradeStatus(row,tick);
   const label=displayVipLabel(row.vipRange??row.label);
@@ -1439,6 +1450,21 @@ function VipTradeRowItem({ row, tick, start }: { row: VipTradeRow; tick: number;
       <p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{countdown || (!tradeEnabled&&status==="LIVE"?actionLabel:`${(row.dailyReturnMin??row.dailyPercentMin).toFixed(1)}% - ${(row.dailyReturnMax??row.dailyPercentMax).toFixed(1)}% Daily Return`)}</p>
     </div>
     <button onClick={start} disabled={!tradeEnabled} className="h-8 w-[96px] shrink-0 rounded-[10px] px-1 text-[9px] font-black leading-tight text-[#050807] disabled:opacity-50" style={{background:accent,boxShadow:`0 0 18px ${accent}2e`}}>{actionLabel}</button>
+  </div>;
+}
+
+function ExtraTradeRowItem({row,tick}:{row:VipTradeRow;tick:number}){
+  const accent="#18ff8a";
+  const state=row.promotionState??"NOT_ELIGIBLE";
+  const day=row.promotionDay?`Day ${row.promotionDay} of ${row.totalPromotionDays??10}`:"";
+  const countdown=tradeCountdownLabel(row,tick);
+  const localTime=readableTradeTime(row);
+  const labels:Record<NonNullable<VipTradeRow["promotionState"]>,string>={DEPOSIT_TO_UNLOCK:"Deposit to Unlock",UPCOMING:"Upcoming",LIVE:"Live",TRADE_PLACED:"Trade Placed",COMPLETED:"Completed",PROMOTION_COMPLETED:"Promotion Completed",NOT_ELIGIBLE:"Not Eligible",INSUFFICIENT_BALANCE:"Balance Required"};
+  const subtitle=[day,localTime,state==="UPCOMING"&&countdown?countdown:state==="LIVE"?"Trade in progress":state==="TRADE_PLACED"?"Promotional trade running":state==="COMPLETED"?"Principal and profit credited":state==="DEPOSIT_TO_UNLOCK"?"Complete your first successful deposit":state==="INSUFFICIENT_BALANCE"?"Fund and activate your AI Wallet":""].filter(Boolean).join(" · ");
+  return <div className="vip-row flex h-[52px] items-center gap-1.5 rounded-[13px] px-2 py-1" style={{"--vip-accent":accent} as CSSProperties}>
+    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-lime text-[7px] font-black text-[#050807] shadow-[0_0_18px_rgba(24,255,138,.2)]">EXTRA</div>
+    <div className="min-w-0 flex-1"><div className="flex min-w-0 items-center gap-1.5"><p className="shrink-0 whitespace-nowrap text-[12px] font-black leading-none text-white">Extra Trade</p><span className="flex h-[18px] shrink-0 items-center rounded-full border border-lime/20 bg-lime/[.08] px-1.5 text-[8px] font-black text-lime">{labels[state]}</span></div><p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{subtitle||labels[state]}</p></div>
+    <button type="button" disabled className="h-8 w-[96px] shrink-0 rounded-[10px] border border-lime/20 bg-lime/[.08] px-1 text-[8px] font-black leading-tight text-lime opacity-80">{labels[state]}</button>
   </div>;
 }
 
@@ -1487,7 +1513,8 @@ function MarketPulseCoinCard({ coin, localCurrency }: { coin: MarketCoin; localC
 }
 function TradeActiveCard({ t = getTranslator("en"), onClick, trade, previewAmount }: { t?: ReturnType<typeof getTranslator>; onClick: () => void; trade: ActiveCopyTrade | null; previewAmount: number }) {
   const amount=trade?.amount??previewAmount;
-  return <button onClick={onClick} className="glass-panel card-3d relative w-full overflow-hidden rounded-[28px] p-5 text-left"><div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-lime/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="pulse-ring grid h-12 w-12 place-items-center rounded-2xl bg-lime text-ink"><Zap size={22} fill="currentColor" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="font-black">Trade Active</h3><StatusBadge>{trade?"Live":"Ready"}</StatusBadge></div><p className="mt-1 text-xs text-slate-400">BTC/USDT - Copy Trade Income</p></div><ChevronRight className="text-slate-500" /></div><div className="relative mt-4 grid grid-cols-2 gap-3"><div><p className="text-[10px] font-bold uppercase text-slate-500">Trade amount</p><p className="mt-1 text-lg font-black text-white">${amount.toFixed(2)}</p></div><div className="text-right"><p className="text-[10px] font-bold uppercase text-slate-500">Remaining</p><p className="mt-1 text-xl font-black text-lime">{trade?formatRemaining(trade.remainingTime??0):"--:--"}</p></div></div><div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-black/30"><div className={`h-full rounded-full bg-lime green-glow ${trade?"w-[38%]":"w-[8%]"}`} /></div></button>;
+  const pair=trade?.pair?trade.pair.toUpperCase().replace("USDT","/USDT"):"Pair unavailable";
+  return <button onClick={onClick} className="glass-panel card-3d relative w-full overflow-hidden rounded-[28px] p-5 text-left"><div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-lime/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="pulse-ring grid h-12 w-12 place-items-center rounded-2xl bg-lime text-ink"><Zap size={22} fill="currentColor" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="font-black">Trade Active</h3><StatusBadge>{trade?"Live":"Ready"}</StatusBadge></div><p className="mt-1 text-xs text-slate-400">{pair} - Copy Trade Income</p></div><ChevronRight className="text-slate-500" /></div><div className="relative mt-4 grid grid-cols-2 gap-3"><div><p className="text-[10px] font-bold uppercase text-slate-500">Trade amount</p><p className="mt-1 text-lg font-black text-white">${amount.toFixed(2)}</p></div><div className="text-right"><p className="text-[10px] font-bold uppercase text-slate-500">Remaining</p><p className="mt-1 text-xl font-black text-lime">{trade?formatRemaining(trade.remainingTime??0):"--:--"}</p></div></div><div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-black/30"><div className={`h-full rounded-full bg-lime green-glow ${trade?"w-[38%]":"w-[8%]"}`} /></div></button>;
 }
 
 function formatRemaining(seconds:number) {
@@ -1875,7 +1902,7 @@ function AiCopyTradePage({currentUser,subscription,activeTrade: _activeTrade,aiW
     </section>
     <AiTopStats balance={aiWalletBalance} todayIncome={todayIncome} currentTrades={currentTrades} allowedTrades={allowedTrades} active={active}/>
     <AiTradeOverviewCard/>
-    <VipTradeRowsCard rows={tradeRows.slice(0,5)} onTradePlaced={onManualTradePlaced}/>
+    <VipTradeRowsCard rows={tradeRows.slice(0,6)} onTradePlaced={onManualTradePlaced}/>
     <TopCopyTraders/>
     <AiInfoStrip/>
     <AiSubscriptionPanel currentUser={currentUser} status={subscription} purchaseAi={purchaseAi} openLogin={openLogin} notify={notify}/>

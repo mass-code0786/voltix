@@ -120,8 +120,9 @@ export async function getUserWalletHistory(userId: string) {
       journal: true,
     },
   }) : [];
+  const tradesById = new Map(trades.map(trade => [trade.id, trade]));
   const history = [
-    ...entries.map(formatLedgerEntry),
+    ...entries.map(entry => formatLedgerEntry(entry, entry.journal.referenceType.startsWith("COPY_TRADE") ? tradesById.get(entry.journal.referenceId) : undefined)),
     ...trades.map(formatTradePlacement),
   ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
     || walletEventOrder(b.referenceType) - walletEventOrder(a.referenceType)
@@ -140,6 +141,7 @@ function formatTradePlacement(trade: {
   id: string;
   source: string;
   pair: string | null;
+  promotionDay: number | null;
   principalAmount: Prisma.Decimal;
   status: string;
   startedAt: Date;
@@ -148,6 +150,7 @@ function formatTradePlacement(trade: {
   slot: { label: string };
 }) {
   const manual = trade.source === "MANUAL";
+  const promotion = trade.source === "NEW_DEPOSITOR_EXTRA";
   const status = trade.status === "FAILED" ? "Failed" : trade.incomeCreditedAt ? "Completed" : "Running";
   return {
     id: `${trade.id}:placed`,
@@ -158,15 +161,16 @@ function formatTradePlacement(trade: {
     direction: "DEBIT" as const,
     amount: decimalToNumber(trade.principalAmount),
     signedAmount: decimalToNumber(trade.principalAmount.neg()),
-    title: manual ? "Manual Trade Placed" : "AI Trade Placed",
+    title: manual ? "Manual Trade Placed" : promotion ? "Extra Trade Placed" : "AI Trade Placed",
     source: trade.source,
     referenceType: "COPY_TRADE_PLACEMENT",
     referenceId: trade.id,
     status,
-    tradeType: manual ? "MANUAL" : "AI",
+    tradeType: manual ? "MANUAL" : promotion ? "PROMOTION" : "AI",
     pair: displayTradePair(trade.pair),
     tradeAmount: decimalToNumber(trade.principalAmount),
     window: trade.slot.label,
+    promotionDay: trade.promotionDay,
     placedAt: trade.startedAt.toISOString(),
     settledAt: trade.incomeCreditedAt?.toISOString() ?? null,
     failureReason: trade.failureReason,
@@ -187,7 +191,7 @@ function formatLedgerEntry(entry: {
   createdAt: Date;
   account: { type: WalletType; asset: { symbol: string } };
   journal: { id: string; referenceType: string; referenceId: string; memo: string; status: string; postedAt: Date | null };
-}) {
+}, trade?: { pair: string | null; slot: { label: string } }) {
   return {
     id: entry.id,
     journalId: entry.journal.id,
@@ -200,6 +204,8 @@ function formatLedgerEntry(entry: {
     referenceType: entry.journal.referenceType,
     referenceId: entry.journal.referenceId,
     tradeId: entry.journal.referenceType.startsWith("COPY_TRADE") ? entry.journal.referenceId : undefined,
+    pair: trade ? displayTradePair(trade.pair) : undefined,
+    window: trade?.slot.label,
     status: entry.journal.status,
     createdAt: (entry.journal.postedAt ?? entry.createdAt).toISOString(),
   };
