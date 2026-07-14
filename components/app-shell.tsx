@@ -1488,11 +1488,10 @@ function ExtraTradeRowItem({row,tick}:{row:VipTradeRow;tick:number}){
   const state=row.promotionState??"NOT_ELIGIBLE";
   const day=row.promotionDay?`Day ${row.promotionDay} of ${row.totalPromotionDays??10}`:"";
   const countdown=tradeCountdownLabel(row,tick);
-  const localTime=readableTradeTime(row);
   const labels:Record<NonNullable<VipTradeRow["promotionState"]>,string>={DEPOSIT_TO_UNLOCK:"Deposit to Unlock",UPCOMING:"Upcoming",LIVE:"Live",TRADE_PLACED:"Trade Placed",COMPLETED:"Completed",PROMOTION_COMPLETED:"Promotion Completed",NOT_ELIGIBLE:"Not Eligible",INSUFFICIENT_BALANCE:"Balance Required"};
-  const subtitle=[day,localTime,state==="UPCOMING"&&countdown?countdown:state==="LIVE"?"Trade in progress":state==="TRADE_PLACED"?"Promotional trade running":state==="COMPLETED"?"Principal and profit credited":state==="DEPOSIT_TO_UNLOCK"?"Complete your first successful deposit":state==="INSUFFICIENT_BALANCE"?"Fund and activate your AI Wallet":""].filter(Boolean).join(" · ");
+  const subtitle=[day,state==="UPCOMING"&&countdown?countdown:state==="LIVE"?"Trade in progress":state==="TRADE_PLACED"?"Promotional trade running":state==="COMPLETED"?"Principal and profit credited":state==="DEPOSIT_TO_UNLOCK"?"Complete your first successful deposit":state==="INSUFFICIENT_BALANCE"?"Fund and activate your AI Wallet":""].filter(Boolean).join(" · ");
   return <div className="vip-row flex h-[52px] items-center gap-1.5 rounded-[13px] px-2 py-1" style={{"--vip-accent":accent} as CSSProperties}>
-    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-lime text-[7px] font-black text-[#050807] shadow-[0_0_18px_rgba(24,255,138,.2)]">EXTRA</div>
+    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-lime text-[7px] font-black text-[#050807] shadow-[0_0_18px_rgba(24,255,138,.2)]">AT</div>
     <div className="min-w-0 flex-1"><div className="flex min-w-0 items-center gap-1.5"><p className="shrink-0 whitespace-nowrap text-[12px] font-black leading-none text-white">Additional Trade</p><span className="flex h-[18px] shrink-0 items-center rounded-full border border-lime/20 bg-lime/[.08] px-1.5 text-[8px] font-black text-lime">{labels[state]}</span></div><p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{subtitle||labels[state]}</p></div>
     <button type="button" disabled className="h-8 w-[96px] shrink-0 rounded-[10px] border border-lime/20 bg-lime/[.08] px-1 text-[8px] font-black leading-tight text-lime opacity-80">{labels[state]}</button>
   </div>;
