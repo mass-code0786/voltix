@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { formatLedgerStatus } from "@/lib/format-ledger-status";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserWalletHistory } from "@/lib/domain/asset-service";
@@ -8,11 +8,18 @@ import { tradePlacementTitle } from "@/lib/ledger-display";
 
 const emptyHistory = { authenticated: false, assets: [], totals: {}, history: [] };
 const copyTradeIncomeTypes = new Set(["COPY_TRADE"]);
-const referralIncomeTypes = new Set(["DIRECT", "LEVEL", "BOT_COMMISSION"]);
+const referralIncomeTypes = new Set(["DIRECT", "BOT_COMMISSION"]);
+const walletHistoryCategories = ["ALL", "DEPOSITS", "TRANSFERS", "WITHDRAWALS", "REFERRAL_INCOME", "LEVEL_INCOME", "VIP_INCOME"] as const;
+type WalletHistoryCategory = typeof walletHistoryCategories[number];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json(emptyHistory, { status: 401 });
+  const requestedCategory = request.nextUrl.searchParams.get("category")?.toUpperCase() ?? "ALL";
+  if (!walletHistoryCategories.includes(requestedCategory as WalletHistoryCategory)) {
+    return NextResponse.json({ error: "Invalid wallet history category" }, { status: 400 });
+  }
+  const category = requestedCategory as WalletHistoryCategory;
   const [{ history: ledger }, deposits, withdrawals, transfers, p2pTransfers, incomes, trades] = await Promise.all([
     getUserWalletHistory(user.id),
     prisma.deposit.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100, include: { asset: true, network: true } }),
@@ -23,6 +30,7 @@ export async function GET() {
     prisma.copyTrade.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100, include: { slot: { select: { label: true } } } }),
   ]);
   const tradesById = new Map(trades.map(trade => [trade.id, trade]));
+  const incomeJournalIds = new Set(incomes.flatMap(income => income.ledgerJournalId ? [income.ledgerJournalId] : []));
   const primaryReferences = new Set<string>();
   const historyRows = [
     ...deposits.map(row => ({
@@ -100,6 +108,7 @@ export async function GET() {
       amount: Number(row.amount.toString()),
       signedAmount: Number(row.amount.toString()),
       title: trade?.source === "NEW_DEPOSITOR_EXTRA" ? "Additional Trade Profit" : incomeTitle(row.type),
+      incomeType: row.type,
       referenceType: copyTradeIncomeTypes.has(row.type) ? "COPY_TRADE_INCOME" : row.sourceType,
       referenceId: row.sourceId,
       tradeId: copyTradeIncomeTypes.has(row.type) ? row.sourceId : undefined,
@@ -162,6 +171,7 @@ export async function GET() {
 
   const fallbackLedger = ledger
     .filter(row => row.referenceType !== "COPY_TRADE_INCOME")
+    .filter(row => category === "ALL" || !("journalId" in row && incomeJournalIds.has(row.journalId)))
     .filter(row => !primaryReferences.has(referenceKey(row.referenceType, row.referenceId)))
     .map(row => ({
       ...row,
@@ -172,12 +182,23 @@ export async function GET() {
     }));
 
   const history = [...historyRows, ...fallbackLedger]
+    .filter(row => category === "ALL" || walletHistoryCategory(row) === category)
     .sort((a, b) => Date.parse(b.sortAt) - Date.parse(a.sortAt)
       || walletEventOrder(b.referenceType) - walletEventOrder(a.referenceType)
       || b.id.localeCompare(a.id))
     .slice(0, 150)
     .map(({ sortAt: _sortAt, ...row }) => row);
   return NextResponse.json({ authenticated: true, assets: [], totals: {}, history });
+}
+
+function walletHistoryCategory(row: { type: string; referenceType: string; incomeType?: string }) : Exclude<WalletHistoryCategory, "ALL"> | "OTHER" {
+  if (row.incomeType === "DIRECT" || row.incomeType === "BOT_COMMISSION") return "REFERRAL_INCOME";
+  if (row.incomeType === "LEVEL") return "LEVEL_INCOME";
+  if (row.incomeType === "VIP_SALARY" || row.referenceType === "VIP_SALARY" || row.referenceType === "VIP_ACHIEVEMENT_REWARD") return "VIP_INCOME";
+  if (row.type === "DEPOSIT" || row.referenceType.includes("DEPOSIT")) return "DEPOSITS";
+  if (row.type === "WITHDRAWAL" || row.referenceType.includes("WITHDRAWAL")) return "WITHDRAWALS";
+  if (["TRANSFER", "P2P_SENT", "P2P_RECEIVED"].includes(row.type) || ["WALLET_TRANSFER", "P2P_TRANSFER"].includes(row.referenceType)) return "TRANSFERS";
+  return "OTHER";
 }
 
 function walletEventOrder(referenceType: string) {
@@ -200,6 +221,7 @@ function displayTradePair(pair: string | null) {
 function incomeTitle(type: string) {
   if (copyTradeIncomeTypes.has(type)) return "AI Trade Profit";
   if (referralIncomeTypes.has(type)) return "Referral Income";
+  if (type === "LEVEL") return "Level Income";
   if (type === "VIP_SALARY") return "VIP Salary";
   return "Income";
 }
