@@ -31,7 +31,18 @@ type PlacedPromotionTrade = {
   selectedRate: Prisma.Decimal;
   calculatedProfit: Prisma.Decimal;
   promotionDay: number | null;
+  status: TradeStatus;
+  windowCloseAt: Date | null;
+  creditDueAt: Date;
 };
+
+export type AdditionalTradePlacementErrorCode = "WINDOW_ENDED" | "ALREADY_PLACED" | "NOT_ELIGIBLE" | "INSUFFICIENT_BALANCE";
+
+export class AdditionalTradePlacementError extends Error {
+  constructor(readonly code: AdditionalTradePlacementErrorCode) {
+    super(code);
+  }
+}
 
 type PromotionTradeSnapshot = {
   id: string;
@@ -101,6 +112,45 @@ export async function runNewDepositorExtraTradeScheduler(now = new Date()) {
   });
 
   return { live: true, occurrenceKey: occurrence.occurrenceKey, pair, usersPlaced, batches };
+}
+
+export async function placeNewDepositorAdditionalTrade(userId: string, now = new Date()) {
+  const occurrence = promotionalOccurrenceForInstant(now);
+  const existing = await findPromotionTradeForOccurrence(userId, occurrence.windowStartAt);
+  if (existing) return { trade: existing, occurrenceKey: occurrence.occurrenceKey, idempotent: true };
+  if (!occurrence.live) throw new AdditionalTradePlacementError("WINDOW_ENDED");
+  const slot = await ensureNewDepositorExtraSlot();
+  const status = await getNewDepositorPromotionStatus(userId, now);
+  if (status.state === "INSUFFICIENT_BALANCE") throw new AdditionalTradePlacementError("INSUFFICIENT_BALANCE");
+  if (status.state !== "LIVE" || !status.eligible || !status.promotionDay || status.promotionDay < 1 || status.promotionDay > NEW_DEPOSITOR_PROMOTION_DAYS) {
+    throw new AdditionalTradePlacementError("NOT_ELIGIBLE");
+  }
+
+  const signal = await getOrCreateTradeWindowSignal({
+    slotId: slot.id,
+    windowLabel: NEW_DEPOSITOR_EXTRA_SLOT,
+    windowStartAt: occurrence.windowStartAt,
+    windowCloseAt: occurrence.windowCloseAt,
+    settlementDueAt: occurrence.settlementDueAt,
+  });
+  const placed = await placePromotionBatch({
+    slotId: slot.id,
+    pair: normalizePair(signal.recommendedPair),
+    occurrenceDate: businessDateKey(occurrence.businessDay),
+    userId,
+    ...occurrence,
+  });
+  const trade = placed[0] ?? await findPromotionTradeForOccurrence(userId, occurrence.windowStartAt);
+  if (!trade) {
+    const refreshed = await getNewDepositorPromotionStatus(userId, now);
+    if (refreshed.state === "INSUFFICIENT_BALANCE") throw new AdditionalTradePlacementError("INSUFFICIENT_BALANCE");
+    if (refreshed.state === "TRADE_PLACED" || refreshed.state === "COMPLETED") throw new AdditionalTradePlacementError("ALREADY_PLACED");
+    throw new AdditionalTradePlacementError("NOT_ELIGIBLE");
+  }
+  await createPlacementNotifications([trade], occurrence.settlementDueAt).catch(error => {
+    console.error("[NEW_DEPOSITOR_EXTRA_NOTIFICATION_FAILURE]", error instanceof Error ? error.message : error);
+  });
+  return { trade, occurrenceKey: occurrence.occurrenceKey, idempotent: placed.length === 0 };
 }
 
 export async function getNewDepositorPromotionStatus(userId: string, now = new Date()) {
@@ -290,6 +340,7 @@ async function placePromotionBatch(input: {
   windowCloseAt: Date;
   settlementDueAt: Date;
   live: boolean;
+  userId?: string;
 }) {
   return prisma.$transaction(async tx => tx.$queryRaw<PlacedPromotionTrade[]>(Prisma.sql`
     WITH first_deposit AS MATERIALIZED (
@@ -314,6 +365,7 @@ async function placePromotionBatch(input: {
       FROM "User" u
       JOIN first_deposit f ON f."userId" = u.id
       WHERE u.status = 'ACTIVE'::"UserStatus"
+        AND (${input.userId ?? null}::text IS NULL OR u.id = ${input.userId ?? null})
         AND u."bitexPrincipal" >= 100
         AND (u."bitexBalance" * 0.01) >= 1
         AND NOT EXISTS (
@@ -345,7 +397,7 @@ async function placePromotionBatch(input: {
       )
       SELECT
         gen_random_uuid()::text, c."userId", ${input.slotId}, ${NEW_DEPOSITOR_EXTRA_SOURCE}, ${input.pair}, c."promotionDay",
-        'new-depositor-extra:' || c."userId" || ':' || c."promotionDay"::text,
+        'additional-trade:' || c."userId" || ':' || ${input.occurrenceKey},
         c.amount,
         c."selectedRate",
         c."walletSnapshotAtTrade",
@@ -355,7 +407,7 @@ async function placePromotionBatch(input: {
         ${input.windowCloseAt}, ${input.windowCloseAt}, ${input.settlementDueAt}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM candidates c
       ON CONFLICT DO NOTHING
-      RETURNING id, "userId", pair, "principalAmount", "returnPercent", "walletSnapshotAtTrade", "selectedRate", "calculatedProfit", "promotionDay"
+      RETURNING id, "userId", pair, "principalAmount", "returnPercent", "walletSnapshotAtTrade", "selectedRate", "calculatedProfit", "promotionDay", status, "windowCloseAt", "creditDueAt"
     ), debited AS (
       UPDATE "User" u
       SET "bitexBalance" = u."bitexBalance" - i."principalAmount", "updatedAt" = CURRENT_TIMESTAMP
@@ -365,6 +417,26 @@ async function placePromotionBatch(input: {
     )
     SELECT i.* FROM inserted i JOIN debited d ON d.id = i."userId"
   `), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 60_000 });
+}
+
+async function findPromotionTradeForOccurrence(userId: string, windowStartAt: Date): Promise<PlacedPromotionTrade | null> {
+  return prisma.copyTrade.findFirst({
+    where: { userId, source: NEW_DEPOSITOR_EXTRA_SOURCE, windowStartAt },
+    select: {
+      id: true,
+      userId: true,
+      pair: true,
+      principalAmount: true,
+      returnPercent: true,
+      walletSnapshotAtTrade: true,
+      selectedRate: true,
+      calculatedProfit: true,
+      promotionDay: true,
+      status: true,
+      windowCloseAt: true,
+      creditDueAt: true,
+    },
+  }) as Promise<PlacedPromotionTrade | null>;
 }
 
 async function createPlacementNotifications(trades: PlacedPromotionTrade[], settlementDueAt: Date) {

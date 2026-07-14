@@ -31,7 +31,7 @@ import type { Coin } from "@/lib/market-defaults";
 import { compact, usd } from "@/lib/format";
 import { useLiveTickers } from "@/lib/use-market-data";
 import { getLedgerDisplay } from "@/lib/ledger-display";
-import { browserTimeZone, formatLocalTimeRange } from "@/lib/local-time";
+import { browserTimeZone, formatLocalDateTime, formatLocalTimeRange } from "@/lib/local-time";
 import { clearPostLoginSplashFlags } from "@/components/app-launch-splash";
 import { getVipIconPath } from "@/lib/vip-icons";
 import { ManualTradeWizard } from "@/components/manual-trade-wizard";
@@ -70,6 +70,7 @@ type ActiveCopyTrade = { id?: string; code?: string; pair?: string | null; rowLa
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
 type CopyTradeCounts = { todaysTradeCount: number; dailyTradeLimit: number };
 type VipTradeRow = { id: string; kind?: "PROMOTION"; label: string; vipRange?: string; vipRanks: string[]; dailyPercentMin: number; dailyPercentMax: number; dailyReturnMin?: number; dailyReturnMax?: number; eligible: boolean; available: boolean; tradeAmount: number; perTradePercent: number; currentTradeTime?: string; tradeStatus?: "UPCOMING" | "LIVE" | "CLOSED"; openTime?: string; closeTime?: string; windowStartAt?: string | null; windowCloseAt?: string | null; timezone?: string | null; secondsUntilOpen?: number; secondsUntilClose?: number; canTrade?: boolean; canTradeWhenLive?: boolean; reason?: string | null; message?: string | null; promotionState?: "DEPOSIT_TO_UNLOCK" | "UPCOMING" | "LIVE" | "TRADE_PLACED" | "COMPLETED" | "PROMOTION_COMPLETED" | "NOT_ELIGIBLE" | "INSUFFICIENT_BALANCE"; promotionDay?: number | null; totalPromotionDays?: number; extraTradesUsed?: number; extraTradesRemaining?: number; nextExtraTradeAt?: string | null; promotionEndsAt?: string | null };
+type AdditionalTradePlacement = { success: true; tradeId: string; occurrenceKey: string; pair: string; tradeAmount: number; walletSnapshot: number; profitRate: number; calculatedProfit: number; promotionDay: number; totalPromotionDays: number; settlementDueAt: string; status: "PLACED"; idempotent: boolean };
 type AppCoin = Coin;
 type MarketCoin = AppCoin & { volume?: number; quoteVolume?: number; live?: boolean };
 type CoinSetting = Partial<Omit<AppCoin,"localLogoPath"|"logoUrl">> & { localLogoPath?: string | null; logoUrl?: string | null };
@@ -1424,6 +1425,8 @@ function IncomeChart({ points,loading }: { points: {label:string;value:number}[]
 function VipTradeRowsCard({ rows, onTradePlaced }: { rows: VipTradeRow[]; onTradePlaced: () => void | Promise<void> }) {
   const [error,setError]=useState("");
   const [wizardOpen,setWizardOpen]=useState(false);
+  const [placingAdditional,setPlacingAdditional]=useState(false);
+  const [additionalPlacement,setAdditionalPlacement]=useState<AdditionalTradePlacement|null>(null);
   const [nowTick,setNowTick]=useState(0);
   const countdownKey=tradeRowsCountdownKey(rows);
   useEffect(() => {
@@ -1440,16 +1443,29 @@ function VipTradeRowsCard({ rows, onTradePlaced }: { rows: VipTradeRow[]; onTrad
     if(!row.eligible){setError(row.message || "You are not eligible for this trade.");return;}
     setWizardOpen(true);
   };
+  const placeAdditional=async()=>{
+    if(placingAdditional)return;
+    setError("");setPlacingAdditional(true);
+    try{
+      const response=await fetch("/api/additional-trade/execute",{method:"POST",credentials:"include"});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.error||"You are not eligible for this Additional Trade.");
+      setAdditionalPlacement(data as AdditionalTradePlacement);
+      await onTradePlaced();
+      hapticNotification("success").catch(()=>null);
+    }catch(cause){setError(cause instanceof Error?cause.message:"You are not eligible for this Additional Trade.");hapticNotification("error").catch(()=>null);}
+    finally{setPlacingAdditional(false);}
+  };
   return <><GlassCard className="home-depth-card overflow-hidden rounded-[20px] p-3">
     <div className="flex items-start justify-between gap-3 pb-1.5">
       <h3 className="text-[16px] font-black text-white">VIP Trade Rows</h3>
       <div className="text-right"><p className="text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Trade Time</p><p className="mt-0.5 text-[10px] font-black text-[#18ff8a]">{nextTime}</p></div>
     </div>
     <div className="space-y-1.5">
-      {rows.length ? rows.map(row=><VipTradeRowItem key={row.id} row={row} tick={nowTick} start={()=>start(row)} />) : <EmptyState title="No VIP trade rows available" icon={LineChart} />}
+      {rows.length ? rows.map(row=><VipTradeRowItem key={row.id} row={row} tick={nowTick} start={()=>start(row)} placeAdditional={placeAdditional} placingAdditional={placingAdditional} />) : <EmptyState title="No VIP trade rows available" icon={LineChart} />}
     </div>
     {error&&<p className="mt-3 border-t border-[#18ff8a]/10 pt-3 text-xs font-bold text-danger">{error}</p>}
-  </GlassCard>{wizardOpen&&<ManualTradeWizard onClose={()=>setWizardOpen(false)} onPlaced={onTradePlaced}/>}</>;
+  </GlassCard>{wizardOpen&&<ManualTradeWizard onClose={()=>setWizardOpen(false)} onPlaced={onTradePlaced}/>} {additionalPlacement&&<AdditionalTradeSuccessPopup placement={additionalPlacement} onClose={()=>setAdditionalPlacement(null)}/>}</>;
 }
 
 function vipAccent(row: VipTradeRow) {
@@ -1461,8 +1477,8 @@ function vipAccent(row: VipTradeRow) {
   return "#18ff8a";
 }
 
-function VipTradeRowItem({ row, tick, start }: { row: VipTradeRow; tick: number; start: () => void }) {
-  if(row.kind==="PROMOTION")return <ExtraTradeRowItem row={row} tick={tick}/>;
+function VipTradeRowItem({ row, tick, start, placeAdditional, placingAdditional }: { row: VipTradeRow; tick: number; start: () => void; placeAdditional: () => void; placingAdditional: boolean }) {
+  if(row.kind==="PROMOTION")return <ExtraTradeRowItem row={row} tick={tick} place={placeAdditional} placing={placingAdditional}/>;
   const accent=vipAccent(row);
   const status=localTradeStatus(row,tick);
   const label=displayVipLabel(row.vipRange??row.label);
@@ -1483,18 +1499,30 @@ function VipTradeRowItem({ row, tick, start }: { row: VipTradeRow; tick: number;
   </div>;
 }
 
-function ExtraTradeRowItem({row,tick}:{row:VipTradeRow;tick:number}){
+function ExtraTradeRowItem({row,tick,place,placing}:{row:VipTradeRow;tick:number;place:()=>void;placing:boolean}){
   const accent="#18ff8a";
   const state=row.promotionState??"NOT_ELIGIBLE";
   const day=row.promotionDay?`Day ${row.promotionDay} of ${row.totalPromotionDays??10}`:"";
   const countdown=tradeCountdownLabel(row,tick);
   const labels:Record<NonNullable<VipTradeRow["promotionState"]>,string>={DEPOSIT_TO_UNLOCK:"Deposit to Unlock",UPCOMING:"Upcoming",LIVE:"Live",TRADE_PLACED:"Trade Placed",COMPLETED:"Completed",PROMOTION_COMPLETED:"Promotion Completed",NOT_ELIGIBLE:"Not Eligible",INSUFFICIENT_BALANCE:"Balance Required"};
-  const subtitle=[day,state==="UPCOMING"&&countdown?countdown:state==="LIVE"?"Trade in progress":state==="TRADE_PLACED"?"Promotional trade running":state==="COMPLETED"?"Principal and profit credited":state==="DEPOSIT_TO_UNLOCK"?"Complete your first successful deposit":state==="INSUFFICIENT_BALANCE"?"Fund and activate your AI Wallet":""].filter(Boolean).join(" · ");
+  const localStatus=localTradeStatus(row,tick);
+  const liveNow=localStatus==="LIVE"&&(state==="UPCOMING"||state==="LIVE");
+  const ended=localStatus==="CLOSED"&&(state==="UPCOMING"||state==="LIVE");
+  const canPlace=liveNow&&row.eligible&&!placing;
+  const actionLabel=placing?"Placing...":liveNow&&row.eligible?"Trade Now":ended?"Ended":state==="UPCOMING"?"Soon":state==="TRADE_PLACED"?"Trade Placed":state==="COMPLETED"?"Completed":state==="PROMOTION_COMPLETED"?"Ended":state==="INSUFFICIENT_BALANCE"?"Insufficient Balance":"Not Eligible";
+  const statusLabel=liveNow?"Live":ended?"Ended":labels[state];
+  const subtitle=[day,liveNow?"Trade in progress":state==="UPCOMING"&&countdown?countdown:state==="TRADE_PLACED"?"Promotional trade running":state==="COMPLETED"?"Principal and profit credited":state==="DEPOSIT_TO_UNLOCK"?"Complete your first successful deposit":state==="INSUFFICIENT_BALANCE"?"Insufficient AI Wallet balance":""].filter(Boolean).join(" · ");
   return <div className="vip-row flex h-[52px] items-center gap-1.5 rounded-[13px] px-2 py-1" style={{"--vip-accent":accent} as CSSProperties}>
     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-lime text-[7px] font-black text-[#050807] shadow-[0_0_18px_rgba(24,255,138,.2)]">AT</div>
-    <div className="min-w-0 flex-1"><div className="flex min-w-0 items-center gap-1.5"><p className="shrink-0 whitespace-nowrap text-[12px] font-black leading-none text-white">Additional Trade</p><span className="flex h-[18px] shrink-0 items-center rounded-full border border-lime/20 bg-lime/[.08] px-1.5 text-[8px] font-black text-lime">{labels[state]}</span></div><p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{subtitle||labels[state]}</p></div>
-    <button type="button" disabled className="h-8 w-[96px] shrink-0 rounded-[10px] border border-lime/20 bg-lime/[.08] px-1 text-[8px] font-black leading-tight text-lime opacity-80">{labels[state]}</button>
+    <div className="min-w-0 flex-1"><div className="flex min-w-0 items-center gap-1.5"><p className="shrink-0 whitespace-nowrap text-[12px] font-black leading-none text-white">Additional Trade</p><span className="flex h-[18px] shrink-0 items-center rounded-full border border-lime/20 bg-lime/[.08] px-1.5 text-[8px] font-black text-lime">{statusLabel}</span></div><p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{subtitle||statusLabel}</p></div>
+    <button type="button" onClick={place} disabled={!canPlace} className="h-8 w-[96px] shrink-0 rounded-[10px] border border-lime/20 bg-lime/[.08] px-1 text-[8px] font-black leading-tight text-lime disabled:opacity-80">{actionLabel}</button>
   </div>;
+}
+
+function AdditionalTradeSuccessPopup({placement,onClose}:{placement:AdditionalTradePlacement;onClose:()=>void}){
+  const [seconds,setSeconds]=useState(10);
+  useEffect(()=>{const timer=window.setInterval(()=>setSeconds(value=>{if(value<=1){window.clearInterval(timer);onClose();return 0;}return value-1;}),1000);return()=>window.clearInterval(timer);},[onClose]);
+  return <div className="fixed inset-0 z-[90] grid place-items-end bg-black/75 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Additional Trade placed"><button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0"/><section className="relative w-full max-w-lg overflow-hidden rounded-[26px] border border-[#18ff8a]/20 bg-[#0c1713] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,.6)] sm:p-8"><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-white/[.08] bg-black/30 text-slate-400"><X size={15}/></button><span className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-[#18ff8a]/40 bg-[#18ff8a]/15 text-[#18ff8a] shadow-[0_0_35px_rgba(24,255,138,.25)]"><CheckCircle2 size={32}/></span><h2 className="mt-5 text-2xl font-black text-white">Additional Trade Placed</h2><div className="mt-5 space-y-2 rounded-2xl border border-[#18ff8a]/15 bg-black/25 p-4 text-left text-xs text-slate-300"><LineItem label="Pair" value={placement.pair}/><LineItem label="Trade Amount" value={`${placement.tradeAmount.toFixed(2)} USDT`}/><LineItem label="Wallet Snapshot" value={`${placement.walletSnapshot.toFixed(2)} USDT`}/><LineItem label="Profit Rate" value={`${placement.profitRate.toFixed(2)}%`}/><LineItem label="Promotion" value={`Day ${placement.promotionDay} of ${placement.totalPromotionDays}`}/><LineItem label="Settlement Time" value={formatLocalDateTime(placement.settlementDueAt)}/><LineItem label="Status" value="Trade Placed Successfully"/></div><p className="mt-4 text-xs font-bold text-slate-500">Closing in <span className="tabular-nums text-white">{seconds}</span> second{seconds===1?"":"s"}</p><button type="button" onClick={onClose} className="mt-5 w-full rounded-xl bg-[#18ff8a] py-3 text-xs font-black text-[#041008]">Done</button></section></div>;
 }
 
 function HomeAiSubscriptionCard({ currentUser, status, purchaseAi, onOpenAuth, notify }: { currentUser: CurrentUser | null; status: AiSubscriptionStatus | null; purchaseAi: () => Promise<{ok:boolean;message:string}>; onOpenAuth: () => void; notify: (message: string) => void }) {
