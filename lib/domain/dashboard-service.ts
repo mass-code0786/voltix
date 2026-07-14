@@ -7,7 +7,7 @@ type DashboardClient = Pick<PrismaClient, "asset" | "walletAccount" | "ledgerEnt
 const aiCopyTradeIncomeTypes: IncomeType[] = ["COPY_TRADE"];
 
 export async function getDashboardSnapshot(client: DashboardClient, userId: string, origin: string) {
-  const [user, wallet, assets, team, incomeTotals, aiCopyTradingIncome, todaysProfit, activePackage] = await Promise.all([
+  const [user, wallet, assets, team, incomeTotals, aiCopyTradingIncome, activePackage] = await Promise.all([
     client.user.findUniqueOrThrow({
       where: { id: userId },
       select: { id: true, name: true, uid: true, vipRank: true },
@@ -21,10 +21,6 @@ export async function getDashboardSnapshot(client: DashboardClient, userId: stri
     }),
     client.income.aggregate({
       where: { userId, type: { in: aiCopyTradeIncomeTypes } },
-      _sum: { amount: true },
-    }),
-    client.income.aggregate({
-      where: { userId, type: { in: aiCopyTradeIncomeTypes }, createdAt: { gte: startOfToday() } },
       _sum: { amount: true },
     }),
     client.userPackage.aggregate({
@@ -41,7 +37,7 @@ export async function getDashboardSnapshot(client: DashboardClient, userId: stri
     },
     summary: {
       totalPortfolio: assets.walletSummary.totalBalanceUsd,
-      todaysProfit: decimalToNumber(todaysProfit._sum?.amount ?? 0),
+      todaysProfit: assets.walletSummary.todayIncome,
       totalIncome: decimalToNumber(incomeTotals._sum?.amount ?? 0),
       aiCopyTradingIncome: decimalToNumber(aiCopyTradingIncome._sum?.amount ?? 0),
       activePackageAmount: decimalToNumber(activePackage._sum.amountUsd ?? 0),
@@ -49,11 +45,6 @@ export async function getDashboardSnapshot(client: DashboardClient, userId: stri
     wallet,
     team,
   };
-}
-
-function startOfToday() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 function decimalToNumber(value: Prisma.Decimal | number) {

@@ -3,13 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { ensureUserWalletAccounts } from "./user-wallets";
 import { displayWalletName } from "@/lib/wallet-labels";
 import { SHINE_PRICE_USD, SHINE_SYMBOL } from "@/lib/shine-token";
+import { localDayUtcBounds } from "./local-day";
 
-type AssetClient = Pick<PrismaClient, "asset" | "walletAccount" | "ledgerEntry" | "copyTrade" | "user"> | Prisma.TransactionClient;
+type AssetClient = Pick<PrismaClient, "asset" | "walletAccount" | "ledgerEntry" | "copyTrade" | "user" | "income"> | Prisma.TransactionClient;
 
 const userWalletTypes: WalletType[] = ["SPOT", "FUTURES", "AI"];
 
-export async function getUserAssetsAndTotals(client: AssetClient, userId: string) {
+export async function getUserAssetsAndTotals(client: AssetClient, userId: string, options?: { now?: Date; timeZone?: string }) {
   await ensureUserWalletAccounts(client, userId);
+  const today = localDayUtcBounds(options?.now, options?.timeZone);
   const [accounts, activeTrades, user] = await Promise.all([
     client.walletAccount.findMany({
       where: { userId, type: { in: userWalletTypes } },
@@ -32,6 +34,20 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
         select: { accountId: true, direction: true, amount: true },
       })
     : [];
+  const [incomeToday, vipAchievementRewardsToday] = await Promise.all([
+    client.income.aggregate({
+      where: { userId, createdAt: { gte: today.start, lt: today.end } },
+      _sum: { amount: true },
+    }),
+    accounts.length ? client.ledgerEntry.aggregate({
+      where: {
+        accountId: { in: accounts.map(account => account.id) },
+        direction: "CREDIT",
+        journal: { referenceType: "VIP_ACHIEVEMENT_REWARD", status: "POSTED", postedAt: { gte: today.start, lt: today.end } },
+      },
+      _sum: { amount: true },
+    }) : Promise.resolve({ _sum: { amount: null } }),
+  ]);
   const balanceByAccount = new Map<string, Prisma.Decimal>();
   for (const entry of entries) {
     const current = balanceByAccount.get(entry.accountId) ?? new Prisma.Decimal(0);
@@ -48,6 +64,7 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
   const aiWalletUsd = user.aiWalletBalance;
   const otherAssetValueUsd = new Prisma.Decimal(0);
   const totalBalanceUsd = spotWalletUsd.add(futuresWalletUsd).add(aiWalletUsd).add(shineUsdValue).add(otherAssetValueUsd);
+  const todayIncome = new Prisma.Decimal(incomeToday._sum.amount ?? 0).add(vipAchievementRewardsToday._sum.amount ?? 0);
 
   const totals = {
     available: { spot: decimalToNumber(user.spotBalance), futures: decimalToNumber(user.futuresBalance), aiWallet: decimalToNumber(user.aiWalletBalance) },
@@ -72,6 +89,9 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
     shineUsdValue: decimalToNumber(shineUsdValue),
     otherAssetValueUsd: decimalToNumber(otherAssetValueUsd),
     totalBalanceUsd: decimalToNumber(totalBalanceUsd),
+    totalBalance: decimalToNumber(totalBalanceUsd),
+    todayIncome: decimalToNumber(todayIncome),
+    todayIncomeTimeZone: today.timeZone,
     updatedAt: new Date().toISOString(),
   };
 
