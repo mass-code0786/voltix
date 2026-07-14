@@ -83,7 +83,7 @@ export function ManualTradeWizard({ onClose, onPlaced }: { onClose: () => void; 
 
   const unavailable = !loading && (!signal?.live || Boolean(signal.blockedMessage));
   return <ModalShell onClose={submitting ? () => {} : onClose}>
-    <div className="border-b border-white/[.08] px-5 py-4"><p className="text-[10px] font-black uppercase tracking-[.18em] text-[#18ff8a]">Manual Trading</p><h2 className="mt-1 pr-10 text-lg font-black text-white">{step === 1 ? "TRADE SIGNAL AVAILABLE" : "SELECT THE RECOMMENDED PAIR"}</h2>{step === 2 && <p className="mt-1 text-xs text-slate-500">Choose the highlighted pair shown in the trade signal.</p>}</div>
+    <div className="border-b border-white/[.08] px-5 py-4"><h2 className="pr-10 text-lg font-black text-white">{step === 1 ? "TRADE SIGNAL AVAILABLE" : "SELECT THE RECOMMENDED PAIR"}</h2>{step === 2 && <p className="mt-1 text-xs text-slate-500">Choose the highlighted pair shown in the trade signal.</p>}</div>
     <div className="max-h-[72vh] overflow-y-auto p-5">
       {loading ? <Loader/> : expired ? <Expiry onClose={() => { setSignal(null); onClose(); }}/> : unavailable ? <Unavailable message={signal?.blockedMessage || signal?.message || error} onClose={onClose}/> : step === 1 ? <div>
         <div className="rounded-2xl border border-[#18ff8a]/20 bg-[#18ff8a]/[.06] p-5 text-center"><Radio className="mx-auto text-[#18ff8a]" size={30}/><p className="mt-3 text-sm leading-6 text-slate-200">For this trading window, the recommended pair is <strong className="text-[#18ff8a]">{signal?.recommendedDisplayPair}</strong>.</p></div>
