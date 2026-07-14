@@ -21,7 +21,8 @@
     "vip:reward-backfill": "tsx scripts/backfill-vip-achievement-rewards.ts",
     "vip:test": "tsx scripts/test-vip-system.ts",
     "settlement:load-test": "tsx scripts/load-test-bulk-settlement.ts",
-    "promotion:test": "tsx scripts/test-new-depositor-promotion.ts"
+    "promotion:test": "tsx scripts/test-new-depositor-promotion.ts",
+    "ai-trade-pair:test": "tsx scripts/test-ai-trade-pair.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",

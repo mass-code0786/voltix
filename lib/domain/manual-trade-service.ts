@@ -33,6 +33,7 @@ export async function getManualTradeSignal(userId?: string, now = new Date()) {
   return {
     live: true as const,
     signalId: stored.id,
+    occurrenceKey: stored.occurrenceKey,
     serverNow: window.serverNow.toISOString(),
     slotId: window.slotId,
     windowLabel: stored.windowLabel,

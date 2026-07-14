@@ -45,6 +45,24 @@ export async function getOrCreateTradeWindowSignal(window: TradeWindowSignalInpu
   });
 }
 
+export async function getPersistedTradeWindowSignal(window: Pick<TradeWindowSignalInput, "slotId" | "windowStartAt" | "windowCloseAt">, client: SignalClient = prisma) {
+  const occurrenceKey = tradeWindowSignalOccurrenceKey(window.slotId, window.windowStartAt);
+  const signal = await client.manualTradeSignal.findUnique({ where: { occurrenceKey } });
+  if (!signal || !matchesTradeWindowSignalOccurrence(signal, window)) return null;
+  return signal;
+}
+
+export function matchesTradeWindowSignalOccurrence(
+  signal: { occurrenceKey: string; slotId: string; windowStartAt: Date; windowCloseAt: Date; recommendedPair: string },
+  window: Pick<TradeWindowSignalInput, "slotId" | "windowStartAt" | "windowCloseAt">,
+) {
+  return signal.occurrenceKey === tradeWindowSignalOccurrenceKey(window.slotId, window.windowStartAt)
+    && signal.slotId === window.slotId
+    && signal.windowStartAt.getTime() === window.windowStartAt.getTime()
+    && signal.windowCloseAt.getTime() === window.windowCloseAt.getTime()
+    && Boolean(signal.recommendedPair.trim());
+}
+
 export function tradeWindowSignalOccurrenceKey(slotId: string, windowStartAt: Date) {
   return `manual-signal:${slotId}:${windowStartAt.toISOString()}`;
 }

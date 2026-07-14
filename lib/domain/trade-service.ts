@@ -8,7 +8,7 @@ import { createNotification } from "./notification-service";
 import { aiWalletBusinessAmount, isAiWalletActive } from "./user-activation";
 import { ensureUserWalletAccounts } from "./user-wallets";
 import { settleDueTradeWindows } from "./bulk-trade-settlement";
-import { getOrCreateTradeWindowSignal } from "./trade-window-signal";
+import { getPersistedTradeWindowSignal, tradeWindowSignalOccurrenceKey } from "./trade-window-signal";
 import { getNewDepositorPromotionStatus, NEW_DEPOSITOR_EXTRA_SOURCE, NEW_DEPOSITOR_PROFIT_MAX_PERCENT, NEW_DEPOSITOR_PROFIT_MIN_PERCENT } from "./new-depositor-promotion";
 
 const COPY_TRADE_STAKE_RATE = new Prisma.Decimal("0.01");
@@ -20,6 +20,7 @@ export const ALREADY_TRADED_IN_WINDOW_MESSAGE = "You have already placed a trade
 export const AI_ALREADY_TRADED_IN_WINDOW_MESSAGE = "AI trade already executed for this window.";
 export const MANUAL_ALREADY_TRADED_IN_WINDOW_MESSAGE = "Manual trade already placed for this window.";
 export const AI_AUTO_TRADE_NOTIFICATION_MESSAGE = "AI Subscription auto trade placed successfully.";
+export const AI_TRADE_SIGNAL_PAIR_NOT_FOUND = "AI trade skipped: persisted window signal pair not found";
 const TRADE_TIMEZONE = "IST";
 const TRADE_DISPLAY_TIMEZONE = "Asia/Kolkata";
 const TRADE_WINDOW_DURATION_MINUTES = 15;
@@ -111,6 +112,12 @@ export class AlreadyTradedInWindowError extends Error {
 }
 
 type CopyTradeSource = "MANUAL" | "AI_SUBSCRIPTION" | "AI_SUBSCRIPTION_AUTO";
+
+class PersistedWindowSignalPairNotFoundError extends Error {
+  constructor(readonly occurrence: { slotId: string; occurrenceKey: string; windowStartAt: Date; userId: string }) {
+    super(AI_TRADE_SIGNAL_PAIR_NOT_FOUND);
+  }
+}
 
 function duplicateTradeWindowMessageForSource(source?: string | null) {
   return source === "AI_SUBSCRIPTION_AUTO"
@@ -364,6 +371,14 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
     return { executed: true, tradeId: trade.id, rowId: row.id, vipRank: normalizedVipRank, selectedRow: row.label, code: null };
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Auto copy trade failed";
+    if (error instanceof PersistedWindowSignalPairNotFoundError) {
+      await logAiAutoTradeEvent(AI_TRADE_SIGNAL_PAIR_NOT_FOUND, {
+        slotId: error.occurrence.slotId,
+        occurrenceKey: error.occurrence.occurrenceKey,
+        windowStartAt: error.occurrence.windowStartAt.toISOString(),
+        userId: error.occurrence.userId,
+      });
+    }
     await logAiTradeCycle({ ...baseLog, reasonIfSkipped: reason });
     return { executed: false, reason, rowId: row.id, vipRank: normalizedVipRank, selectedRow: row.label };
   }
@@ -543,16 +558,25 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
     const dailyPercent = new Prisma.Decimal(getVipDailyIncomePercent(normalizedVipRank));
     const perTradePercent = dailyPercent.div(limit);
     const timeline = { windowStartAt: slotStart, windowCloseAt: slotEnd, completesAt: slotEnd, creditDueAt };
-    const pair = input.pair
-      ? normalizeTradePair(input.pair)
-      : isAiAutoTrade
-        ? normalizeTradePair((await getOrCreateTradeWindowSignal({
-            slotId: slot.id,
-            windowLabel: slot.label,
-            windowStartAt: timeline.windowStartAt,
-            windowCloseAt: timeline.windowCloseAt,
-            settlementDueAt: timeline.creditDueAt,
-          }, tx)).recommendedPair)
+    const persistedSignal = isAiAutoTrade
+      ? await getPersistedTradeWindowSignal({
+          slotId: slot.id,
+          windowStartAt: timeline.windowStartAt,
+          windowCloseAt: timeline.windowCloseAt,
+        }, tx)
+      : null;
+    if (isAiAutoTrade && !persistedSignal) {
+      throw new PersistedWindowSignalPairNotFoundError({
+        slotId: slot.id,
+        occurrenceKey: tradeWindowSignalOccurrenceKey(slot.id, timeline.windowStartAt),
+        windowStartAt: timeline.windowStartAt,
+        userId: input.userId,
+      });
+    }
+    const pair = isAiAutoTrade
+      ? normalizeTradePair(persistedSignal!.recommendedPair)
+      : input.pair
+        ? normalizeTradePair(input.pair)
         : await defaultTradePair(tx);
     const trade = await tx.copyTrade.create({
       data: {
@@ -586,6 +610,8 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
           tradeAmount: tradeAmount.toString(),
           source: input.source ?? "MANUAL",
           pair,
+          signalId: persistedSignal?.id ?? null,
+          occurrenceKey: persistedSignal?.occurrenceKey ?? null,
           idempotencyKey: input.idempotencyKey ?? null,
           dailyPercent: dailyPercent.toString(),
           perTradePercent: perTradePercent.toString(),
