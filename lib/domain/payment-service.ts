@@ -112,7 +112,7 @@ async function createStandardNowPaymentsDeposit(input: { userId: string; amount:
         addressMode: "PER_PAYMENT",
         clientRequestId: input.clientRequestId,
         payCurrency: input.payCurrency.toLowerCase(),
-        priceCurrency: "usdt",
+        priceCurrency: "usd",
         amount: input.amount,
         paymentStatus: "creating",
         status: "PENDING",

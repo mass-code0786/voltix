@@ -40,6 +40,7 @@ export async function createNowPaymentsStandardPayment(input: {
   console.info("NOWPayments standard payment request", {
     endpoint: "/v1/payment",
     localDepositId: input.depositId,
+    priceCurrency: "usd",
     payCurrency: input.currency,
     orderId: input.orderId,
     callbackUrl,
@@ -48,15 +49,15 @@ export async function createNowPaymentsStandardPayment(input: {
     method: "POST",
     diagnostics: {
       ...depositPaymentDiagnostics(input.currency),
-      priceCurrency: "usdt",
+      priceCurrency: "usd",
       orderIdFormat: "voltix-deposit:<userId>:<depositId>",
     },
     body: {
       price_amount: input.amount,
-      price_currency: "usdt",
+      price_currency: "usd",
       pay_currency: input.currency,
       order_id: input.orderId,
-      order_description: `Voltix deposit ${input.depositId}`,
+      order_description: "Voltix deposit",
       ipn_callback_url: callbackUrl,
       is_fixed_rate: false,
       is_fee_paid_by_user: false,
