@@ -5,12 +5,14 @@ export type NowPaymentsJson = Record<string, unknown>;
 export class NowPaymentsApiError extends Error {
   readonly status: number | null;
   readonly response: NowPaymentsJson | null;
+  readonly endpoint: string | null;
 
-  constructor(message: string, status: number | null, response: NowPaymentsJson | null = null) {
+  constructor(message: string, status: number | null, response: NowPaymentsJson | null = null, endpoint: string | null = null) {
     super(message);
     this.name = "NowPaymentsApiError";
     this.status = status;
     this.response = response;
+    this.endpoint = endpoint;
   }
 
   get definitiveRejection() {
@@ -67,19 +69,20 @@ export async function getOrCreateNowPaymentsCustomerPayment(input: {
     pay_currency: input.currency,
     limit: "500",
     page: "0",
-    sortBy: "created_at",
-    orderBy: "desc",
   });
   const existingData = await request(`/v1/sub-partner/payments?${query}`, {
     method: "GET",
     auth: "deposit",
+    diagnostics: depositPaymentDiagnostics(input.customerId, input.currency),
   });
   const existing = objectList(existingData, ["data", "result", "payments"])
     .find(payment => stringValue(payment.pay_address ?? payment.address));
   if (existing) return existing;
+  await ensureNowPaymentsDepositCurrencyEnabled(input.currency, input.customerId);
   return request("/v1/sub-partner/payment", {
     method: "POST",
     auth: "deposit",
+    diagnostics: depositPaymentDiagnostics(input.customerId, input.currency),
     body: {
       currency: input.currency,
       amount: input.amount,
@@ -150,14 +153,21 @@ export async function createNowPaymentsPayout(input: {
 }
 
 type NowPaymentsAuthPurpose = "deposit" | "payout";
+type NowPaymentsSafeDiagnostics = {
+  customerId?: string;
+  payCurrency?: string;
+  network?: string;
+  priceCurrency?: string | null;
+  orderIdFormat?: string | null;
+};
 
-async function request(path: string, options: { method: "POST" | "GET"; auth?: NowPaymentsAuthPurpose; body?: NowPaymentsJson }) {
+async function request(path: string, options: { method: "POST" | "GET"; auth?: NowPaymentsAuthPurpose; body?: NowPaymentsJson; diagnostics?: NowPaymentsSafeDiagnostics }) {
   const apiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
   if (!apiKey) {
     const message = options.auth === "deposit"
       ? "NOWPayments deposit credentials are not configured."
       : "NOWPayments API key is not configured";
-    throw new NowPaymentsApiError(message, 503);
+    throw new NowPaymentsApiError(message, 503, null, endpointOf(path));
   }
   const headers: Record<string, string> = { "x-api-key": apiKey, "Content-Type": "application/json" };
   if (options.auth) headers.Authorization = `Bearer ${await authToken(options.auth)}`;
@@ -173,7 +183,10 @@ async function request(path: string, options: { method: "POST" | "GET"; auth?: N
     throw new NowPaymentsApiError(error instanceof Error ? `NOWPayments request failed: ${error.message}` : "NOWPayments request failed", null);
   }
   const data = await response.json().catch(() => ({})) as NowPaymentsJson;
-  if (!response.ok) throw new NowPaymentsApiError(extractError(data), response.status, data);
+  if (!response.ok) {
+    logNowPaymentsFailure(path, response.status, data, headers, options.diagnostics);
+    throw new NowPaymentsApiError(extractError(data), response.status, data, endpointOf(path));
+  }
   return data;
 }
 
@@ -274,6 +287,69 @@ function appUrl() {
 
 function apiBase() {
   return (process.env.NOWPAYMENTS_API_BASE_URL || "https://api.nowpayments.io").replace(/\/$/, "");
+}
+
+function depositPaymentDiagnostics(customerId: string, payCurrency: string): NowPaymentsSafeDiagnostics {
+  return {
+    customerId,
+    payCurrency,
+    network: payCurrency === "usdtbsc" ? "BSC" : payCurrency === "usdttrc20" ? "TRON" : "unknown",
+    priceCurrency: null,
+    orderIdFormat: null,
+  };
+}
+
+async function ensureNowPaymentsDepositCurrencyEnabled(payCurrency: string, customerId: string) {
+  const data = await request("/v1/merchant/coins", {
+    method: "GET",
+    diagnostics: depositPaymentDiagnostics(customerId, payCurrency),
+  });
+  const currencies = stringList(data).map(value => value.toLowerCase());
+  if (!currencies.length) {
+    throw new NowPaymentsApiError("NOWPayments enabled currencies response could not be validated", 502, null, "/v1/merchant/coins");
+  }
+  if (!currencies.includes(payCurrency.toLowerCase())) {
+    throw new NowPaymentsApiError(`NOWPayments currency ${payCurrency} is disabled`, 400, null, "/v1/merchant/coins");
+  }
+}
+
+function stringList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(stringList);
+  if (typeof value === "string") return [value];
+  if (isJsonObject(value)) return Object.values(value).flatMap(stringList);
+  return [];
+}
+
+function logNowPaymentsFailure(path: string, status: number, data: NowPaymentsJson, headers: Record<string, string>, diagnostics?: NowPaymentsSafeDiagnostics) {
+  console.error("NOWPayments API request failed", {
+    endpoint: endpointOf(path),
+    httpStatus: status,
+    providerCode: stringValue(data.code ?? data.statusCode ?? data.status_code),
+    providerMessage: extractError(data),
+    customerId: diagnostics?.customerId ?? null,
+    payCurrency: diagnostics?.payCurrency ?? null,
+    network: diagnostics?.network ?? null,
+    priceCurrency: diagnostics?.priceCurrency ?? null,
+    orderIdFormat: diagnostics?.orderIdFormat ?? null,
+    hasApiKey: Boolean(headers["x-api-key"]),
+    hasBearerToken: Boolean(headers.Authorization),
+  });
+}
+
+function endpointOf(path: string) {
+  return path.split("?", 1)[0];
+}
+
+export function nowPaymentsDepositUserMessage(error: NowPaymentsApiError, payCurrency?: string) {
+  if (error.status === 503 && error.message === "NOWPayments deposit credentials are not configured.") return error.message;
+  if (/not supported|not available|disabled|currency/i.test(error.message)) {
+    const network = payCurrency === "usdttrc20" ? "TRC20" : payCurrency === "usdtbsc" ? "BEP20" : "selected network";
+    return `USDT ${network} deposits are temporarily unavailable.`;
+  }
+  if (/not allowed|forbidden|permission|not enabled|verification/i.test(error.message)) {
+    return "Deposit address provisioning is not enabled for this payment account. Please contact support.";
+  }
+  return "Unable to create the deposit address right now. Please try again shortly.";
 }
 
 function stringValue(value: unknown) {
