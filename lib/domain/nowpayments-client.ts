@@ -29,108 +29,39 @@ export function nowPaymentsCurrencyForNetwork(network: string) {
   throw new Error("Only USDT BEP20 and USDT TRC20 are supported");
 }
 
-export async function createNowPaymentsCustomer(name: string) {
-  const existing = await findNowPaymentsCustomerByName(name);
-  if (existing) return existing;
-  try {
-    return await request("/v1/sub-partner/balance", {
-      method: "POST",
-      auth: "deposit",
-      body: { name },
-    });
-  } catch (error) {
-    if (!(error instanceof NowPaymentsApiError) || !/already\s+exist/i.test(error.message)) throw error;
-    const recovered = await findNowPaymentsCustomerByName(name);
-    if (recovered) return recovered;
-    throw new NowPaymentsApiError("Existing NOWPayments customer could not be resolved", 502, error.response);
-  }
-}
-
-export async function findNowPaymentsCustomerByName(name: string) {
-  const limit = 500;
-  for (let offset = 0; ; offset += limit) {
-    const data = await request(`/v1/sub-partner?limit=${limit}&offset=${offset}&order=ASC`, {
-      method: "GET",
-      auth: "deposit",
-    });
-    const customers = objectList(data, ["data", "result", "sub_partners", "customers"]);
-    const match = customers.find(customer => stringValue(customer.name) === name);
-    if (match || customers.length < limit) return match ?? null;
-  }
-}
-
-export async function getOrCreateNowPaymentsCustomerPayment(input: {
-  customerId: string;
-  currency: string;
-  amount: number;
-}) {
-  const query = new URLSearchParams({
-    sub_partner_id: input.customerId,
-    pay_currency: input.currency,
-    limit: "500",
-    page: "0",
-  });
-  const existingData = await request(`/v1/sub-partner/payments?${query}`, {
-    method: "GET",
-    auth: "deposit",
-    diagnostics: depositPaymentDiagnostics(input.customerId, input.currency),
-  });
-  const existing = objectList(existingData, ["data", "result", "payments"])
-    .find(payment => stringValue(payment.pay_address ?? payment.address));
-  if (existing) return existing;
-  await ensureNowPaymentsDepositCurrencyEnabled(input.currency, input.customerId);
-  return request("/v1/sub-partner/payment", {
-    method: "POST",
-    auth: "deposit",
-    diagnostics: depositPaymentDiagnostics(input.customerId, input.currency),
-    body: {
-      currency: input.currency,
-      amount: input.amount,
-      sub_partner_id: input.customerId,
-      is_fixed_rate: false,
-      is_fee_paid_by_user: false,
-      ipn_callback_url: nowPaymentsDepositCallbackUrl(),
-    },
-  });
-}
-
 export async function createNowPaymentsStandardPayment(input: {
   depositId: string;
   currency: string;
   amount: number;
   orderId: string;
 }) {
-  await ensureNowPaymentsDepositCurrencyEnabled(input.currency, null);
+  await ensureNowPaymentsDepositCurrencyEnabled(input.currency);
+  const callbackUrl = nowPaymentsDepositCallbackUrl();
+  console.info("NOWPayments standard payment request", {
+    endpoint: "/v1/payment",
+    localDepositId: input.depositId,
+    payCurrency: input.currency,
+    orderId: input.orderId,
+    callbackUrl,
+  });
   return request("/v1/payment", {
     method: "POST",
     diagnostics: {
-      ...depositPaymentDiagnostics(null, input.currency),
-      priceCurrency: "usd",
+      ...depositPaymentDiagnostics(input.currency),
+      priceCurrency: "usdt",
       orderIdFormat: "voltix-deposit:<userId>:<depositId>",
     },
     body: {
       price_amount: input.amount,
-      price_currency: "usd",
+      price_currency: "usdt",
       pay_currency: input.currency,
       order_id: input.orderId,
       order_description: `Voltix deposit ${input.depositId}`,
-      ipn_callback_url: nowPaymentsDepositCallbackUrl(),
+      ipn_callback_url: callbackUrl,
       is_fixed_rate: false,
       is_fee_paid_by_user: false,
     },
   });
-}
-
-export function isNowPaymentsPermanentCapabilityError(error: unknown) {
-  if (!(error instanceof NowPaymentsApiError) || !error.endpoint?.startsWith("/v1/sub-partner")) return false;
-  if (error.status === null || error.status === 401 || error.status === 429 || error.status >= 500) return false;
-  const message = error.message.toLowerCase();
-  return message === "order is not allowed"
-    || /customer management.*(not enabled|not available|not allowed|unsupported|restricted)/i.test(message)
-    || /sub[ -]?partner.*(not permitted|not allowed|not enabled|not available|unsupported|restricted)/i.test(message)
-    || /account verification.*required/i.test(message)
-    || /permanent.*(not supported|not available|not allowed)/i.test(message)
-    || (error.status === 403 && /forbidden|not allowed|not permitted|permission/i.test(message));
 }
 
 export async function validateNowPaymentsPayoutAddress(address: string, currency: string) {
@@ -191,7 +122,7 @@ export async function createNowPaymentsPayout(input: {
   };
 }
 
-type NowPaymentsAuthPurpose = "deposit" | "payout";
+type NowPaymentsAuthPurpose = "payout";
 type NowPaymentsSafeDiagnostics = {
   customerId?: string;
   payCurrency?: string;
@@ -203,10 +134,7 @@ type NowPaymentsSafeDiagnostics = {
 async function request(path: string, options: { method: "POST" | "GET"; auth?: NowPaymentsAuthPurpose; body?: NowPaymentsJson; diagnostics?: NowPaymentsSafeDiagnostics }) {
   const apiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
   if (!apiKey) {
-    const message = options.auth === "deposit"
-      ? "NOWPayments deposit credentials are not configured."
-      : "NOWPayments API key is not configured";
-    throw new NowPaymentsApiError(message, 503, null, endpointOf(path));
+    throw new NowPaymentsApiError("NOWPayments API key is not configured", 503, null, endpointOf(path));
   }
   const headers: Record<string, string> = { "x-api-key": apiKey, "Content-Type": "application/json" };
   if (options.auth) headers.Authorization = `Bearer ${await authToken(options.auth)}`;
@@ -235,9 +163,7 @@ async function authToken(purpose: NowPaymentsAuthPurpose) {
   const password = process.env.NOWPAYMENTS_PASSWORD;
   if (!email || !password) {
     throw new NowPaymentsApiError(
-      purpose === "deposit"
-        ? "NOWPayments deposit credentials are not configured."
-        : "NOWPayments payout credentials are not configured",
+      "NOWPayments payout credentials are not configured",
       503,
     );
   }
@@ -264,17 +190,6 @@ function firstPayout(data: NowPaymentsJson): NowPaymentsJson {
   if (Array.isArray(candidate) && candidate[0] && typeof candidate[0] === "object") return candidate[0] as NowPaymentsJson;
   if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) return candidate as NowPaymentsJson;
   return data;
-}
-
-function objectList(data: NowPaymentsJson, keys: string[]): NowPaymentsJson[] {
-  const candidate = keys.map(key => data[key]).find(value => value !== undefined) ?? data;
-  if (Array.isArray(candidate)) return candidate.filter(isJsonObject);
-  if (isJsonObject(candidate)) {
-    for (const value of Object.values(candidate)) {
-      if (Array.isArray(value)) return value.filter(isJsonObject);
-    }
-  }
-  return [];
 }
 
 function isJsonObject(value: unknown): value is NowPaymentsJson {
@@ -311,7 +226,11 @@ function decodeBase32(value: string) {
 }
 
 function nowPaymentsDepositCallbackUrl() {
-  return process.env.NOWPAYMENTS_IPN_CALLBACK_URL?.trim() || `${appUrl()}/api/webhooks/nowpayments`;
+  const callbackUrl = process.env.NOWPAYMENTS_IPN_CALLBACK_URL?.trim() || `${appUrl()}/api/webhooks/nowpayments`;
+  if (process.env.NODE_ENV === "production" && callbackUrl !== "https://voltix.zenithsoftech.com/api/webhooks/nowpayments") {
+    throw new Error("NOWPayments production IPN callback URL is invalid");
+  }
+  return callbackUrl;
 }
 
 function nowPaymentsPayoutCallbackUrl() {
@@ -328,9 +247,8 @@ function apiBase() {
   return (process.env.NOWPAYMENTS_API_BASE_URL || "https://api.nowpayments.io").replace(/\/$/, "");
 }
 
-function depositPaymentDiagnostics(customerId: string | null, payCurrency: string): NowPaymentsSafeDiagnostics {
+function depositPaymentDiagnostics(payCurrency: string): NowPaymentsSafeDiagnostics {
   return {
-    customerId: customerId ?? undefined,
     payCurrency,
     network: payCurrency === "usdtbsc" ? "BSC" : payCurrency === "usdttrc20" ? "TRON" : "unknown",
     priceCurrency: null,
@@ -338,10 +256,10 @@ function depositPaymentDiagnostics(customerId: string | null, payCurrency: strin
   };
 }
 
-async function ensureNowPaymentsDepositCurrencyEnabled(payCurrency: string, customerId: string | null) {
+async function ensureNowPaymentsDepositCurrencyEnabled(payCurrency: string) {
   const data = await request("/v1/merchant/coins", {
     method: "GET",
-    diagnostics: depositPaymentDiagnostics(customerId, payCurrency),
+    diagnostics: depositPaymentDiagnostics(payCurrency),
   });
   const currencies = stringList(data).map(value => value.toLowerCase());
   if (!currencies.length) {

@@ -462,6 +462,7 @@ model Deposit {
   providerInvoiceId  String?         @unique
   providerPaymentUrl String?
   payCurrency        String?
+  providerPayAmount  Decimal?        @db.Decimal(36, 18)
   payAddress         String?
   paymentStatus      String?
   priceCurrency      String?
