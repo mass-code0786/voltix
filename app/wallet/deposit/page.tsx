@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Copy } from "lucide-react";
@@ -17,6 +17,8 @@ type DepositResult = {
   payCurrency: string | null;
   payAddress: string | null;
   paymentStatus: string | null;
+  addressMode: "PERMANENT" | "PER_PAYMENT";
+  expiresAt: string | null;
   actuallyPaid: number | null;
   outcomeAmount: number | null;
   status: string;
@@ -32,6 +34,8 @@ export default function WalletDepositPage() {
   const [message,setMessage]=useState("");
   const [submitting,setSubmitting]=useState(false);
   const [deposit,setDeposit]=useState<DepositResult|null>(null);
+  const clientRequestIdRef=useRef<string|null>(null);
+  const submittingRef=useRef(false);
   const value=Number(amount);
   const payAddress=deposit?.payAddress??"";
   const qrValue=payAddress||deposit?.providerPaymentId||"";
@@ -41,16 +45,29 @@ export default function WalletDepositPage() {
     setPayCurrency(next==="TRON"?"usdttrc20":"usdtbsc");
     setError("");
     setMessage("");
+    clientRequestIdRef.current=null;
   };
 
   const submit=async()=>{
+    if(submittingRef.current)return;
     setError("");
     setMessage("");
     if(value<=0){setError("Enter a valid deposit amount");return;}
     if(value<10){setError("Minimum deposit is 10 USDT.");return;}
+    submittingRef.current=true;
     setSubmitting(true);
-    const response=await fetch("/api/deposits/nowpayments/create",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount:value,network,payCurrency})});
+    clientRequestIdRef.current??=crypto.randomUUID();
+    let response:Response;
+    try{
+      response=await fetch("/api/deposits/nowpayments/create",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount:value,network,payCurrency,clientRequestId:clientRequestIdRef.current})});
+    }catch{
+      submittingRef.current=false;
+      setSubmitting(false);
+      setError("Unable to create the deposit address right now. Please try again shortly.");
+      return;
+    }
     const data=await response.json().catch(()=>({}));
+    submittingRef.current=false;
     setSubmitting(false);
     if(response.status===401){router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/wallet/deposit")}`);return;}
     if(!response.ok){setError(data.error||"NOWPayments deposit failed");return;}
@@ -86,16 +103,17 @@ export default function WalletDepositPage() {
             <LineItem label="Pay currency" value={deposit.payCurrency??payCurrency.toUpperCase()}/>
             <LineItem label="Network" value={deposit.networkName}/>
             <LineItem label="Pay address" value={payAddress||"Payment address unavailable"}/>
+            {deposit.expiresAt&&<LineItem label="Expires" value={new Date(deposit.expiresAt).toLocaleString()}/>}
           </div>
           <button onClick={copyPayment} className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-white/[.08] bg-black/25 p-3 text-left">
             <span className="min-w-0 flex-1 break-all text-xs text-slate-300">{payAddress||"Payment address unavailable"}</span>
             <Copy size={16} className="shrink-0 text-[#18ff8a]"/>
           </button>
-          <div className="mt-4 rounded-2xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">This permanent address can be reused. Deposits credit to Spot Wallet after the required blockchain confirmations and final provider status.</div>
+          <div className="mt-4 rounded-2xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">{deposit.addressMode==="PER_PAYMENT"?"This deposit address is valid for this payment request. Create a new deposit request for your next deposit.":"This permanent address can be reused. Deposits credit to Spot Wallet after the required blockchain confirmations and final provider status."}</div>
         </>:<>
-          <label className="block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={event=>{setAmount(event.target.value);setError("");setMessage("");}} placeholder="0.00" className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"/></label>
+          <label className="block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={event=>{setAmount(event.target.value);setError("");setMessage("");clientRequestIdRef.current=null;}} placeholder="0.00" className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"/></label>
           <label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={event=>changeNetwork(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option></select></label>
-          <label className="mt-4 block text-xs font-bold text-slate-400">Payment currency<select value={payCurrency} onChange={event=>{setPayCurrency(event.target.value);setError("");setMessage("");}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="usdtbsc">USDT BSC</option><option value="usdttrc20">USDT TRC20</option></select></label>
+          <label className="mt-4 block text-xs font-bold text-slate-400">Payment currency<select value={payCurrency} onChange={event=>{setPayCurrency(event.target.value);setError("");setMessage("");clientRequestIdRef.current=null;}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="usdtbsc">USDT BSC</option><option value="usdttrc20">USDT TRC20</option></select></label>
         </>}
         {error&&<p className="mt-3 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs font-bold text-[#ff8aa0]">{error}</p>}
         {!deposit&&<div className="sticky bottom-0 -mx-4 mt-5 border-t border-white/[.08] bg-[#111c18]/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-xl">

@@ -8,7 +8,9 @@ import { recalculateVipRanksForUserAndUplines } from "./vip-rank-service";
 import { displayWalletName } from "@/lib/wallet-labels";
 import {
   createNowPaymentsCustomer,
+  createNowPaymentsStandardPayment,
   getOrCreateNowPaymentsCustomerPayment,
+  isNowPaymentsPermanentCapabilityError,
   createNowPaymentsPayout,
   NowPaymentsApiError,
   nowPaymentsCurrencyForNetwork,
@@ -162,26 +164,117 @@ async function getOrCreateDepositAddressesLocked(tx: Prisma.TransactionClient, u
   return { addresses: addresses.map(formatDepositAddress) };
 }
 
-export async function createNowPaymentsDeposit(input: { userId: string; amount: Prisma.Decimal; network: string; payCurrency: string }) {
+export async function createNowPaymentsDeposit(input: { userId: string; amount: Prisma.Decimal; network: string; payCurrency: string; clientRequestId: string }) {
   if (input.amount.lte(0)) throw new Error("Deposit amount must be positive");
   const expectedCurrency = nowPaymentsCurrencyForNetwork(input.network);
   if (input.payCurrency.trim().toLowerCase() !== expectedCurrency) throw new Error("Payment currency does not match the selected network");
-  const { addresses } = await getOrCreateDepositAddresses(input.userId);
-  const address = addresses.find(row => row.network === input.network.trim().toUpperCase());
-  if (!address) throw new Error("Permanent deposit address is unavailable");
+  const existingAttempt = await prisma.deposit.findFirst({
+    where: { userId: input.userId, clientRequestId: input.clientRequestId },
+    include: { asset: true, network: true },
+  });
+  if (existingAttempt) {
+    if (existingAttempt.addressMode === "PER_PAYMENT" && (!existingAttempt.providerPaymentId || !existingAttempt.payAddress)) {
+      return provisionStandardNowPaymentsDeposit(existingAttempt.id);
+    }
+    return formatDeposit(existingAttempt);
+  }
+
+  try {
+    const { addresses } = await getOrCreateDepositAddresses(input.userId);
+    const address = addresses.find(row => row.network === input.network.trim().toUpperCase());
+    if (!address) throw new Error("Permanent deposit address is unavailable");
+    return formatPermanentDepositAddress(address, input.amount);
+  } catch (error) {
+    if (!isNowPaymentsPermanentCapabilityError(error)) throw error;
+    return createStandardNowPaymentsDeposit(input);
+  }
+}
+
+async function createStandardNowPaymentsDeposit(input: { userId: string; amount: Prisma.Decimal; network: string; payCurrency: string; clientRequestId: string }) {
+  const deposit = await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${input.userId} FOR UPDATE`;
+    const existing = await tx.deposit.findFirst({
+      where: { userId: input.userId, clientRequestId: input.clientRequestId },
+      include: { asset: true, network: true },
+    });
+    if (existing) return existing;
+    const asset = await ensureUserWalletAccounts(tx, input.userId);
+    const network = await ensureNetwork(tx, input.network);
+    const created = await tx.deposit.create({
+      data: {
+        userId: input.userId,
+        assetId: asset.id,
+        networkId: network.id,
+        addressMode: "PER_PAYMENT",
+        clientRequestId: input.clientRequestId,
+        payCurrency: input.payCurrency.toLowerCase(),
+        priceCurrency: "usd",
+        amount: input.amount,
+        paymentStatus: "creating",
+        status: "PENDING",
+      },
+      include: { asset: true, network: true },
+    });
+    return tx.deposit.update({
+      where: { id: created.id },
+      data: { providerOrderId: `voltix-deposit:${input.userId}:${created.id}` },
+      include: { asset: true, network: true },
+    });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+
+  return provisionStandardNowPaymentsDeposit(deposit.id);
+}
+
+async function provisionStandardNowPaymentsDeposit(depositId: string) {
+  return prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT "id" FROM "Deposit" WHERE "id" = ${depositId} FOR UPDATE`;
+    const locked = await tx.deposit.findUniqueOrThrow({ where: { id: depositId }, include: { asset: true, network: true } });
+    if (locked.providerPaymentId && locked.payAddress) return formatDeposit(locked);
+    const remote = await createNowPaymentsStandardPayment({
+      depositId: locked.id,
+      currency: locked.payCurrency!,
+      amount: Number(locked.amount.toString()),
+      orderId: locked.providerOrderId!,
+    });
+    const providerPaymentId = valueAsString(remote.payment_id);
+    const payAddress = valueAsString(remote.pay_address);
+    if (!providerPaymentId || !payAddress) throw new Error("NOWPayments standard payment response did not include a payment ID and address");
+    const updated = await tx.deposit.update({
+      where: { id: locked.id },
+      data: {
+        providerPaymentId,
+        payAddress,
+        payCurrency: valueAsString(remote.pay_currency)?.toLowerCase() ?? locked.payCurrency,
+        priceCurrency: valueAsString(remote.price_currency)?.toLowerCase() ?? locked.priceCurrency,
+        amount: decimalOrUndefined(remote.price_amount) ?? locked.amount,
+        paymentStatus: valueAsString(remote.payment_status) ?? "waiting",
+        expiresAt: dateOrUndefined(remote.expiration_estimate_date ?? remote.valid_until ?? remote.expires_at),
+        rawWebhookJson: remote as Prisma.InputJsonValue,
+      },
+      include: { asset: true, network: true },
+    });
+    return formatDeposit(updated);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 60_000 });
+}
+
+function formatPermanentDepositAddress(address: ReturnType<typeof formatDepositAddress>, amount: Prisma.Decimal) {
   return {
     id: address.id,
-    amount: Number(input.amount.toString()),
+    amount: Number(amount.toString()),
     asset: address.asset,
     network: address.network,
     networkName: address.networkName,
     provider: "NOWPAYMENTS",
+    addressMode: "PERMANENT",
     providerPaymentId: address.providerPaymentId,
+    providerOrderId: null,
     providerInvoiceId: null,
     providerPaymentUrl: null,
     payCurrency: address.payCurrency,
+    priceCurrency: null,
     payAddress: address.address,
     paymentStatus: "waiting",
+    expiresAt: null,
     actuallyPaid: null,
     outcomeAmount: null,
     txHash: null,
@@ -220,7 +313,7 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
     let target = paymentId
       ? await tx.deposit.findUnique({ where: { providerPaymentId: paymentId }, include: { asset: true, network: true } })
       : null;
-    target ??= orderId ? await tx.deposit.findUnique({ where: { id: orderId }, include: { asset: true, network: true } }) : null;
+    target ??= orderId ? await tx.deposit.findFirst({ where: { OR: [{ id: orderId }, { providerOrderId: orderId }] }, include: { asset: true, network: true } }) : null;
     if (!target && parentPaymentId && paymentId) {
       const address = await tx.depositAddress.findUnique({ where: { providerPaymentId: parentPaymentId }, include: { asset: true, network: true } });
       if (address) {
@@ -876,7 +969,7 @@ function formatDepositAddress(address: { id: string; address: string; payCurrenc
   };
 }
 
-function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: string | null; status: string; confirmations?: number; createdAt: Date; creditedAt?: Date | null; provider?: string; providerPaymentId?: string | null; providerInvoiceId?: string | null; providerPaymentUrl?: string | null; payCurrency?: string | null; payAddress?: string | null; paymentStatus?: string | null; actuallyPaid?: Prisma.Decimal | null; outcomeAmount?: Prisma.Decimal | null; webhookReceivedAt?: Date | null; asset: { symbol: string }; network: { key: string; name: string; requiredConfirmations?: number } }) {
+function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: string | null; status: string; confirmations?: number; createdAt: Date; creditedAt?: Date | null; provider?: string; addressMode?: string; providerPaymentId?: string | null; providerOrderId?: string | null; providerInvoiceId?: string | null; providerPaymentUrl?: string | null; payCurrency?: string | null; priceCurrency?: string | null; payAddress?: string | null; paymentStatus?: string | null; expiresAt?: Date | null; clientRequestId?: string | null; actuallyPaid?: Prisma.Decimal | null; outcomeAmount?: Prisma.Decimal | null; webhookReceivedAt?: Date | null; asset: { symbol: string }; network: { key: string; name: string; requiredConfirmations?: number } }) {
   return {
     id: deposit.id,
     amount: Number(deposit.amount.toString()),
@@ -884,12 +977,17 @@ function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: st
     network: deposit.network.key.toUpperCase(),
     networkName: deposit.network.name,
     provider: deposit.provider ?? "NOWPAYMENTS",
+    addressMode: deposit.addressMode ?? "PERMANENT",
     providerPaymentId: deposit.providerPaymentId ?? null,
+    providerOrderId: deposit.providerOrderId ?? null,
     providerInvoiceId: deposit.providerInvoiceId ?? null,
     providerPaymentUrl: deposit.providerPaymentUrl ?? null,
     payCurrency: deposit.payCurrency?.toUpperCase() ?? null,
+    priceCurrency: deposit.priceCurrency?.toUpperCase() ?? null,
     payAddress: deposit.payAddress ?? null,
     paymentStatus: deposit.paymentStatus ?? null,
+    expiresAt: deposit.expiresAt?.toISOString() ?? null,
+    clientRequestId: deposit.clientRequestId ?? null,
     actuallyPaid: deposit.actuallyPaid ? Number(deposit.actuallyPaid.toString()) : null,
     outcomeAmount: deposit.outcomeAmount ? Number(deposit.outcomeAmount.toString()) : null,
     txHash: deposit.txHash,
@@ -986,6 +1084,13 @@ function decimalOrUndefined(value: unknown) {
   } catch {
     return undefined;
   }
+}
+
+function dateOrUndefined(value: unknown) {
+  const stringValue = valueAsString(value);
+  if (!stringValue) return undefined;
+  const date = new Date(stringValue);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
 function mapNowPaymentsStatus(status: string) {

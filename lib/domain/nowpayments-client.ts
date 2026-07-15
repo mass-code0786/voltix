@@ -94,6 +94,45 @@ export async function getOrCreateNowPaymentsCustomerPayment(input: {
   });
 }
 
+export async function createNowPaymentsStandardPayment(input: {
+  depositId: string;
+  currency: string;
+  amount: number;
+  orderId: string;
+}) {
+  await ensureNowPaymentsDepositCurrencyEnabled(input.currency, null);
+  return request("/v1/payment", {
+    method: "POST",
+    diagnostics: {
+      ...depositPaymentDiagnostics(null, input.currency),
+      priceCurrency: "usd",
+      orderIdFormat: "voltix-deposit:<userId>:<depositId>",
+    },
+    body: {
+      price_amount: input.amount,
+      price_currency: "usd",
+      pay_currency: input.currency,
+      order_id: input.orderId,
+      order_description: `Voltix deposit ${input.depositId}`,
+      ipn_callback_url: nowPaymentsDepositCallbackUrl(),
+      is_fixed_rate: false,
+      is_fee_paid_by_user: false,
+    },
+  });
+}
+
+export function isNowPaymentsPermanentCapabilityError(error: unknown) {
+  if (!(error instanceof NowPaymentsApiError) || !error.endpoint?.startsWith("/v1/sub-partner")) return false;
+  if (error.status === null || error.status === 401 || error.status === 429 || error.status >= 500) return false;
+  const message = error.message.toLowerCase();
+  return message === "order is not allowed"
+    || /customer management.*(not enabled|not available|not allowed|unsupported|restricted)/i.test(message)
+    || /sub[ -]?partner.*(not permitted|not allowed|not enabled|not available|unsupported|restricted)/i.test(message)
+    || /account verification.*required/i.test(message)
+    || /permanent.*(not supported|not available|not allowed)/i.test(message)
+    || (error.status === 403 && /forbidden|not allowed|not permitted|permission/i.test(message));
+}
+
 export async function validateNowPaymentsPayoutAddress(address: string, currency: string) {
   const data = await request("/v1/payout/validate-address", {
     method: "POST",
@@ -289,9 +328,9 @@ function apiBase() {
   return (process.env.NOWPAYMENTS_API_BASE_URL || "https://api.nowpayments.io").replace(/\/$/, "");
 }
 
-function depositPaymentDiagnostics(customerId: string, payCurrency: string): NowPaymentsSafeDiagnostics {
+function depositPaymentDiagnostics(customerId: string | null, payCurrency: string): NowPaymentsSafeDiagnostics {
   return {
-    customerId,
+    customerId: customerId ?? undefined,
     payCurrency,
     network: payCurrency === "usdtbsc" ? "BSC" : payCurrency === "usdttrc20" ? "TRON" : "unknown",
     priceCurrency: null,
@@ -299,7 +338,7 @@ function depositPaymentDiagnostics(customerId: string, payCurrency: string): Now
   };
 }
 
-async function ensureNowPaymentsDepositCurrencyEnabled(payCurrency: string, customerId: string) {
+async function ensureNowPaymentsDepositCurrencyEnabled(payCurrency: string, customerId: string | null) {
   const data = await request("/v1/merchant/coins", {
     method: "GET",
     diagnostics: depositPaymentDiagnostics(customerId, payCurrency),

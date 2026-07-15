@@ -65,8 +65,8 @@ type WithdrawalInput = { walletType: "SPOT"; amount: number; address: string; ne
 type EarlyWithdrawalBreakdown = { requiresConfirmation: boolean; eligible: boolean; capitalAmount: number; earnedProfit: number; requiredProfit: number; completedPercentage: number; remainingPercentage: number; withdrawalAmount: number; earlyWithdrawalCharge: number; percentageFee: number; fixedFee: number; totalFees: number; netAmount: number };
 type WithdrawalResult = { ok: boolean; message: string; requiresConfirmation?: boolean; breakdown?: EarlyWithdrawalBreakdown };
 type TransferPreview = { requestedAmount:number;chargeRate:number;chargeAmount:number;receivedAmount:number;eligible:boolean;completedPercentage:number;remainingPercentage:number;requiredProfit:number;earnedProfit:number };
-type DepositInput = { amount: number; network: string; payCurrency: string };
-type DepositResult = { id: string; amount: number; asset: string; network: string; networkName: string; providerPaymentId: string | null; providerInvoiceId: string | null; providerPaymentUrl: string | null; payCurrency: string | null; payAddress: string | null; paymentStatus: string | null; actuallyPaid: number | null; outcomeAmount: number | null; status: string; createdAt: string };
+type DepositInput = { amount: number; network: string; payCurrency: string; clientRequestId?: string };
+type DepositResult = { id: string; amount: number; asset: string; network: string; networkName: string; addressMode: "PERMANENT" | "PER_PAYMENT"; expiresAt: string | null; providerPaymentId: string | null; providerInvoiceId: string | null; providerPaymentUrl: string | null; payCurrency: string | null; payAddress: string | null; paymentStatus: string | null; actuallyPaid: number | null; outcomeAmount: number | null; status: string; createdAt: string };
 type ActiveCopyTrade = { id?: string; code?: string; pair?: string | null; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string; creditDueAt?: string };
 type CopyTradeHistory = ActiveCopyTrade & { date: string; status: string };
 type CopyTradeCounts = { todaysTradeCount: number; dailyTradeLimit: number };
@@ -927,8 +927,8 @@ export default function AppShell() {
     return {ok:true};
   }, [assetTotals, aiWalletBalance, currentUser, futuresBalance, notify, refreshAssets, refreshDashboard]);
 
-  const createDeposit = useCallback(async ({ amount, network, payCurrency }: DepositInput) => {
-    const response = await fetch("/api/deposits/nowpayments/create", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, network, payCurrency }) });
+  const createDeposit = useCallback(async ({ amount, network, payCurrency, clientRequestId }: DepositInput) => {
+    const response = await fetch("/api/deposits/nowpayments/create", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, network, payCurrency, clientRequestId: clientRequestId ?? crypto.randomUUID() }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, message: data.error || "NOWPayments deposit failed" };
     await refreshAssets(currentUser);

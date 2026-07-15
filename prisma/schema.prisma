@@ -60,6 +60,11 @@ enum DepositProvider {
   NOWPAYMENTS
 }
 
+enum DepositAddressMode {
+  PERMANENT
+  PER_PAYMENT
+}
+
 enum WithdrawalStatus {
   PENDING
   PROCESSING
@@ -445,13 +450,18 @@ model Deposit {
   depositAddressId   String?
   depositAddress     DepositAddress? @relation(fields: [depositAddressId], references: [id])
   provider           DepositProvider @default(NOWPAYMENTS)
+  addressMode        DepositAddressMode @default(PERMANENT)
   providerPaymentId  String?         @unique
+  providerOrderId    String?         @unique
+  clientRequestId    String?         @unique
   parentPaymentId    String?
   providerInvoiceId  String?         @unique
   providerPaymentUrl String?
   payCurrency        String?
   payAddress         String?
   paymentStatus      String?
+  priceCurrency      String?
+  expiresAt          DateTime?
   actuallyPaid       Decimal?        @db.Decimal(36, 18)
   outcomeAmount      Decimal?        @db.Decimal(36, 18)
   rawWebhookJson     Json?

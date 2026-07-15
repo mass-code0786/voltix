@@ -11,6 +11,7 @@ const createSchema = z.object({
   amount: z.coerce.number().positive(),
   network: z.string().trim().min(1).default("BSC"),
   payCurrency: z.string().trim().min(2).max(16).default("usdtbsc"),
+  clientRequestId: z.string().uuid(),
 });
 
 export async function POST(request: Request) {
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
       amount: new Prisma.Decimal(parsed.data.amount),
       network: parsed.data.network,
       payCurrency: parsed.data.payCurrency,
+      clientRequestId: parsed.data.clientRequestId,
     });
     await auditSuccess({ request, userId: user.id, role: "USER", action: "DEPOSIT_CREATED", module: "DEPOSIT", description: "NOWPayments deposit created", newValue: deposit }).catch(() => null);
     return NextResponse.json({ deposit }, { status: 201 });
