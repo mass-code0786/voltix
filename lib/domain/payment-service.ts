@@ -8,7 +8,7 @@ import { recalculateVipRanksForUserAndUplines } from "./vip-rank-service";
 import { displayWalletName } from "@/lib/wallet-labels";
 import {
   createNowPaymentsCustomer,
-  createNowPaymentsCustomerPayment,
+  getOrCreateNowPaymentsCustomerPayment,
   createNowPaymentsPayout,
   NowPaymentsApiError,
   nowPaymentsCurrencyForNetwork,
@@ -78,7 +78,14 @@ export async function getUserDeposits(userId: string) {
 }
 
 export async function getOrCreateDepositAddresses(userId: string) {
-  const existing = await prisma.depositAddress.findMany({
+  return prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+    return getOrCreateDepositAddressesLocked(tx, userId);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 60_000 });
+}
+
+async function getOrCreateDepositAddressesLocked(tx: Prisma.TransactionClient, userId: string) {
+  const existing = await tx.depositAddress.findMany({
     where: { userId, active: true },
     include: { asset: true, network: true },
     orderBy: { network: { key: "asc" } },
@@ -87,21 +94,23 @@ export async function getOrCreateDepositAddresses(userId: string) {
   const missing = ["BSC", "TRON"].filter(network => !existingNetworks.has(network));
   if (!missing.length) return { addresses: existing.map(formatDepositAddress) };
 
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { uid: true } });
-  let customer = await prisma.paymentProviderCustomer.findUnique({ where: { userId } });
+  const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { uid: true } });
+  let customer = await tx.paymentProviderCustomer.findUnique({ where: { userId } });
   if (!customer) {
     const name = `voltix-${user.uid}`.slice(0, 30);
     const remote = await createNowPaymentsCustomer(name);
     const providerCustomerId = valueAsString(remote.id ?? remote.sub_partner_id ?? remote.user_id);
     if (!providerCustomerId) throw new Error("NOWPayments customer response did not include an ID");
-    customer = await prisma.paymentProviderCustomer.create({
-      data: { userId, providerCustomerId, name, rawJson: remote as Prisma.InputJsonValue },
+    customer = await tx.paymentProviderCustomer.upsert({
+      where: { userId },
+      create: { userId, providerCustomerId, name, rawJson: remote as Prisma.InputJsonValue },
+      update: {},
     });
   }
 
   for (const networkKey of missing) {
     const currency = nowPaymentsCurrencyForNetwork(networkKey);
-    const remote = await createNowPaymentsCustomerPayment({
+    const remote = await getOrCreateNowPaymentsCustomerPayment({
       customerId: customer.providerCustomerId,
       currency,
       amount: Number(process.env.MIN_DEPOSIT_AMOUNT_USDT || 10),
@@ -110,40 +119,42 @@ export async function getOrCreateDepositAddresses(userId: string) {
     const address = valueAsString(remote.pay_address ?? remote.address);
     if (!providerPaymentId || !address) throw new Error(`NOWPayments did not return a ${networkKey} deposit address`);
 
-    await prisma.$transaction(async tx => {
-      const asset = await ensureUserWalletAccounts(tx, userId);
-      const network = await ensureNetwork(tx, networkKey);
-      const depositAddress = await tx.depositAddress.create({
-        data: {
-          userId,
-          assetId: asset.id,
-          networkId: network.id,
-          providerCustomerId: customer!.providerCustomerId,
-          providerPaymentId,
-          payCurrency: currency,
-          address,
-          rawJson: remote as Prisma.InputJsonValue,
-        },
-      });
-      await tx.deposit.create({
-        data: {
-          userId,
-          assetId: asset.id,
-          networkId: network.id,
-          depositAddressId: depositAddress.id,
-          providerPaymentId,
-          payCurrency: currency,
-          payAddress: address,
-          paymentStatus: valueAsString(remote.payment_status) ?? "waiting",
-          amount: decimalOrUndefined(remote.pay_amount ?? remote.amount) ?? new Prisma.Decimal(process.env.MIN_DEPOSIT_AMOUNT_USDT || 10),
-          status: "PENDING",
-          rawWebhookJson: remote as Prisma.InputJsonValue,
-        },
-      });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    const asset = await ensureUserWalletAccounts(tx, userId);
+    const network = await ensureNetwork(tx, networkKey);
+    const activeAddress = await tx.depositAddress.findUnique({
+      where: { userId_assetId_networkId: { userId, assetId: asset.id, networkId: network.id } },
+    });
+    if (activeAddress?.active) continue;
+    const depositAddress = await tx.depositAddress.create({
+      data: {
+        userId,
+        assetId: asset.id,
+        networkId: network.id,
+        providerCustomerId: customer.providerCustomerId,
+        providerPaymentId,
+        payCurrency: currency,
+        address,
+        rawJson: remote as Prisma.InputJsonValue,
+      },
+    });
+    await tx.deposit.create({
+      data: {
+        userId,
+        assetId: asset.id,
+        networkId: network.id,
+        depositAddressId: depositAddress.id,
+        providerPaymentId,
+        payCurrency: currency,
+        payAddress: address,
+        paymentStatus: valueAsString(remote.payment_status) ?? "waiting",
+        amount: decimalOrUndefined(remote.pay_amount ?? remote.amount) ?? new Prisma.Decimal(process.env.MIN_DEPOSIT_AMOUNT_USDT || 10),
+        status: "PENDING",
+        rawWebhookJson: remote as Prisma.InputJsonValue,
+      },
+    });
   }
 
-  const addresses = await prisma.depositAddress.findMany({
+  const addresses = await tx.depositAddress.findMany({
     where: { userId, active: true },
     include: { asset: true, network: true },
     orderBy: { network: { key: "asc" } },

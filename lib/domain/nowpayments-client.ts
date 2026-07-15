@@ -28,18 +28,55 @@ export function nowPaymentsCurrencyForNetwork(network: string) {
 }
 
 export async function createNowPaymentsCustomer(name: string) {
-  return request("/v1/sub-partner/balance", {
-    method: "POST",
-    auth: "deposit",
-    body: { name },
-  });
+  const existing = await findNowPaymentsCustomerByName(name);
+  if (existing) return existing;
+  try {
+    return await request("/v1/sub-partner/balance", {
+      method: "POST",
+      auth: "deposit",
+      body: { name },
+    });
+  } catch (error) {
+    if (!(error instanceof NowPaymentsApiError) || !/already\s+exist/i.test(error.message)) throw error;
+    const recovered = await findNowPaymentsCustomerByName(name);
+    if (recovered) return recovered;
+    throw new NowPaymentsApiError("Existing NOWPayments customer could not be resolved", 502, error.response);
+  }
 }
 
-export async function createNowPaymentsCustomerPayment(input: {
+export async function findNowPaymentsCustomerByName(name: string) {
+  const limit = 500;
+  for (let offset = 0; ; offset += limit) {
+    const data = await request(`/v1/sub-partner?limit=${limit}&offset=${offset}&order=ASC`, {
+      method: "GET",
+      auth: "deposit",
+    });
+    const customers = objectList(data, ["data", "result", "sub_partners", "customers"]);
+    const match = customers.find(customer => stringValue(customer.name) === name);
+    if (match || customers.length < limit) return match ?? null;
+  }
+}
+
+export async function getOrCreateNowPaymentsCustomerPayment(input: {
   customerId: string;
   currency: string;
   amount: number;
 }) {
+  const query = new URLSearchParams({
+    sub_partner_id: input.customerId,
+    pay_currency: input.currency,
+    limit: "500",
+    page: "0",
+    sortBy: "created_at",
+    orderBy: "desc",
+  });
+  const existingData = await request(`/v1/sub-partner/payments?${query}`, {
+    method: "GET",
+    auth: "deposit",
+  });
+  const existing = objectList(existingData, ["data", "result", "payments"])
+    .find(payment => stringValue(payment.pay_address ?? payment.address));
+  if (existing) return existing;
   return request("/v1/sub-partner/payment", {
     method: "POST",
     auth: "deposit",
@@ -175,6 +212,21 @@ function firstPayout(data: NowPaymentsJson): NowPaymentsJson {
   if (Array.isArray(candidate) && candidate[0] && typeof candidate[0] === "object") return candidate[0] as NowPaymentsJson;
   if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) return candidate as NowPaymentsJson;
   return data;
+}
+
+function objectList(data: NowPaymentsJson, keys: string[]): NowPaymentsJson[] {
+  const candidate = keys.map(key => data[key]).find(value => value !== undefined) ?? data;
+  if (Array.isArray(candidate)) return candidate.filter(isJsonObject);
+  if (isJsonObject(candidate)) {
+    for (const value of Object.values(candidate)) {
+      if (Array.isArray(value)) return value.filter(isJsonObject);
+    }
+  }
+  return [];
+}
+
+function isJsonObject(value: unknown): value is NowPaymentsJson {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function roundPayoutAmount(amount: number) {
