@@ -119,7 +119,7 @@ export async function getUserAssetsAndTotals(client: AssetClient, userId: string
 }
 
 export async function getUserWalletHistory(userId: string) {
-  const [accounts, trades] = await Promise.all([
+  const [accounts, trades, aiToSpotTransfers] = await Promise.all([
     prisma.walletAccount.findMany({
       where: { userId, type: { in: userWalletTypes } },
       select: { id: true },
@@ -129,6 +129,11 @@ export async function getUserWalletHistory(userId: string) {
       orderBy: { startedAt: "desc" },
       take: 100,
       include: { slot: { select: { label: true } } },
+    }),
+    prisma.walletTransfer.findMany({
+      where: { userId, fromWallet: "AI", toWallet: "SPOT" },
+      orderBy: { createdAt: "desc" },
+      take: 100,
     }),
   ]);
   const entries = accounts.length ? await prisma.ledgerEntry.findMany({
@@ -141,13 +146,45 @@ export async function getUserWalletHistory(userId: string) {
     },
   }) : [];
   const tradesById = new Map(trades.map(trade => [trade.id, trade]));
+  const aiToSpotTransferIds = new Set(aiToSpotTransfers.map(transfer => transfer.id));
   const history = [
-    ...entries.map(entry => formatLedgerEntry(entry, entry.journal.referenceType.startsWith("COPY_TRADE") ? tradesById.get(entry.journal.referenceId) : undefined)),
+    ...entries
+      .filter(entry => !aiToSpotTransferIds.has(entry.journal.referenceId))
+      .map(entry => formatLedgerEntry(entry, entry.journal.referenceType.startsWith("COPY_TRADE") ? tradesById.get(entry.journal.referenceId) : undefined)),
+    ...aiToSpotTransfers.map(formatAiToSpotTransfer),
     ...trades.map(formatTradePlacement),
   ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
     || walletEventOrder(b.referenceType) - walletEventOrder(a.referenceType)
     || b.id.localeCompare(a.id)).slice(0, 150);
   return { history };
+}
+
+function formatAiToSpotTransfer(transfer: {
+  id: string;
+  amount: Prisma.Decimal;
+  feeAmount: Prisma.Decimal;
+  receivedAmount: Prisma.Decimal;
+  status: string;
+  completedAt: Date | null;
+  createdAt: Date;
+}) {
+  return {
+    id: transfer.id,
+    type: "TRANSFER",
+    walletType: displayWalletName("AI"),
+    asset: "USDT",
+    direction: "DEBIT" as const,
+    amount: decimalToNumber(transfer.amount),
+    signedAmount: decimalToNumber(transfer.amount.neg()),
+    requestedAmount: decimalToNumber(transfer.amount),
+    earlyTransferCharge: decimalToNumber(transfer.feeAmount),
+    creditedAmount: decimalToNumber(transfer.receivedAmount),
+    title: "AI Wallet to Spot Wallet",
+    referenceType: "AI_TO_SPOT_TRANSFER",
+    referenceId: transfer.id,
+    status: transfer.status,
+    createdAt: (transfer.completedAt ?? transfer.createdAt).toISOString(),
+  };
 }
 
 function walletEventOrder(referenceType: string) {

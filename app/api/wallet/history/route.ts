@@ -78,8 +78,8 @@ export async function GET(request: NextRequest) {
       referenceType: row.fromWallet === "AI" && row.toWallet === "SPOT" ? "AI_TO_SPOT_TRANSFER" : "WALLET_TRANSFER",
       referenceId: row.id,
       status: formatLedgerStatus(row.status),
-      createdAt: row.createdAt.toISOString(),
-      sortAt: row.createdAt.toISOString(),
+      createdAt: (row.completedAt ?? row.createdAt).toISOString(),
+      sortAt: (row.completedAt ?? row.createdAt).toISOString(),
     })),
     ...p2pTransfers.map(row => {
       const sent = row.senderId === user.id;
@@ -200,7 +200,7 @@ function walletHistoryCategory(row: { type: string; referenceType: string; incom
   if (row.incomeType === "VIP_SALARY" || row.referenceType === "VIP_SALARY" || row.referenceType === "VIP_ACHIEVEMENT_REWARD") return "VIP_INCOME";
   if (row.type === "DEPOSIT" || row.referenceType.includes("DEPOSIT")) return "DEPOSITS";
   if (row.type === "WITHDRAWAL" || row.referenceType.includes("WITHDRAWAL")) return "WITHDRAWALS";
-  if (["TRANSFER", "P2P_SENT", "P2P_RECEIVED"].includes(row.type) || ["WALLET_TRANSFER", "P2P_TRANSFER"].includes(row.referenceType)) return "TRANSFERS";
+  if (["TRANSFER", "P2P_SENT", "P2P_RECEIVED"].includes(row.type) || ["WALLET_TRANSFER", "AI_TO_SPOT_TRANSFER", "P2P_TRANSFER"].includes(row.referenceType)) return "TRANSFERS";
   return "OTHER";
 }
 
@@ -233,6 +233,7 @@ function ledgerTitle(referenceType: string, memo: string, direction: string) {
   if (referenceType === "ADMIN_WALLET_ADJUSTMENT") return direction === "CREDIT" ? "Admin Credit" : "Admin Debit";
   if (referenceType === "COPY_TRADE_INCOME") return "AI Trade Profit";
   if (referenceType === "WALLET_TRANSFER") return "Wallet Transfer";
+  if (referenceType === "AI_TO_SPOT_TRANSFER" || referenceType === "AI_TO_SPOT") return "AI Wallet to Spot Wallet";
   if (referenceType === "P2P_TRANSFER") return direction === "CREDIT" ? "P2P Received" : "P2P Sent";
   if (referenceType.includes("DEPOSIT")) return "Deposit";
   if (referenceType.includes("WITHDRAWAL")) return "Withdrawal";
