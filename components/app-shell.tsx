@@ -656,7 +656,7 @@ export default function AppShell() {
       setMenu(false);
       window.location.replace("/auth?mode=login&returnTo=%2Fdashboard");
     } catch {
-      notify("Unable to sign out. Please check your connection and try again.");
+      notify("Unable to log out. Please try again.");
       logoutInProgressRef.current = false;
       setLogoutInProgress(false);
     }

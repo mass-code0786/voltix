@@ -165,6 +165,7 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const logoutInProgressRef = useRef(false);
+  const profileRequestsRef = useRef<AbortController | null>(null);
 
   const kycTone = useMemo(() => {
     if (profile?.kycStatus === "APPROVED") return "border-[#18ff8a]/30 bg-[#18ff8a]/10 text-[#18ff8a]";
@@ -191,11 +192,13 @@ export default function ProfilePage() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/profile", { cache: "no-store", credentials: "include" })
+    const controller = new AbortController();
+    profileRequestsRef.current = controller;
+    fetch("/api/profile", { cache: "no-store", credentials: "include", signal: controller.signal })
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         if (response.status === 401) {
-          router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/profile")}`);
+          if (!logoutInProgressRef.current) router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/profile")}`);
           return null;
         }
         if (!response.ok) throw new Error(data.error || "Profile request failed");
@@ -210,18 +213,20 @@ export default function ProfilePage() {
         setProfileImageUrl(data.profileImageUrl ?? "");
       })
       .catch(err => {
-        if (active) setError(err instanceof Error ? err.message : "Profile request failed");
+        if (active && !controller.signal.aborted && !logoutInProgressRef.current) {
+          setError(err instanceof Error ? err.message : "Profile request failed");
+        }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && !controller.signal.aborted && !logoutInProgressRef.current) setLoading(false);
       });
 
     Promise.allSettled([
-      fetch("/api/dashboard", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
-      fetch("/api/team", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
-      fetch("/api/ai/subscription", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
-      fetch("/api/notifications", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
-      fetch("/api/income", { cache: "no-store", credentials: "include" }).then(r => r.ok ? r.json() : null),
+      fetch("/api/dashboard", { cache: "no-store", credentials: "include", signal: controller.signal }).then(r => r.ok ? r.json() : null),
+      fetch("/api/team", { cache: "no-store", credentials: "include", signal: controller.signal }).then(r => r.ok ? r.json() : null),
+      fetch("/api/ai/subscription", { cache: "no-store", credentials: "include", signal: controller.signal }).then(r => r.ok ? r.json() : null),
+      fetch("/api/notifications", { cache: "no-store", credentials: "include", signal: controller.signal }).then(r => r.ok ? r.json() : null),
+      fetch("/api/income", { cache: "no-store", credentials: "include", signal: controller.signal }).then(r => r.ok ? r.json() : null),
     ]).then(results => {
       if (!active) return;
       const [dashboardResult, teamResult, aiResult, notificationResult, incomeResult] = results;
@@ -234,6 +239,8 @@ export default function ProfilePage() {
 
     return () => {
       active = false;
+      controller.abort();
+      if (profileRequestsRef.current === controller) profileRequestsRef.current = null;
     };
   }, [router]);
 
@@ -389,6 +396,7 @@ export default function ProfilePage() {
     if (logoutInProgressRef.current) return;
     logoutInProgressRef.current = true;
     setLogoutInProgress(true);
+    profileRequestsRef.current?.abort();
     setError("");
     setMessage("");
     try {
@@ -403,11 +411,12 @@ export default function ProfilePage() {
       setAi(null);
       setIncome(null);
       setUnreadNotifications(0);
-      window.location.replace("/auth?mode=login&returnTo=%2Fdashboard");
+      router.replace("/auth?mode=login&returnTo=%2Fdashboard");
     } catch {
-      setError("Unable to sign out. Please check your connection and try again.");
+      setError("Unable to log out. Please try again.");
       logoutInProgressRef.current = false;
       setLogoutInProgress(false);
+      setLoading(false);
     }
   };
 
@@ -447,7 +456,9 @@ export default function ProfilePage() {
         onMenuButton={() => router.push("/")}
       />
       <div className="mx-auto w-full max-w-[420px] px-4 pb-40 pt-1 lg:max-w-3xl">
-        {loading ? (
+        {logoutInProgress ? (
+          <div className="profile-glass mt-1 rounded-[22px] p-5 text-sm text-slate-400">Logging out...</div>
+        ) : loading ? (
           <div className="profile-glass mt-1 rounded-[22px] p-5 text-sm text-slate-400">Loading profile...</div>
         ) : displayProfile ? (
           <div className="space-y-3">
