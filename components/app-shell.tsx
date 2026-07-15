@@ -2997,27 +2997,288 @@ function P2PTransferModal({assets,close,sendTransfer}:{assets:P2PAsset[];close:(
   return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="flex max-h-[92vh] w-full max-w-md flex-col rounded-t-3xl border border-line bg-[#111c18] sm:rounded-3xl"><header className="flex items-start justify-between border-b border-line p-5"><div><h3 className="text-xl font-black">P2P Transfer</h3><p className="mt-1 text-xs text-slate-500">Internal user-to-user Spot Wallet transfer.</p></div><button onClick={close} aria-label="Close P2P transfer"><X/></button></header>{confirming&&selected?<><div className="flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl border border-lime/20 bg-lime/[.06] p-4"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-lime text-ink"><Send size={19}/></span><p className="text-sm font-bold text-white">You are sending {value.toFixed(8).replace(/\.?0+$/,"")} {selected.symbol} to {receiver.trim()}</p></div></div><div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Asset" value={selected.symbol}/><LineItem label="Amount" value={`${value.toFixed(8).replace(/\.?0+$/,"")} ${selected.symbol}`}/><LineItem label="Receiver" value={receiver.trim()}/>{note.trim()&&<LineItem label="Note" value={note.trim()}/>}</div><TransactionPinInput label="Transaction PIN" value={transactionPin} onChange={setTransactionPin} autoFocus/><button type="button" onClick={useBiometric} className="w-full rounded-xl border border-lime/30 bg-lime/10 py-3 text-xs font-black text-lime">{mobileVerificationToken?"Biometric ready":"Use biometric instead"}</button>{error&&<p className="text-xs text-danger">{error}</p>}</div><div className="grid grid-cols-2 gap-3 border-t border-line p-4"><button onClick={()=>setConfirming(false)} disabled={submitting} className="rounded-xl border border-line py-3 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button><button onClick={submit} disabled={submitting||(!mobileVerificationToken&&transactionPin.length!==6)} className="rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60">{submitting?"Sending...":"Confirm"}</button></div></>:<><div className="flex-1 space-y-4 overflow-y-auto p-5"><label className="block text-xs font-bold text-slate-400">Select coin/asset<select value={asset} onChange={e=>{setAsset(e.target.value);reset();}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white">{ordered.length?ordered.map(item=><option key={item.symbol} value={item.symbol}>{item.symbol} - {item.name}</option>):<option value="USDT">No available assets</option>}</select></label><div className="rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Available balance" value={selected?`${selected.balance.toFixed(8).replace(/\.?0+$/,"")} ${selected.symbol}`:"0"}/><LineItem label="Source" value="Spot Wallet"/></div><label className="block text-xs font-bold text-slate-400">Receiver UID or email<input value={receiver} onChange={e=>{setReceiver(e.target.value);reset();}} placeholder="UID or email" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Amount<div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);reset();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-white outline-none"/>{selected&&<button onClick={()=>{setAmount(String(selected.balance));reset();}} className="px-4 text-xs font-black text-lime">MAX</button>}<span className="pr-4 text-xs text-slate-500">{selected?.symbol??""}</span></div></label><label className="block text-xs font-bold text-slate-400">Note optional<textarea value={note} onChange={e=>{setNote(e.target.value);reset();}} rows={3} maxLength={160} className="mt-2 w-full resize-none rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label>{error&&<p className="text-xs text-danger">{error}</p>}</div><div className="border-t border-line p-4"><button onClick={review} disabled={!ordered.length} className="w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">Confirm Transfer</button></div></>}</div></div>;
 }
 
-function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{initialFrom:UserWallet;initialTo:UserWallet;balances:Record<UserWallet,number>;close:()=>void;transfer:(from:UserWallet,to:UserWallet,amount:number,idempotencyKey:string,previewOnly?:boolean,acceptEarlyTransferCharge?:boolean)=>Promise<{ok:boolean;preview?:TransferPreview}>}) {
-  const sourceWallets:UserWallet[]=["SPOT","FUTURES","AI"];
-  const transferWallets:UserWallet[]=["SPOT","FUTURES","AI"];
-  const [from,setFrom]=useState<UserWallet>(sourceWallets.includes(initialFrom)?initialFrom:"SPOT");
-  const [to,setTo]=useState<UserWallet>(initialTo==="AI"||initialTo!==from?initialTo:"FUTURES");
-  const [amount,setAmount]=useState("");
-  const [error,setError]=useState("");
-  const [confirming,setConfirming]=useState(false);
-  const [idempotencyKey,setIdempotencyKey]=useState("");
-  const [submitting,setSubmitting]=useState(false);
-  const [preview,setPreview]=useState<TransferPreview|null>(null);
-  const destinations=from==="AI"?["SPOT" as const]:transferWallets.filter(wallet=>wallet!==from);
-  const value=Number(amount)||0;
-  const label=(wallet:UserWallet)=>displayWalletName(wallet);
-  const resetReview=()=>{setConfirming(false);setPreview(null);setIdempotencyKey("");setError("");};
-  const changeFrom=(wallet:UserWallet)=>{setFrom(wallet);if(wallet==="AI")setTo("SPOT");else if(wallet===to)setTo(transferWallets.find(item=>item!==wallet)!);resetReview();};
-  const changeTo=(wallet:UserWallet)=>{setTo(wallet);resetReview();};
-  const swap=()=>{const nextFrom=to;setTo(from);setFrom(nextFrom);resetReview();};
-  const review=async()=>{if(value<=0){setError("Enter a valid amount");return;}if(value>balances[from]){setError(`Insufficient ${displayWalletName(from)} balance`);return;}setSubmitting(true);const key=crypto.randomUUID();const result=await transfer(from,to,value,key,true);setSubmitting(false);if(!result.ok||!result.preview){setError("Transfer could not be previewed");return;}setIdempotencyKey(key);setPreview(result.preview);setConfirming(true);};
-  const continueTransfer=async()=>{if(submitting||!preview)return;setSubmitting(true);const result=await transfer(from,to,value,idempotencyKey,false,preview.chargeAmount>0);setSubmitting(false);if(!result.ok){setConfirming(false);setPreview(null);setError("Transfer conditions changed. Please review the transfer again.");}};
-  return <div className="fixed inset-0 z-[70] bg-[#0a120f] sm:grid sm:place-items-center sm:bg-black/70 sm:p-4 sm:backdrop-blur-sm"><div className="flex min-h-full w-full flex-col bg-[#111c18] sm:min-h-0 sm:max-w-md sm:rounded-3xl sm:border sm:border-line"><header className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="text-xl font-black">Transfer</h3><button onClick={close} aria-label="Close transfer"><X/></button></header>{confirming&&preview?<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28">{preview.chargeAmount>0&&<section className="rounded-xl border border-[#f6c85f]/30 bg-[#f6c85f]/10 p-4 text-xs leading-5 text-slate-300"><h3 className="text-lg font-black text-white">Early Transfer Charge</h3><p className="mt-2">Your required AI trading period is not complete. A 20% early transfer charge will apply if you transfer funds from your AI Wallet to your Spot Wallet now.</p></section>}<div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Requested Amount" value={`${preview.requestedAmount.toFixed(2)} USDT`}/><LineItem label="Early Transfer Charge" value={`${preview.chargeRate}%`}/><LineItem label="Charge Amount" value={`${preview.chargeAmount.toFixed(2)} USDT`}/><LineItem label="Amount You Will Receive in Spot Wallet" value={`${preview.receivedAmount.toFixed(2)} USDT`}/>{from==="AI"&&<LineItem label="Trading Progress" value={`${preview.completedPercentage.toFixed(2)}% (${preview.remainingPercentage.toFixed(2)}% remaining)`}/>}</div></div><div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={()=>{setConfirming(false);setPreview(null);}} disabled={submitting} className="rounded-xl border border-line py-4 text-sm font-black text-slate-300 disabled:opacity-60">Cancel</button><button onClick={continueTransfer} disabled={submitting} className="rounded-xl bg-lime py-4 text-sm font-black text-ink disabled:opacity-60">{submitting?"Transferring...":"Confirm Transfer"}</button></div></>:<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="relative rounded-2xl border border-line bg-ink/60 p-4"><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">From<select value={from} onChange={e=>changeFrom(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{sourceWallets.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><div className="my-4 border-t border-line"/><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">To<select value={to} onChange={e=>changeTo(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{destinations.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><button onClick={swap} disabled={from==="AI"} className="absolute right-5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-panel text-lime disabled:opacity-30" aria-label="Swap wallets"><ArrowLeftRight size={18} className="rotate-90"/></button></section><label className="block text-xs font-bold text-slate-400">Coin<select className="mt-2 w-full rounded-xl border border-line bg-ink p-4 text-sm font-bold text-white"><option>USDT</option></select></label><div><div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400">Amount</label><span className="text-[11px] text-slate-500">Available {balances[from].toFixed(2)} USDT</span></div><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);resetReview();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-4 text-lg font-bold outline-none"/><button onClick={()=>{setAmount(balances[from].toFixed(2));resetReview();}} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}</div></div><div className="fixed inset-x-0 bottom-0 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={review} disabled={submitting} className="w-full rounded-xl bg-lime py-4 text-sm font-black text-ink disabled:opacity-60">{submitting?"Checking...":"Confirm Transfer"}</button></div></>}</div></div>
+function WalletTransferModal({
+  initialFrom,
+  initialTo,
+  balances,
+  close,
+  transfer,
+}: {
+  initialFrom: UserWallet;
+  initialTo: UserWallet;
+  balances: Record<UserWallet, number>;
+  close: () => void;
+  transfer: (
+    from: UserWallet,
+    to: UserWallet,
+    amount: number,
+    idempotencyKey: string,
+    previewOnly?: boolean,
+    acceptEarlyTransferCharge?: boolean
+  ) => Promise<{ ok: boolean; preview?: TransferPreview }>;
+}) {
+  const sourceWallets: UserWallet[] = ["SPOT", "FUTURES", "AI"];
+  const transferWallets: UserWallet[] = ["SPOT", "FUTURES", "AI"];
+  const [from, setFrom] = useState<UserWallet>(
+    sourceWallets.includes(initialFrom) ? initialFrom : "SPOT"
+  );
+  const [to, setTo] = useState<UserWallet>(
+    initialTo === "AI" || initialTo !== from ? initialTo : "FUTURES"
+  );
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [preview, setPreview] = useState<TransferPreview | null>(null);
+  const destinations =
+    from === "AI"
+      ? ["SPOT" as const]
+      : transferWallets.filter((wallet) => wallet !== from);
+  const value = Number(amount) || 0;
+  const label = (wallet: UserWallet) => displayWalletName(wallet);
+  const resetReview = () => {
+    setConfirming(false);
+    setPreview(null);
+    setIdempotencyKey("");
+    setError("");
+  };
+  const changeFrom = (wallet: UserWallet) => {
+    setFrom(wallet);
+    if (wallet === "AI") setTo("SPOT");
+    else if (wallet === to)
+      setTo(transferWallets.find((item) => item !== wallet)!);
+    resetReview();
+  };
+  const changeTo = (wallet: UserWallet) => {
+    setTo(wallet);
+    resetReview();
+  };
+  const swap = () => {
+    const nextFrom = to;
+    setTo(from);
+    setFrom(nextFrom);
+    resetReview();
+  };
+  const review = async () => {
+    if (value <= 0) {
+      setError("Enter a valid amount");
+      return;
+    }
+    if (value > balances[from]) {
+      setError(`Insufficient ${displayWalletName(from)} balance`);
+      return;
+    }
+    setSubmitting(true);
+    const key = crypto.randomUUID();
+    const result = await transfer(from, to, value, key, true);
+    setSubmitting(false);
+    if (!result.ok || !result.preview) {
+      setError("Transfer could not be previewed");
+      return;
+    }
+    setIdempotencyKey(key);
+    setPreview(result.preview);
+    setConfirming(true);
+  };
+  const continueTransfer = async () => {
+    if (submitting || !preview) return;
+    setSubmitting(true);
+    const result = await transfer(
+      from,
+      to,
+      value,
+      idempotencyKey,
+      false,
+      preview.chargeAmount > 0
+    );
+    setSubmitting(false);
+    if (!result.ok) {
+      setConfirming(false);
+      setPreview(null);
+      setError(
+        "Transfer conditions changed. Please review the transfer again."
+      );
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-[70] bg-[#0a120f] sm:grid sm:place-items-center sm:bg-black/70 sm:p-4 sm:backdrop-blur-sm">
+      <div className="flex min-h-full w-full flex-col bg-[#111c18] sm:min-h-0 sm:max-w-md sm:rounded-3xl sm:border sm:border-line">
+        <header className="flex items-center justify-between border-b border-line px-5 py-4">
+          <h3 className="text-xl font-black">Transfer</h3>
+          <button onClick={close} aria-label="Close transfer">
+            <X />
+          </button>
+        </header>
+        {confirming && preview ? (
+          <>
+            <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28">
+              {(preview.chargeRate > 0 || preview.chargeAmount > 0) && (
+                <section className="rounded-xl border border-lime/30 bg-ink/60 p-4 text-xs leading-5 text-slate-300 shadow-[0_0_28px_rgba(24,255,138,.12),inset_0_1px_0_rgba(255,255,255,.04)]">
+                  <h3 className="text-lg font-black text-white">
+                    Early Transfer Charge
+                  </h3>
+                  <p className="mt-2">
+                    Your required AI trading period is not complete. A 20% early
+                    transfer charge will apply if you transfer funds from your
+                    AI Wallet to your Spot Wallet now.
+                  </p>
+                </section>
+              )}
+              <div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4">
+                <LineItem
+                  label="Requested Amount"
+                  value={`${preview.requestedAmount.toFixed(2)} USDT`}
+                />
+                {(preview.chargeRate > 0 || preview.chargeAmount > 0) && (
+                  <>
+                    <LineItem
+                      label="Early Transfer Charge"
+                      value={`${preview.chargeRate}%`}
+                    />
+                    <LineItem
+                      label="Charge Amount"
+                      value={`${preview.chargeAmount.toFixed(2)} USDT`}
+                    />
+                  </>
+                )}
+                <LineItem
+                  label="Amount You Will Receive in Spot Wallet"
+                  value={`${preview.receivedAmount.toFixed(2)} USDT`}
+                />
+                {from === "AI" &&
+                  (preview.chargeRate > 0 || preview.chargeAmount > 0) && (
+                  <LineItem
+                    label="Trading Progress"
+                    value={`${preview.completedPercentage.toFixed(
+                      2
+                    )}% (${preview.remainingPercentage.toFixed(2)}% remaining)`}
+                  />
+                )}
+              </div>
+            </div>
+            <div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl">
+              <button
+                onClick={() => {
+                  setConfirming(false);
+                  setPreview(null);
+                }}
+                disabled={submitting}
+                className="rounded-xl border border-line py-4 text-sm font-black text-slate-300 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={continueTransfer}
+                disabled={submitting}
+                className="rounded-xl bg-lime py-4 text-sm font-black text-ink disabled:opacity-60"
+              >
+                {submitting ? "Transferring..." : "Confirm Transfer"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28">
+              <section className="relative rounded-2xl border border-line bg-ink/60 p-4">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  From
+                  <select
+                    value={from}
+                    onChange={(e) => changeFrom(e.target.value as UserWallet)}
+                    className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none"
+                  >
+                    {sourceWallets.map((wallet) => (
+                      <option key={wallet} value={wallet} className="bg-ink">
+                        {label(wallet)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="my-4 border-t border-line" />
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  To
+                  <select
+                    value={to}
+                    onChange={(e) => changeTo(e.target.value as UserWallet)}
+                    className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none"
+                  >
+                    {destinations.map((wallet) => (
+                      <option key={wallet} value={wallet} className="bg-ink">
+                        {label(wallet)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  onClick={swap}
+                  disabled={from === "AI"}
+                  className="absolute right-5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-panel text-lime disabled:opacity-30"
+                  aria-label="Swap wallets"
+                >
+                  <ArrowLeftRight size={18} className="rotate-90" />
+                </button>
+              </section>
+              <label className="block text-xs font-bold text-slate-400">
+                Coin
+                <select className="mt-2 w-full rounded-xl border border-line bg-ink p-4 text-sm font-bold text-white">
+                  <option>USDT</option>
+                </select>
+              </label>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-400">
+                    Amount
+                  </label>
+                  <span className="text-[11px] text-slate-500">
+                    Available {balances[from].toFixed(2)} USDT
+                  </span>
+                </div>
+                <div
+                  className={`mt-2 flex items-center rounded-xl border bg-ink ${
+                    error
+                      ? "border-danger/60"
+                      : "border-line focus-within:border-lime/50"
+                  }`}
+                >
+                  <input
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => {
+                      setAmount(e.target.value);
+                      resetReview();
+                    }}
+                    placeholder="0.00"
+                    className="min-w-0 flex-1 bg-transparent px-4 py-4 text-lg font-bold outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      setAmount(balances[from].toFixed(2));
+                      resetReview();
+                    }}
+                    className="px-4 text-xs font-black text-lime"
+                  >
+                    MAX
+                  </button>
+                  <span className="pr-4 text-xs text-slate-500">USDT</span>
+                </div>
+                {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+              </div>
+            </div>
+            <div className="fixed inset-x-0 bottom-0 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl">
+              <button
+                onClick={review}
+                disabled={submitting}
+                className="w-full rounded-xl bg-lime py-4 text-sm font-black text-ink disabled:opacity-60"
+              >
+                {submitting ? "Checking..." : "Confirm Transfer"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function WithdrawalModal({
@@ -3588,4 +3849,3 @@ function LineItem({label,value}:{label:string;value:string}) { return <div class
 
 
 function Stat({label,value,trend}:{label:string;value:string;trend?:string}) { return <div className="rounded-xl border border-line bg-ink/50 p-3"><p className="text-[10px] text-slate-500">{label}</p><div className="mt-1 flex items-end gap-1"><p className="font-black">{value}</p>{trend&&<span className="text-[9px] text-mint">{trend}</span>}</div></div> }
-
