@@ -194,6 +194,7 @@ export async function getUserDepositStatus(input: { userId: string; depositId: s
 
 export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
   const paymentId = valueAsString(payload.payment_id);
+  if (!paymentId) throw new Error("NOWPayments callback is missing a provider payment identity");
   const orderId = valueAsString(payload.order_id);
   const parentPaymentId = valueAsString(payload.parent_payment_id);
   const paymentStatus = valueAsString(payload.payment_status) ?? "unknown";

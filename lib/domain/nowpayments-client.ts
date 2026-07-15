@@ -30,7 +30,7 @@ export function nowPaymentsCurrencyForNetwork(network: string) {
 export async function createNowPaymentsCustomer(name: string) {
   return request("/v1/sub-partner/balance", {
     method: "POST",
-    auth: true,
+    auth: "deposit",
     body: { name },
   });
 }
@@ -42,7 +42,7 @@ export async function createNowPaymentsCustomerPayment(input: {
 }) {
   return request("/v1/sub-partner/payment", {
     method: "POST",
-    auth: true,
+    auth: "deposit",
     body: {
       currency: input.currency,
       amount: input.amount,
@@ -74,7 +74,7 @@ export async function createNowPaymentsPayout(input: {
 }) {
   const data = await request("/v1/payout", {
     method: "POST",
-    auth: true,
+    auth: "payout",
     body: {
       withdrawals: [{
         address: input.address,
@@ -96,7 +96,7 @@ export async function createNowPaymentsPayout(input: {
   if (batchId && totpSecret) {
     await request(`/v1/payout/${encodeURIComponent(batchId)}/verify`, {
       method: "POST",
-      auth: true,
+      auth: "payout",
       body: { verification_code: generateTotp(totpSecret) },
     });
   } else if (process.env.NOWPAYMENTS_REQUIRE_PAYOUT_2FA !== "false") {
@@ -112,11 +112,18 @@ export async function createNowPaymentsPayout(input: {
   };
 }
 
-async function request(path: string, options: { method: "POST" | "GET"; auth?: boolean; body?: NowPaymentsJson }) {
+type NowPaymentsAuthPurpose = "deposit" | "payout";
+
+async function request(path: string, options: { method: "POST" | "GET"; auth?: NowPaymentsAuthPurpose; body?: NowPaymentsJson }) {
   const apiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
-  if (!apiKey) throw new NowPaymentsApiError("NOWPayments API key is not configured", 503);
+  if (!apiKey) {
+    const message = options.auth === "deposit"
+      ? "NOWPayments deposit credentials are not configured."
+      : "NOWPayments API key is not configured";
+    throw new NowPaymentsApiError(message, 503);
+  }
   const headers: Record<string, string> = { "x-api-key": apiKey, "Content-Type": "application/json" };
-  if (options.auth) headers.Authorization = `Bearer ${await authToken()}`;
+  if (options.auth) headers.Authorization = `Bearer ${await authToken(options.auth)}`;
   let response: Response;
   try {
     response = await fetch(`${apiBase()}${path}`, {
@@ -133,11 +140,18 @@ async function request(path: string, options: { method: "POST" | "GET"; auth?: b
   return data;
 }
 
-async function authToken() {
+async function authToken(purpose: NowPaymentsAuthPurpose) {
   if (cachedAuth && cachedAuth.expiresAt > Date.now() + 15_000) return cachedAuth.token;
   const email = process.env.NOWPAYMENTS_EMAIL?.trim();
   const password = process.env.NOWPAYMENTS_PASSWORD;
-  if (!email || !password) throw new NowPaymentsApiError("NOWPayments payout credentials are not configured", 503);
+  if (!email || !password) {
+    throw new NowPaymentsApiError(
+      purpose === "deposit"
+        ? "NOWPayments deposit credentials are not configured."
+        : "NOWPayments payout credentials are not configured",
+      503,
+    );
+  }
   let response: Response;
   try {
     response = await fetch(`${apiBase()}/v1/auth`, {

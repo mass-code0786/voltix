@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { createNowPaymentsDeposit } from "@/lib/domain/payment-service";
 import { rateLimitByUser } from "@/lib/security";
 import { auditFailure, auditSuccess } from "@/lib/audit";
+import { NowPaymentsApiError } from "@/lib/domain/nowpayments-client";
 
 const createSchema = z.object({
   amount: z.coerce.number().positive(),
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ deposit }, { status: 201 });
   } catch (error) {
     await auditFailure({ request, userId: user.id, role: "USER", action: "DEPOSIT_CREATED", module: "DEPOSIT", description: "NOWPayments deposit creation failed", errorMessage: error instanceof Error ? error.message : "NOWPayments deposit creation failed" }).catch(() => null);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "NOWPayments deposit creation failed" }, { status: 400 });
+    const status = error instanceof NowPaymentsApiError && error.status === 503 ? 503 : 400;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "NOWPayments deposit creation failed" }, { status });
   }
 }

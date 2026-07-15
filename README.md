@@ -26,8 +26,8 @@ npm run db:push
 ## Production boundaries
 
 - USDT BEP20/TRC20 deposits use permanent NOWPayments Customer Management addresses and signed IPN callbacks.
-- Configure `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_EMAIL`, `NOWPAYMENTS_PASSWORD`, `NOWPAYMENTS_TOTP_SECRET`, `NOWPAYMENTS_IPN_SECRET`, both callback URLs, and `NEXT_PUBLIC_APP_URL` before enabling deposits or payouts.
-- Enable NOWPayments Customer Management and Mass Payouts for the merchant account, whitelist the production server IP, and keep payout 2FA enabled.
+- Deposits require `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_EMAIL`, `NOWPAYMENTS_PASSWORD`, and `NOWPAYMENTS_IPN_SECRET`. `NOWPAYMENTS_EMAIL` and `NOWPAYMENTS_PASSWORD` obtain the bearer token used by Customer Management address provisioning. Configure `NOWPAYMENTS_IPN_CALLBACK_URL`, or configure `NEXT_PUBLIC_APP_URL`/`APP_URL` so the callback defaults to `/api/webhooks/nowpayments`. Legacy payout settings (`NOWPAYMENTS_TOTP_SECRET`, `NOWPAYMENTS_REQUIRE_PAYOUT_2FA`, and `NOWPAYMENTS_PAYOUT_IPN_CALLBACK_URL`) do not affect deposits.
+- Enable NOWPayments Customer Management for the merchant account. NOWPayments Mass Payouts, payout 2FA, and payout IP whitelisting are not used for deposits; withdrawals are handled by the separate VPS wallet system.
 - Spot balances are credited only after a signed final-status IPN includes a blockchain transaction hash and verified paid amount.
 - Deposit and withdrawal idempotency is enforced by provider IDs, transaction hashes, client idempotency keys, and ledger journal idempotency.
 - Spot withdrawals reserve funds atomically before payout submission. Definitive provider failures post a balanced refund; ambiguous provider responses remain processing for reconciliation rather than risking a duplicate payout.
