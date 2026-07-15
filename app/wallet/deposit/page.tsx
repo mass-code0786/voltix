@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Copy } from "lucide-react";
+import { ArrowLeft, Copy } from "lucide-react";
 
 type DepositResult = {
   id: string;
@@ -31,7 +31,6 @@ export default function WalletDepositPage() {
   const [network,setNetwork]=useState("BSC");
   const [payCurrency,setPayCurrency]=useState("usdtbsc");
   const [error,setError]=useState("");
-  const [message,setMessage]=useState("");
   const [submitting,setSubmitting]=useState(false);
   const [deposit,setDeposit]=useState<DepositResult|null>(null);
   const clientRequestIdRef=useRef<string|null>(null);
@@ -44,14 +43,12 @@ export default function WalletDepositPage() {
     setNetwork(next);
     setPayCurrency(next==="TRON"?"usdttrc20":"usdtbsc");
     setError("");
-    setMessage("");
     clientRequestIdRef.current=null;
   };
 
   const submit=async()=>{
     if(submittingRef.current)return;
     setError("");
-    setMessage("");
     if(value<=0){setError("Enter a valid deposit amount");return;}
     if(value<10){setError("Minimum deposit is 10 USDT.");return;}
     submittingRef.current=true;
@@ -72,15 +69,12 @@ export default function WalletDepositPage() {
     if(response.status===401){router.replace(`/auth?mode=login&returnTo=${encodeURIComponent("/wallet/deposit")}`);return;}
     if(!response.ok){setError(data.error||"NOWPayments deposit failed");return;}
     setDeposit(data.deposit as DepositResult);
-    setMessage("NOWPayments deposit created");
   };
 
   const copyPayment=async()=>{
     setError("");
-    setMessage("");
     if(!payAddress){setError("Payment address unavailable");return;}
     await navigator.clipboard?.writeText(payAddress);
-    setMessage("Payment address copied");
   };
 
   return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-3 text-white sm:px-6">
@@ -91,7 +85,6 @@ export default function WalletDepositPage() {
       </header>
 
       <section className="profile-glass mt-2 rounded-[22px] p-4">
-        {message&&<div className="mb-4 flex items-center gap-3 rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 p-3 text-sm font-bold text-[#18ff8a]"><CheckCircle2 size={18}/>{message}</div>}
         {deposit?<>
           <div className="mx-auto my-5 grid h-44 w-44 place-items-center rounded-2xl bg-white p-3">
             {qrValue?<img src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrValue)}`} alt="NOWPayments payment QR code" className="h-full w-full object-contain"/>:<div className="grid h-full w-full place-items-center bg-[#07130f] p-2 text-center text-[10px] font-bold text-slate-500">Payment QR unavailable</div>}
@@ -109,11 +102,10 @@ export default function WalletDepositPage() {
             <span className="min-w-0 flex-1 break-all text-xs text-slate-300">{payAddress||"Payment address unavailable"}</span>
             <Copy size={16} className="shrink-0 text-[#18ff8a]"/>
           </button>
-          <div className="mt-4 rounded-2xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">{deposit.addressMode==="PER_PAYMENT"?"This deposit address is valid for this payment request. Create a new deposit request for your next deposit.":"This permanent address can be reused. Deposits credit to Spot Wallet after the required blockchain confirmations and final provider status."}</div>
         </>:<>
-          <label className="block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={event=>{setAmount(event.target.value);setError("");setMessage("");clientRequestIdRef.current=null;}} placeholder="0.00" className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"/></label>
+          <label className="block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={event=>{setAmount(event.target.value);setError("");clientRequestIdRef.current=null;}} placeholder="0.00" className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"/></label>
           <label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={event=>changeNetwork(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option></select></label>
-          <label className="mt-4 block text-xs font-bold text-slate-400">Payment currency<select value={payCurrency} onChange={event=>{setPayCurrency(event.target.value);setError("");setMessage("");clientRequestIdRef.current=null;}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="usdtbsc">USDT BSC</option><option value="usdttrc20">USDT TRC20</option></select></label>
+          <label className="mt-4 block text-xs font-bold text-slate-400">Payment currency<select value={payCurrency} onChange={event=>{setPayCurrency(event.target.value);setError("");clientRequestIdRef.current=null;}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="usdtbsc">USDT BSC</option><option value="usdttrc20">USDT TRC20</option></select></label>
         </>}
         {error&&<p className="mt-3 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs font-bold text-[#ff8aa0]">{error}</p>}
         {!deposit&&<div className="sticky bottom-0 -mx-4 mt-5 border-t border-white/[.08] bg-[#111c18]/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
