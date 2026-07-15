@@ -57,7 +57,6 @@ export default function WalletWithdrawPage() {
 
   const value=Number(amount)||0;
   const available=useMemo(()=>Number(totals.total?.spot??0),[totals]);
-  const aiAvailable=Number(totals.total?.aiWallet??0);
   const fixedFee=value>0?fixedSpotFee:0;
   const percentageFee=value*spotFeeRate;
   const totalFee=fixedFee+percentageFee;
@@ -143,9 +142,7 @@ export default function WalletWithdrawPage() {
         </div>
       </section>:<section className="profile-glass mt-2 rounded-[22px] p-4">
         {success&&<div className="mb-4 flex items-center gap-3 rounded-2xl border border-[#18ff8a]/30 bg-[#18ff8a]/10 p-3 text-sm font-bold text-[#18ff8a]"><CheckCircle2 size={18}/>{success}</div>}
-        <div className="rounded-2xl border border-white/[.08] bg-black/25 p-4"><LineItem label="Withdrawal source" value="Spot Wallet"/></div>
-        {available<=0&&aiAvailable>0&&<div className="mt-4 rounded-2xl border border-[#f6c85f]/30 bg-[#f6c85f]/10 p-4 text-xs text-slate-300"><p>Transfer funds from your AI Wallet to your Spot Wallet before making a withdrawal.</p><button type="button" onClick={()=>router.push("/dashboard?view=wallet&action=transfer&from=AI&to=SPOT")} className="mt-3 rounded-xl bg-[#18ff8a] px-4 py-2.5 font-black text-[#050608]">Transfer to Spot Wallet</button></div>}
-        <label className="mt-4 block text-xs font-bold text-slate-400">Amount</label>
+        <label className="block text-xs font-bold text-slate-400">Amount</label>
         <div className={`mt-2 flex items-center rounded-2xl border bg-black/25 ${error?"border-[#ff4f6d]/60":"border-white/[.08] focus-within:border-[#18ff8a]/50"}`}>
           <input inputMode="decimal" value={amount} onChange={event=>{setAmount(event.target.value);resetError();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3.5 text-white outline-none"/>
           <button type="button" onClick={()=>{setAmount(available.toFixed(2));resetError();}} className="px-4 text-xs font-black text-[#18ff8a]">MAX</button>
