@@ -20,8 +20,8 @@ export async function POST(request: Request) {
 
   try {
     const payload = JSON.parse(rawBody) as Record<string, unknown>;
-    const deposit = await processNowPaymentsIpn(payload);
-    if (deposit.status === "CREDITED") {
+    const deposit = await processNowPaymentsIpn(payload, { signatureVerified: true });
+    if (deposit.status === "COMPLETED") {
       await postFirstDepositReferralIncome(deposit.id).catch(() => ({ posted: 0 }));
     }
     await auditSuccess({ request, role: "SYSTEM", action: "NOWPAYMENTS_WEBHOOK", module: "WEBHOOK", description: "NOWPayments webhook processed", metadata: { paymentId: payload.payment_id ?? null, orderId: payload.order_id ?? null, depositId: deposit.id, status: deposit.status } }).catch(() => null);
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   } catch (error) {
     await logInvalidWebhook(request, "NOWPAYMENTS_IPN_PROCESSING_FAILED", error instanceof Error ? error.message : "Unknown error");
     await auditFailure({ request, role: "SYSTEM", action: "NOWPAYMENTS_WEBHOOK", module: "WEBHOOK", description: "NOWPayments webhook processing failed", errorMessage: error instanceof Error ? error.message : "NOWPayments IPN processing failed" }).catch(() => null);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "NOWPayments IPN processing failed" }, { status: 400 });
+    return NextResponse.json({ error: "NOWPayments IPN could not be processed" }, { status: 400 });
   }
 }
 

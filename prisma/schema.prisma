@@ -52,6 +52,10 @@ enum DepositStatus {
   CONFIRMING
   CONFIRMED
   CREDITED
+  COMPLETED
+  UNDERPAID
+  OVERPAID
+  REVIEW_REQUIRED
   FAILED
   EXPIRED
 }
@@ -466,6 +470,8 @@ model Deposit {
   outcomeAmount      Decimal?        @db.Decimal(36, 18)
   rawWebhookJson     Json?
   webhookReceivedAt  DateTime?
+  signatureVerified  Boolean         @default(false)
+  failureReason      String?
   txHash             String?
   eventIndex         Int             @default(0)
   amount             Decimal         @db.Decimal(36, 18)

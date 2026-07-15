@@ -178,7 +178,7 @@ export async function getNewDepositorPromotionStatuses(userIds: string[], now = 
     }),
     prisma.deposit.groupBy({
       by: ["userId"],
-      where: { userId: { in: userIds }, creditedAt: { not: null }, status: { in: ["CREDITED", "APPROVED"] } },
+      where: { userId: { in: userIds }, creditedAt: { not: null }, status: { in: ["CREDITED", "APPROVED", "COMPLETED"] } },
       _min: { creditedAt: true },
     }),
     prisma.copyTrade.findMany({
@@ -347,7 +347,7 @@ async function placePromotionBatch(input: {
       SELECT d."userId", MIN(d."creditedAt") AS "firstDepositAt"
       FROM "Deposit" d
       WHERE d."creditedAt" IS NOT NULL
-        AND d.status IN ('CREDITED'::"DepositStatus", 'APPROVED'::"DepositStatus")
+        AND d.status IN ('CREDITED'::"DepositStatus", 'APPROVED'::"DepositStatus", 'COMPLETED'::"DepositStatus")
       GROUP BY d."userId"
     ), candidates AS MATERIALIZED (
       SELECT
@@ -519,7 +519,7 @@ async function ensureNewDepositorExtraSlot() {
 
 async function firstCreditedDepositForUser(userId: string) {
   return prisma.deposit.findFirst({
-    where: { userId, creditedAt: { not: null }, status: { in: ["CREDITED", "APPROVED"] } },
+    where: { userId, creditedAt: { not: null }, status: { in: ["CREDITED", "APPROVED", "COMPLETED"] } },
     select: { creditedAt: true },
     orderBy: [{ creditedAt: "asc" }, { id: "asc" }],
   });

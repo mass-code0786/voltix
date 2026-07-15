@@ -183,7 +183,23 @@ export async function createNowPaymentsDeposit(input: { userId: string; amount: 
     const { addresses } = await getOrCreateDepositAddresses(input.userId);
     const address = addresses.find(row => row.network === input.network.trim().toUpperCase());
     if (!address) throw new Error("Permanent deposit address is unavailable");
-    return formatPermanentDepositAddress(address, input.amount);
+    const request = await prisma.deposit.create({
+      data: {
+        userId: input.userId,
+        assetId: (await prisma.asset.findUniqueOrThrow({ where: { symbol: "USDT" } })).id,
+        networkId: (await prisma.chainNetwork.findUniqueOrThrow({ where: { key: input.network.trim().toUpperCase() } })).id,
+        depositAddressId: address.id,
+        clientRequestId: input.clientRequestId,
+        providerOrderId: `voltix-deposit:${input.userId}:${input.clientRequestId}`,
+        payCurrency: input.payCurrency.toLowerCase(),
+        payAddress: address.address,
+        paymentStatus: "waiting",
+        amount: input.amount,
+        status: "PENDING",
+      },
+      include: { asset: true, network: true },
+    });
+    return formatDeposit(request);
   } catch (error) {
     if (!isNowPaymentsPermanentCapabilityError(error)) throw error;
     return createStandardNowPaymentsDeposit(input);
@@ -296,7 +312,7 @@ export async function getUserDepositStatus(input: { userId: string; depositId: s
   return formatDeposit(deposit);
 }
 
-export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
+export async function processNowPaymentsIpn(payload: NowPaymentsPayload, verification: { signatureVerified: true }) {
   const paymentId = valueAsString(payload.payment_id);
   if (!paymentId) throw new Error("NOWPayments callback is missing a provider payment identity");
   const orderId = valueAsString(payload.order_id);
@@ -318,7 +334,16 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
       const address = await tx.depositAddress.findUnique({ where: { providerPaymentId: parentPaymentId }, include: { asset: true, network: true } });
       if (address) {
         if (payCurrency && payCurrency !== address.payCurrency.toLowerCase()) throw new Error("Deposit currency does not match the permanent address");
-        target = await tx.deposit.create({
+        const pendingRequest = await tx.deposit.findFirst({
+          where: { depositAddressId: address.id, providerPaymentId: null, creditedAt: null, status: "PENDING" },
+          orderBy: { createdAt: "desc" },
+          include: { asset: true, network: true },
+        });
+        target = pendingRequest ? await tx.deposit.update({
+          where: { id: pendingRequest.id },
+          data: { providerPaymentId: paymentId, parentPaymentId },
+          include: { asset: true, network: true },
+        }) : await tx.deposit.create({
           data: {
             userId: address.userId,
             assetId: address.assetId,
@@ -342,6 +367,9 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
       }
     }
     if (!target) throw new Error("NOWPayments deposit was not found");
+    await tx.$queryRaw`SELECT "id" FROM "Deposit" WHERE "id" = ${target.id} FOR UPDATE`;
+    target = await tx.deposit.findUniqueOrThrow({ where: { id: target.id }, include: { asset: true, network: true } });
+    if (target.providerPaymentId && target.providerPaymentId !== paymentId) throw new Error("NOWPayments payment ID does not match the stored deposit");
     if (payCurrency && target.payCurrency && payCurrency !== target.payCurrency.toLowerCase()) throw new Error("Deposit currency does not match the selected network");
     if (txHash) {
       const duplicateHash = await tx.deposit.findFirst({ where: { networkId: target.networkId, txHash, eventIndex: target.eventIndex, id: { not: target.id } }, select: { id: true } });
@@ -353,6 +381,12 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
       ? Math.floor(payloadConfirmations)
       : paymentStatus.toLowerCase() === "finished" ? target.network.requiredConfirmations : target.confirmations;
     const creditAmount = paidAmount ?? target.actuallyPaid;
+    const requestedAmount = target.amount;
+    const tolerance = nowPaymentsDepositTolerance();
+    const finalStatus = paymentStatus.toLowerCase() === "finished";
+    const amountReviewStatus = finalStatus && creditAmount
+      ? classifyNowPaymentsAmount(requestedAmount, creditAmount, tolerance)
+      : null;
     const updated = await tx.deposit.update({
       where: { id: target.id },
       data: {
@@ -366,19 +400,26 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
         actuallyPaid: paidAmount,
         outcomeAmount: decimalOrUndefined(payload.outcome_amount),
         txHash: txHash ?? target.txHash,
-        amount: creditAmount ?? target.amount,
         confirmations,
-        status,
+        status: amountReviewStatus ?? status,
         rawWebhookJson: payload as Prisma.InputJsonValue,
         webhookReceivedAt: now,
+        signatureVerified: verification.signatureVerified,
+        failureReason: amountReviewStatus ? `Paid amount differs from requested amount by more than ${tolerance.toString()} USDT` : null,
       },
       include: { asset: true, network: true },
     });
 
-    if (!isCreditableNowPaymentsStatus(paymentStatus) || updated.creditedAt) return formatDeposit(updated);
-    if (!updated.txHash) throw new Error("Confirmed deposit is missing a blockchain transaction hash");
+    if (!isCreditableNowPaymentsStatus(paymentStatus) || updated.creditedAt || amountReviewStatus) return formatDeposit(updated);
+    if (!updated.txHash) {
+      const review = await tx.deposit.update({ where: { id: updated.id }, data: { status: "REVIEW_REQUIRED", failureReason: "Finished payment is missing a pay-in transaction hash" }, include: { asset: true, network: true } });
+      return formatDeposit(review);
+    }
     if (updated.confirmations < updated.network.requiredConfirmations) return formatDeposit(updated);
-    if (!creditAmount || creditAmount.lte(0)) throw new Error("Confirmed deposit is missing a verified paid amount");
+    if (!creditAmount || creditAmount.lte(0)) {
+      const review = await tx.deposit.update({ where: { id: updated.id }, data: { status: "REVIEW_REQUIRED", failureReason: "Finished payment is missing a verified paid amount" }, include: { asset: true, network: true } });
+      return formatDeposit(review);
+    }
 
     const [spotAccount, treasuryAccount] = await Promise.all([
       tx.walletAccount.findUniqueOrThrow({ where: { userId_assetId_type: { userId: updated.userId, assetId: updated.assetId, type: "SPOT" } } }),
@@ -397,7 +438,7 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
     await tx.user.update({ where: { id: updated.userId }, data: { spotBalance: { increment: creditAmount } } });
     const credited = await tx.deposit.update({
       where: { id: updated.id },
-      data: { status: "CREDITED", creditedAt: now },
+      data: { status: "COMPLETED", creditedAt: now, failureReason: null },
       include: { asset: true, network: true },
     });
     await recalculateVipRanksForUserAndUplines(updated.userId, tx);
@@ -406,7 +447,7 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload) {
       type: "DEPOSIT_STATUS",
       title: "Deposit credited",
       message: `${creditAmount.toString()} ${updated.asset.symbol} has been credited to your Spot wallet.`,
-      metadata: { depositId: updated.id, provider: "NOWPAYMENTS", paymentId, status: "CREDITED", ledgerJournalId: journal.id },
+      metadata: { depositId: updated.id, provider: "NOWPAYMENTS", paymentId, status: "COMPLETED", ledgerJournalId: journal.id, amountCredited: creditAmount.toString() },
     });
     await tx.auditLog.create({
       data: {
@@ -992,7 +1033,7 @@ function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: st
     outcomeAmount: deposit.outcomeAmount ? Number(deposit.outcomeAmount.toString()) : null,
     txHash: deposit.txHash,
     status: deposit.status,
-    displayStatus: deposit.status === "CREDITED" || deposit.status === "APPROVED" ? "Completed" : deposit.status === "CONFIRMING" || deposit.status === "CONFIRMED" || deposit.status === "DETECTED" ? "Confirming" : deposit.status === "FAILED" || deposit.status === "REJECTED" || deposit.status === "EXPIRED" ? "Failed" : "Pending",
+    displayStatus: deposit.status === "COMPLETED" || deposit.status === "CREDITED" || deposit.status === "APPROVED" ? "Completed" : deposit.status === "CONFIRMING" || deposit.status === "CONFIRMED" || deposit.status === "DETECTED" ? "Confirming" : deposit.status === "FAILED" || deposit.status === "REJECTED" || deposit.status === "EXPIRED" ? "Failed" : deposit.status === "REVIEW_REQUIRED" || deposit.status === "UNDERPAID" || deposit.status === "OVERPAID" ? "Review required" : "Pending",
     confirmations: deposit.confirmations ?? 0,
     requiredConfirmations: deposit.network.requiredConfirmations ?? 0,
     creditedAt: deposit.creditedAt?.toISOString() ?? null,
@@ -1084,6 +1125,17 @@ function decimalOrUndefined(value: unknown) {
   } catch {
     return undefined;
   }
+}
+
+function nowPaymentsDepositTolerance() {
+  const configured = decimalOrUndefined(process.env.NOWPAYMENTS_DEPOSIT_TOLERANCE_USDT ?? "0.10");
+  return configured && configured.gte(0) ? configured : new Prisma.Decimal("0.10");
+}
+
+export function classifyNowPaymentsAmount(requested: Prisma.Decimal, paid: Prisma.Decimal, tolerance: Prisma.Decimal) {
+  const difference = paid.minus(requested);
+  if (difference.abs().lte(tolerance)) return null;
+  return difference.isNegative() ? DepositStatus.UNDERPAID : DepositStatus.OVERPAID;
 }
 
 function dateOrUndefined(value: unknown) {

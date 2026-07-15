@@ -180,16 +180,20 @@ export async function getAdminDeposits() {
   });
   return {
     rows: deposits.map(deposit => [
-      deposit.providerPaymentId ?? deposit.id,
+      deposit.id,
+      deposit.providerPaymentId ?? "",
+      deposit.providerOrderId ?? "",
       deposit.paymentStatus ?? deposit.status,
       `${deposit.user.name} / ${deposit.user.uid}`,
       money(deposit.amount),
-      deposit.payCurrency?.toUpperCase() ?? deposit.network.name,
       deposit.actuallyPaid ? money(deposit.actuallyPaid) : "$0.00",
-      deposit.status,
-      deposit.creditedAt ? "Credited" : "Not credited",
+      deposit.actuallyPaid ? money(deposit.actuallyPaid.minus(deposit.amount)) : "",
+      deposit.txHash ?? "",
       deposit.webhookReceivedAt ? formatDate(deposit.webhookReceivedAt) : "",
-      deposit.id,
+      deposit.signatureVerified ? "Verified" : "Not verified",
+      deposit.creditedAt ? formatDate(deposit.creditedAt) : "",
+      deposit.status,
+      deposit.failureReason ?? "",
     ]),
   };
 }

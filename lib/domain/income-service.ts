@@ -42,9 +42,9 @@ export async function postFirstDepositReferralIncome(depositId: string, adminUse
       where: { id: depositId },
       include: { user: { include: { referredBy: { include: { referredBy: true } } } }, asset: true },
     });
-    if (deposit.status !== "APPROVED" && deposit.status !== "CREDITED") return { posted: 0 };
+    if (deposit.status !== "APPROVED" && deposit.status !== "CREDITED" && deposit.status !== "COMPLETED") return { posted: 0 };
     const otherApproved = await tx.deposit.count({
-      where: { userId: deposit.userId, id: { not: deposit.id }, status: { in: ["APPROVED", "CREDITED"] } },
+      where: { userId: deposit.userId, id: { not: deposit.id }, status: { in: ["APPROVED", "CREDITED", "COMPLETED"] } },
     });
     if (otherApproved > 0) return { posted: 0 };
 
