@@ -332,6 +332,7 @@ export async function getUserWithdrawals(userId: string) {
 }
 
 export async function createWithdrawalRequest(input: { userId: string; walletType: WithdrawalWallet; amount: Prisma.Decimal; address: string; network: string; idempotencyKey: string; acceptEarlyWithdrawalCharge?: boolean }) {
+  if (input.walletType === "AI") throw new Error("Direct withdrawal from AI Wallet is no longer available. Please transfer funds to your Spot Wallet first.");
   if (!input.idempotencyKey.trim()) throw new Error("Idempotency key is required");
   if (!input.address.trim()) throw new Error("External wallet address is required");
   if (input.amount.lte(0)) throw new Error("Withdrawal amount must be positive");
@@ -613,6 +614,8 @@ export async function rejectDepositRequest(input: { depositId: string; adminUser
 }
 
 export async function approveWithdrawalRequest(input: { withdrawalId: string; adminUserId: string }) {
+  throw new Error("Legacy AI withdrawals are read-only and can no longer be approved.");
+  /* Legacy implementation retained below for historical data compatibility.
   const approved = await prisma.$transaction(async (tx) => {
     const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: input.withdrawalId }, include: { asset: true, network: true } });
     if (withdrawal.status !== "PENDING") throw new Error("Withdrawal has already been actioned");
@@ -673,9 +676,12 @@ export async function approveWithdrawalRequest(input: { withdrawalId: string; ad
     const pending = await prisma.withdrawal.findUniqueOrThrow({ where: { id: approved.id }, include: { asset: true, network: true } });
     return formatWithdrawal(pending);
   }
+  */
 }
 
 export async function rejectWithdrawalRequest(input: { withdrawalId: string; adminUserId: string; reason?: string }) {
+  throw new Error("Legacy AI withdrawals are read-only and can no longer be rejected.");
+  /* Legacy implementation retained below for historical data compatibility.
   return prisma.$transaction(async (tx) => {
     const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: input.withdrawalId }, include: { asset: true, network: true } });
     if (withdrawal.status !== "PENDING") throw new Error("Withdrawal has already been actioned");
@@ -710,6 +716,7 @@ export async function rejectWithdrawalRequest(input: { withdrawalId: string; adm
     });
     return formatWithdrawal(updated);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  */
 }
 
 export async function processNowPaymentsPayoutIpn(payload: NowPaymentsPayload) {

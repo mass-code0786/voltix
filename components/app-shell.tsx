@@ -61,9 +61,10 @@ const WALLET_HISTORY_TABS: readonly { id: WalletHistoryCategory; label: string }
   { id: "LEVEL_INCOME", label: "Level Income" },
   { id: "VIP_INCOME", label: "VIP Income" },
 ];
+type WithdrawalInput = { walletType: "SPOT"; amount: number; address: string; network: string; transactionPin: string; mobileVerificationToken?: string };
 type EarlyWithdrawalBreakdown = { requiresConfirmation: boolean; eligible: boolean; capitalAmount: number; earnedProfit: number; requiredProfit: number; completedPercentage: number; remainingPercentage: number; withdrawalAmount: number; earlyWithdrawalCharge: number; percentageFee: number; fixedFee: number; totalFees: number; netAmount: number };
-type WithdrawalInput = { walletType: "SPOT" | "AI"; amount: number; address: string; network: string; transactionPin: string; mobileVerificationToken?: string; acceptEarlyWithdrawalCharge?: boolean };
 type WithdrawalResult = { ok: boolean; message: string; requiresConfirmation?: boolean; breakdown?: EarlyWithdrawalBreakdown };
+type TransferPreview = { requestedAmount:number;chargeRate:number;chargeAmount:number;receivedAmount:number;eligible:boolean;completedPercentage:number;remainingPercentage:number;requiredProfit:number;earnedProfit:number };
 type DepositInput = { amount: number; network: string; payCurrency: string };
 type DepositResult = { id: string; amount: number; asset: string; network: string; networkName: string; providerPaymentId: string | null; providerInvoiceId: string | null; providerPaymentUrl: string | null; payCurrency: string | null; payAddress: string | null; paymentStatus: string | null; actuallyPaid: number | null; outcomeAmount: number | null; status: string; createdAt: string };
 type ActiveCopyTrade = { id?: string; code?: string; pair?: string | null; rowLabel?: string; amount: number; returnPercent: number; profit: number; remainingTime?: number; status?: string; date?: string; creditDueAt?: string };
@@ -166,6 +167,9 @@ type WalletHistoryRecord = {
   promotionDay?: number | null;
   walletSnapshotAtTrade?: number;
   profitPercent?: number;
+  requestedAmount?: number;
+  earlyTransferCharge?: number;
+  creditedAmount?: number;
 };
 type TeamMember = {
   id: string;
@@ -373,6 +377,10 @@ function mapLedgerHistory(rows: WalletHistoryRecord[]): WalletActivity[] {
         row.tradeType === "AI" ? "AI Subscription" : row.tradeType === "PROMOTION" ? "New Depositor Promotion" : row.window || "Window unavailable",
         ...(row.tradeType === "PROMOTION" && row.promotionDay ? [`Promotion Day: ${row.promotionDay} of 10`] : []),
         ...(row.tradeType === "AI" && row.window ? [row.window] : []),
+      ] : row.referenceType === "AI_TO_SPOT_TRANSFER" ? [
+        `Requested Amount: ${Number(row.requestedAmount ?? row.amount).toFixed(2)} ${row.asset}`,
+        `Early Transfer Charge: ${Number(row.earlyTransferCharge ?? 0).toFixed(2)} ${row.asset}`,
+        `Credited to Spot Wallet: ${Number(row.creditedAmount ?? row.amount).toFixed(2)} ${row.asset}`,
       ] : tradeLinked ? [
         `Pair: ${row.pair}`,
         ...(row.promotionDay ? [`Promotion Day: ${row.promotionDay} of 10`] : []),
@@ -902,20 +910,21 @@ export default function AppShell() {
     updateUrl("wallet", section);
   }, [updateUrl]);
 
-  const transferWallet = useCallback(async (from: UserWallet, to: UserWallet, amount: number, idempotencyKey: string) => {
+  const transferWallet = useCallback(async (from: UserWallet, to: UserWallet, amount: number, idempotencyKey: string, previewOnly=false, acceptEarlyTransferCharge=false):Promise<{ok:boolean;preview?:TransferPreview}> => {
     const spotBalance = Number(assetTotals.total?.spot ?? 0);
     const balances = { SPOT: spotBalance, FUTURES: futuresBalance, AI: aiWalletBalance };
-    if (amount <= 0 || amount > balances[from]) return false;
-    const response = await fetch("/api/wallet", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromWallet: from, toWallet: to, amount, idempotencyKey }) });
+    if (amount <= 0 || amount > balances[from]) return {ok:false};
+    const response = await fetch(`/api/wallet${previewOnly?"?preview=true":""}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromWallet: from, toWallet: to, amount, idempotencyKey, acceptEarlyTransferCharge }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       notify(data.error || "Transfer could not be completed");
-      return false;
+      return {ok:false};
     }
+    if(previewOnly)return {ok:true,preview:data.preview as TransferPreview};
     await Promise.all([refreshAssets(currentUser), refreshDashboard(currentUser)]);
     setTransferOpen(null);
     notify(`Successfully transferred to ${displayWalletName(to)}`);
-    return true;
+    return {ok:true};
   }, [assetTotals, aiWalletBalance, currentUser, futuresBalance, notify, refreshAssets, refreshDashboard]);
 
   const createDeposit = useCallback(async ({ amount, network, payCurrency }: DepositInput) => {
@@ -927,30 +936,24 @@ export default function AppShell() {
     return { ok: true, message: "", deposit: data.deposit as DepositResult };
   }, [currentUser, notify, refreshAssets, updateUrl, walletSection]);
 
-  const createWithdrawal = useCallback(async ({ walletType, amount, address, network, transactionPin, mobileVerificationToken, acceptEarlyWithdrawalCharge }: WithdrawalInput): Promise<WithdrawalResult> => {
+  const createWithdrawal = useCallback(async ({ walletType, amount, address, network, transactionPin, mobileVerificationToken }: WithdrawalInput): Promise<WithdrawalResult> => {
     const spotBalance = Number(assetTotals.total?.spot ?? 0);
-    if (walletType === "SPOT" && (amount <= 0 || amount > spotBalance)) return { ok: false, message: "Insufficient Spot Wallet balance" };
-    if (walletType === "AI" && (amount <= 0 || amount > aiWalletBalance)) return { ok: false, message: "Insufficient AI Wallet balance" };
-    const requiredProfit = aiTradePrincipalLocked * .6;
-    const eligible = walletType !== "AI" || requiredProfit <= 0 || aiTradeProfitEarned >= requiredProfit;
-    const fee = walletType === "SPOT" ? 2 + amount * .05 : 2 + amount * .05 + (eligible ? 0 : amount * .2);
+    if (amount <= 0 || amount > spotBalance) return { ok: false, message: "Insufficient Spot Wallet balance" };
+    const fee = 2 + amount * .05;
     const received = amount - fee;
     if (received <= 0) return { ok: false, message: "Withdrawal amount must exceed the total fee" };
-    const response = await fetch("/api/withdrawals", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ walletType, amount, address, network, transactionPin, mobileVerificationToken, acceptEarlyWithdrawalCharge }) });
+    const response = await fetch("/api/withdrawals", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ walletType, amount, address, network, transactionPin, mobileVerificationToken }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      if (data.requiresConfirmation) {
-        return { ok: false, message: "", requiresConfirmation: true, breakdown: data as EarlyWithdrawalBreakdown };
-      }
       hapticNotification("error").catch(() => null);
       return { ok: false, message: data.error || "Withdrawal request failed" };
     }
     await refreshAssets(currentUser);
-    notify(walletType === "SPOT" ? "Spot withdrawal is processing" : "AI withdrawal sent for admin approval");
+    notify("Spot withdrawal is processing");
     hapticNotification("success").catch(() => null);
     setWithdrawalOpen(false);
     return { ok: true, message: "" };
-  }, [assetTotals, aiWalletBalance, aiTradeProfitEarned, aiTradePrincipalLocked, currentUser, notify, refreshAssets]);
+  }, [assetTotals, currentUser, notify, refreshAssets]);
 
   const sendP2PTransfer = useCallback(async (input: P2PTransferInput) => {
     const response = await fetch("/api/p2p/transfer", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
@@ -2251,67 +2254,666 @@ function CopyTradeScreen({activeTrade,aiWalletBalance,tradeRows,startTrade,compl
   };
   return <div className="space-y-5"><section className={`${card} overflow-hidden`}><div className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="font-bold">Copy Trade Income</h3><ShieldCheck size={20} className="text-lime"/></div>{activeTrade?<div className="p-4 sm:p-5"><TradeActiveCard onClick={()=>{}} trade={activeTrade} previewAmount={activeTrade.amount}/></div>:<div className="divide-y divide-line/70">{rows.map(row=>{const status=localTradeStatus(row,nowTick);const countdown=tradeCountdownLabel(row,nowTick);const tradeEnabled=isTradeButtonEnabled(row,nowTick);const actionLabel=tradeButtonLabel(row,status,tradeEnabled);return <div key={row.id} className="flex items-center gap-3 px-4 py-4 sm:px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime"><LineChart size={18}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black">{displayVipLabel(row.vipRange??row.label)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${status==="LIVE"?"bg-lime/10 text-lime":status==="UPCOMING"?"bg-[#f6c85f]/10 text-[#f6c85f]":"bg-white/5 text-slate-500"}`}>{status}</span></div><p className="mt-1 text-[10px] text-slate-500">Trade time: {readableTradeTime(row)}{countdown?` | ${countdown}`:""}</p><p className="mt-1 text-[10px] text-slate-500">Trade amount: ${Number(row.tradeAmount ?? aiWalletBalance*.01).toFixed(2)} | Daily {row.dailyReturnMin??row.dailyPercentMin}% - {row.dailyReturnMax??row.dailyPercentMax}%</p>{!tradeEnabled&&status==="LIVE"&&<p className="mt-1 text-[10px] text-danger">{actionLabel}</p>}</div><button onClick={()=>start(row)} disabled={loadingRow===row.id||!tradeEnabled} className="w-[112px] shrink-0 rounded-lg bg-lime px-3 py-2 text-[10px] font-black leading-tight text-ink disabled:opacity-50">{loadingRow===row.id?"Wait":actionLabel}</button></div>})}</div>}{error&&<p className="border-t border-line px-5 py-3 text-xs text-danger">{error}</p>}</section></div>;
 }
-function WalletScreen({notify,assets,loading,refreshing,onRefresh,totalBalance,todayIncome,spotBalance,futuresBalance,aiWalletBalance,aiTradeProfitEarned,aiTradeTarget,activity,section,action,balanceVisible,setBalanceVisible,onSectionChange,onOpenTransfer,onOpenWithdrawal,onOpenDeposit,onCloseAction,onCreateDeposit}:{notify:(s:string)=>void;assets:AppCoin[];loading:boolean;refreshing:boolean;onRefresh:()=>void;totalBalance:number;todayIncome:number;spotBalance:number;futuresBalance:number;aiWalletBalance:number;aiTradeProfitEarned:number;aiTradeTarget:number;activity:WalletActivity[];section:WalletSection;action:WalletAction;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onSectionChange:(section:WalletSection)=>void;onOpenTransfer:()=>void;onOpenWithdrawal:()=>void;onOpenDeposit:()=>void;onCloseAction:()=>void;onCreateDeposit:(input:DepositInput)=>Promise<{ok:boolean;message:string;deposit?:DepositResult}>}) {
- const [historyTab,setHistoryTab]=useState<WalletHistoryCategory>("ALL"); const [categoryActivity,setCategoryActivity]=useState<WalletActivity[]|null>(null); const [categoryLoading,setCategoryLoading]=useState(false); const live=useLiveTickers(); const tickerMap=useMemo(()=>new Map(live.map(ticker=>[ticker.symbol,ticker])),[live]); const activeAssets=useMemo(()=>assets.filter(coin=>coin.isActive).map(coin=>{const ticker=tickerMap.get(coin.pair);return ticker?{...coin,price:ticker.price,change:ticker.changePercent}:coin;}),[assets,tickerMap]); const displayedActivity=historyTab==="ALL"?activity:categoryActivity??[];
- useEffect(()=>{if(historyTab==="ALL"){setCategoryActivity(null);setCategoryLoading(false);return;}const controller=new AbortController();setCategoryLoading(true);setCategoryActivity(null);fetch(`/api/wallet/history?category=${historyTab}`,{cache:"no-store",credentials:"include",signal:controller.signal}).then(async response=>{const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||"Wallet history unavailable");setCategoryActivity(mapLedgerHistory(Array.isArray(data.history)?data.history:[]));}).catch(error=>{if(!controller.signal.aborted){setCategoryActivity([]);notify(error instanceof Error?error.message:"Wallet history unavailable");}}).finally(()=>{if(!controller.signal.aborted)setCategoryLoading(false);});return()=>controller.abort();},[activity,historyTab,notify]);
-if(loading)return <div className="wallet-page -mt-1 min-h-screen" aria-busy="true"><WalletHero/><section className="wallet-glass wallet-total-card animate-pulse"><div className="h-16 w-48 rounded-xl bg-white/10"/></section><section className="wallet-type-grid animate-pulse">{[0,1,2].map(item=><div key={item} className="wallet-glass wallet-type-card h-24"><div className="h-4 w-24 rounded bg-white/10"/></div>)}</section></div>;
-return <div className="wallet-page -mt-1 min-h-screen">
-  <WalletHero/>
-  <WalletTotalCard total={totalBalance} todayIncome={todayIncome} balanceVisible={balanceVisible} setBalanceVisible={setBalanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
-  <WalletTypeCards spot={spotBalance} ai={aiWalletBalance} futures={futuresBalance} balanceVisible={balanceVisible}/>
-  <WalletQuickActions onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal} onOpenTransfer={onOpenTransfer} onHistory={()=>onSectionChange("ledger")} onAddressBook={()=>notify("Address book unavailable")}/>
-  <WalletBalancesCard assets={activeAssets} balanceVisible={balanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>
-  {section==="ledger"&&<section className="wallet-glass wallet-ledger-card min-w-0 overflow-hidden"><div className="flex justify-between gap-3"><div><h3>Wallet ledger</h3><p>Deposits, transfers, withdrawals and balance movements</p></div><button onClick={()=>notify("Ledger export prepared")}>Export</button></div><div className="no-scrollbar mt-4 flex w-full touch-pan-x gap-2 overflow-x-auto scroll-smooth whitespace-nowrap pr-4">{WALLET_HISTORY_TABS.map(tab=><button key={tab.id} onClick={()=>setHistoryTab(tab.id)} className={`shrink-0 rounded-xl px-3 py-2 text-[10px] font-black ${historyTab===tab.id?"bg-lime text-ink":"border border-line bg-white/[.03] text-slate-400"}`}>{tab.label}</button>)}</div><ActivityRows rows={displayedActivity} loading={categoryLoading} emptyMessage={walletHistoryEmptyMessage(historyTab)}/></section>}
-  <WalletSecurityCard/>
-</div>;
+function WalletScreen({
+  notify,
+  assets,
+  loading,
+  refreshing,
+  onRefresh,
+  totalBalance,
+  todayIncome,
+  spotBalance,
+  futuresBalance,
+  aiWalletBalance,
+  aiTradeProfitEarned,
+  aiTradeTarget,
+  activity,
+  section,
+  action,
+  balanceVisible,
+  setBalanceVisible,
+  onSectionChange,
+  onOpenTransfer,
+  onOpenWithdrawal,
+  onOpenDeposit,
+  onCloseAction,
+  onCreateDeposit,
+}: {
+  notify: (s: string) => void;
+  assets: AppCoin[];
+  loading: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
+  totalBalance: number;
+  todayIncome: number;
+  spotBalance: number;
+  futuresBalance: number;
+  aiWalletBalance: number;
+  aiTradeProfitEarned: number;
+  aiTradeTarget: number;
+  activity: WalletActivity[];
+  section: WalletSection;
+  action: WalletAction;
+  balanceVisible: boolean;
+  setBalanceVisible: (value: boolean) => void;
+  onSectionChange: (section: WalletSection) => void;
+  onOpenTransfer: () => void;
+  onOpenWithdrawal: () => void;
+  onOpenDeposit: () => void;
+  onCloseAction: () => void;
+  onCreateDeposit: (
+    input: DepositInput
+  ) => Promise<{ ok: boolean; message: string; deposit?: DepositResult }>;
+}) {
+  const [historyTab, setHistoryTab] = useState<WalletHistoryCategory>("ALL");
+  const [categoryActivity, setCategoryActivity] = useState<
+    WalletActivity[] | null
+  >(null);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const live = useLiveTickers();
+  const tickerMap = useMemo(
+    () => new Map(live.map((ticker) => [ticker.symbol, ticker])),
+    [live]
+  );
+  const activeAssets = useMemo(
+    () =>
+      assets
+        .filter((coin) => coin.isActive)
+        .map((coin) => {
+          const ticker = tickerMap.get(coin.pair);
+          return ticker
+            ? { ...coin, price: ticker.price, change: ticker.changePercent }
+            : coin;
+        }),
+    [assets, tickerMap]
+  );
+  const displayedActivity =
+    historyTab === "ALL" ? activity : categoryActivity ?? [];
+  useEffect(() => {
+    if (historyTab === "ALL") {
+      setCategoryActivity(null);
+      setCategoryLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setCategoryLoading(true);
+    setCategoryActivity(null);
+    fetch(`/api/wallet/history?category=${historyTab}`, {
+      cache: "no-store",
+      credentials: "include",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok)
+          throw new Error(data.error || "Wallet history unavailable");
+        setCategoryActivity(
+          mapLedgerHistory(Array.isArray(data.history) ? data.history : [])
+        );
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setCategoryActivity([]);
+          notify(
+            error instanceof Error
+              ? error.message
+              : "Wallet history unavailable"
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCategoryLoading(false);
+      });
+    return () => controller.abort();
+  }, [activity, historyTab, notify]);
+  if (loading)
+    return (
+      <div className="wallet-page -mt-1 min-h-screen" aria-busy="true">
+        <WalletHero />
+        <section className="wallet-glass wallet-total-card animate-pulse">
+          <div className="h-16 w-48 rounded-xl bg-white/10" />
+        </section>
+        <section className="wallet-type-grid animate-pulse">
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="wallet-glass wallet-type-card h-24">
+              <div className="h-4 w-24 rounded bg-white/10" />
+            </div>
+          ))}
+        </section>
+      </div>
+    );
+  return (
+    <div className="wallet-page -mt-1 min-h-screen">
+      <WalletHero />
+      <WalletTotalCard
+        total={totalBalance}
+        todayIncome={todayIncome}
+        balanceVisible={balanceVisible}
+        setBalanceVisible={setBalanceVisible}
+        onOpenDeposit={onOpenDeposit}
+        onOpenWithdrawal={onOpenWithdrawal}
+      />
+      <WalletTypeCards
+        spot={spotBalance}
+        ai={aiWalletBalance}
+        futures={futuresBalance}
+        balanceVisible={balanceVisible}
+      />
+      <WalletQuickActions
+        onOpenDeposit={onOpenDeposit}
+        onOpenWithdrawal={onOpenWithdrawal}
+        onOpenTransfer={onOpenTransfer}
+        onHistory={() => onSectionChange("ledger")}
+        onAddressBook={() => notify("Address book unavailable")}
+      />
+      <WalletBalancesCard
+        assets={activeAssets}
+        balanceVisible={balanceVisible}
+        onOpenDeposit={onOpenDeposit}
+        onOpenWithdrawal={onOpenWithdrawal}
+      />
+      {section === "ledger" && (
+        <section className="wallet-glass wallet-ledger-card min-w-0 overflow-hidden">
+          <div className="flex justify-between gap-3">
+            <div>
+              <h3>Wallet ledger</h3>
+              <p>Deposits, transfers, withdrawals and balance movements</p>
+            </div>
+            <button onClick={() => notify("Ledger export prepared")}>
+              Export
+            </button>
+          </div>
+          <div className="no-scrollbar mt-4 flex w-full touch-pan-x gap-2 overflow-x-auto scroll-smooth whitespace-nowrap pr-4">
+            {WALLET_HISTORY_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setHistoryTab(tab.id)}
+                className={`shrink-0 rounded-xl px-3 py-2 text-[10px] font-black ${
+                  historyTab === tab.id
+                    ? "bg-lime text-ink"
+                    : "border border-line bg-white/[.03] text-slate-400"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <ActivityRows
+            rows={displayedActivity}
+            loading={categoryLoading}
+            emptyMessage={walletHistoryEmptyMessage(historyTab)}
+          />
+        </section>
+      )}
+      <WalletSecurityCard />
+    </div>
+  );
 }
 
-function WalletBalanceRow({label,balance}:{label:string;balance:number}) { return <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5"><p className="text-sm font-bold">{label}</p><p className="text-sm font-black">{balance.toFixed(2)} USDT</p></div> }
+function WalletBalanceRow({
+  label,
+  balance,
+}: {
+  label: string;
+  balance: number;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5">
+      <p className="text-sm font-bold">{label}</p>
+      <p className="text-sm font-black">{balance.toFixed(2)} USDT</p>
+    </div>
+  );
+}
 
 function WalletHero() {
-  return <section className="wallet-hero"><div className="relative z-10"><h1>Wallet</h1><p>Manage your assets securely</p></div><WalletHeroSvg/></section>;
+  return (
+    <section className="wallet-hero">
+      <div className="relative z-10">
+        <h1>Wallet</h1>
+        <p>Manage your assets securely</p>
+      </div>
+      <WalletHeroSvg />
+    </section>
+  );
 }
 
 function WalletHeroSvg() {
-  return <svg viewBox="0 0 180 136" className="wallet-hero-svg" aria-hidden="true"><defs><linearGradient id="walletCase" x1="42" y1="35" x2="132" y2="96"><stop stopColor="#f4fff9"/><stop offset=".36" stopColor="#18ff8a"/><stop offset="1" stopColor="#047a49"/></linearGradient><radialGradient id="walletGlow" cx="50%" cy="50%" r="55%"><stop stopColor="#18ff8a" stopOpacity=".42"/><stop offset="1" stopColor="#18ff8a" stopOpacity="0"/></radialGradient><filter id="walletBlur"><feGaussianBlur stdDeviation="4"/></filter></defs><ellipse cx="91" cy="104" rx="62" ry="18" fill="url(#walletGlow)" filter="url(#walletBlur)" className="wallet-svg-pulse"/><g className="wallet-svg-orbit"><ellipse cx="91" cy="100" rx="58" ry="15" fill="#06110d" stroke="#18ff8a" strokeOpacity=".42" strokeDasharray="28 15"/></g><rect x="44" y="47" width="88" height="54" rx="14" fill="#07130f" stroke="#18ff8a" strokeOpacity=".5"/><path d="M56 47h64c8 0 12 5 12 12v5H44v-5c0-8 5-12 12-12Z" fill="url(#walletCase)" fillOpacity=".22"/><rect x="111" y="64" width="30" height="22" rx="8" fill="#0b1712" stroke="#18ff8a" strokeOpacity=".55"/><circle cx="123" cy="75" r="3" fill="#18ff8a"/><path d="M74 61h-9l16 30 5 9 5-9 16-30h-9L86 81 74 61Z" fill="url(#walletCase)" stroke="#eafff4" strokeOpacity=".28"/><g className="wallet-coin-a"><circle cx="42" cy="42" r="14" fill="#06110d" stroke="#18ff8a"/><text x="42" y="45" textAnchor="middle" fill="#18ff8a" fontSize="7" fontWeight="900">USDT</text></g><g className="wallet-coin-b"><circle cx="142" cy="38" r="13" fill="#120d05" stroke="#f6c85f"/><text x="142" y="41" textAnchor="middle" fill="#f6c85f" fontSize="7" fontWeight="900">BTC</text></g><g fill="#9cffd9">{[28,151,34,148].map((x,i)=><circle key={x} cx={x} cy={72+i*9} r="1.4" opacity=".5" className="wallet-svg-particle"/>)}</g></svg>;
+  return (
+    <svg viewBox="0 0 180 136" className="wallet-hero-svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="walletCase" x1="42" y1="35" x2="132" y2="96">
+          <stop stopColor="#f4fff9" />
+          <stop offset=".36" stopColor="#18ff8a" />
+          <stop offset="1" stopColor="#047a49" />
+        </linearGradient>
+        <radialGradient id="walletGlow" cx="50%" cy="50%" r="55%">
+          <stop stopColor="#18ff8a" stopOpacity=".42" />
+          <stop offset="1" stopColor="#18ff8a" stopOpacity="0" />
+        </radialGradient>
+        <filter id="walletBlur">
+          <feGaussianBlur stdDeviation="4" />
+        </filter>
+      </defs>
+      <ellipse
+        cx="91"
+        cy="104"
+        rx="62"
+        ry="18"
+        fill="url(#walletGlow)"
+        filter="url(#walletBlur)"
+        className="wallet-svg-pulse"
+      />
+      <g className="wallet-svg-orbit">
+        <ellipse
+          cx="91"
+          cy="100"
+          rx="58"
+          ry="15"
+          fill="#06110d"
+          stroke="#18ff8a"
+          strokeOpacity=".42"
+          strokeDasharray="28 15"
+        />
+      </g>
+      <rect
+        x="44"
+        y="47"
+        width="88"
+        height="54"
+        rx="14"
+        fill="#07130f"
+        stroke="#18ff8a"
+        strokeOpacity=".5"
+      />
+      <path
+        d="M56 47h64c8 0 12 5 12 12v5H44v-5c0-8 5-12 12-12Z"
+        fill="url(#walletCase)"
+        fillOpacity=".22"
+      />
+      <rect
+        x="111"
+        y="64"
+        width="30"
+        height="22"
+        rx="8"
+        fill="#0b1712"
+        stroke="#18ff8a"
+        strokeOpacity=".55"
+      />
+      <circle cx="123" cy="75" r="3" fill="#18ff8a" />
+      <path
+        d="M74 61h-9l16 30 5 9 5-9 16-30h-9L86 81 74 61Z"
+        fill="url(#walletCase)"
+        stroke="#eafff4"
+        strokeOpacity=".28"
+      />
+      <g className="wallet-coin-a">
+        <circle cx="42" cy="42" r="14" fill="#06110d" stroke="#18ff8a" />
+        <text
+          x="42"
+          y="45"
+          textAnchor="middle"
+          fill="#18ff8a"
+          fontSize="7"
+          fontWeight="900"
+        >
+          USDT
+        </text>
+      </g>
+      <g className="wallet-coin-b">
+        <circle cx="142" cy="38" r="13" fill="#120d05" stroke="#f6c85f" />
+        <text
+          x="142"
+          y="41"
+          textAnchor="middle"
+          fill="#f6c85f"
+          fontSize="7"
+          fontWeight="900"
+        >
+          BTC
+        </text>
+      </g>
+      <g fill="#9cffd9">
+        {[28, 151, 34, 148].map((x, i) => (
+          <circle
+            key={x}
+            cx={x}
+            cy={72 + i * 9}
+            r="1.4"
+            opacity=".5"
+            className="wallet-svg-particle"
+          />
+        ))}
+      </g>
+    </svg>
+  );
 }
 
-function WalletTotalCard({total,todayIncome,balanceVisible,setBalanceVisible,onOpenDeposit,onOpenWithdrawal}:{total:number;todayIncome:number;balanceVisible:boolean;setBalanceVisible:(value:boolean)=>void;onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
-  return <section className="wallet-glass wallet-total-card"><div className="min-w-0"><div className="flex items-center gap-2"><p>Total Wallet Balance</p><button type="button" onClick={() => setBalanceVisible(!balanceVisible)} className="grid h-7 w-7 place-items-center rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]" aria-label={balanceVisible ? "Hide wallet balance" : "Show wallet balance"} aria-pressed={!balanceVisible}>{balanceVisible ? <Eye size={15}/> : <EyeOff size={15}/>}</button></div><h2>{balanceVisible ? usd(total) : BALANCE_MASK}</h2><div className="mt-2 flex items-center gap-2"><em>{balanceVisible ? `${todayIncome >= 0 ? "+" : ""}${usd(todayIncome)} today` : BALANCE_MASK}</em></div></div><div className="wallet-total-actions"><button onClick={onOpenDeposit}><Plus size={16}/>Add Funds</button><button onClick={onOpenWithdrawal}><Send size={16}/>Withdraw</button></div></section>;
+function WalletTotalCard({
+  total,
+  todayIncome,
+  balanceVisible,
+  setBalanceVisible,
+  onOpenDeposit,
+  onOpenWithdrawal,
+}: {
+  total: number;
+  todayIncome: number;
+  balanceVisible: boolean;
+  setBalanceVisible: (value: boolean) => void;
+  onOpenDeposit: () => void;
+  onOpenWithdrawal: () => void;
+}) {
+  return (
+    <section className="wallet-glass wallet-total-card">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <p>Total Wallet Balance</p>
+          <button
+            type="button"
+            onClick={() => setBalanceVisible(!balanceVisible)}
+            className="grid h-7 w-7 place-items-center rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[#18ff8a]"
+            aria-label={
+              balanceVisible ? "Hide wallet balance" : "Show wallet balance"
+            }
+            aria-pressed={!balanceVisible}
+          >
+            {balanceVisible ? <Eye size={15} /> : <EyeOff size={15} />}
+          </button>
+        </div>
+        <h2>{balanceVisible ? usd(total) : BALANCE_MASK}</h2>
+        <div className="mt-2 flex items-center gap-2">
+          <em>
+            {balanceVisible
+              ? `${todayIncome >= 0 ? "+" : ""}${usd(todayIncome)} today`
+              : BALANCE_MASK}
+          </em>
+        </div>
+      </div>
+      <div className="wallet-total-actions">
+        <button onClick={onOpenDeposit}>
+          <Plus size={16} />
+          Add Funds
+        </button>
+        <button onClick={onOpenWithdrawal}>
+          <Send size={16} />
+          Withdraw
+        </button>
+      </div>
+    </section>
+  );
 }
 
-function WalletTypeCards({spot,ai,futures,balanceVisible}:{spot:number;ai:number;futures:number;balanceVisible:boolean}) {
-  const items=[
-    ["Spot Wallet",spot,Wallet,"green"],
-    ["AI Wallet",ai,Bot,"purple"],
-    ["Futures Wallet",futures,LineChart,"blue"],
+function WalletTypeCards({
+  spot,
+  ai,
+  futures,
+  balanceVisible,
+}: {
+  spot: number;
+  ai: number;
+  futures: number;
+  balanceVisible: boolean;
+}) {
+  const items = [
+    ["Spot Wallet", spot, Wallet, "green"],
+    ["AI Wallet", ai, Bot, "purple"],
+    ["Futures Wallet", futures, LineChart, "blue"],
   ] as const;
-  return <section className="wallet-type-grid">{items.map(([label,value,Icon,tone])=><div key={label} className="wallet-glass wallet-type-card"><div className="wallet-type-head"><span className={`wallet-type-icon wallet-type-${tone}`}><Icon size={16}/></span><p>{label}</p></div><div className="wallet-type-body"><strong>{balanceVisible ? value.toFixed(2) : BALANCE_MASK}</strong></div></div>)}</section>;
+  return (
+    <section className="wallet-type-grid">
+      {items.map(([label, value, Icon, tone]) => (
+        <div key={label} className="wallet-glass wallet-type-card">
+          <div className="wallet-type-head">
+            <span className={`wallet-type-icon wallet-type-${tone}`}>
+              <Icon size={16} />
+            </span>
+            <p>{label}</p>
+          </div>
+          <div className="wallet-type-body">
+            <strong>{balanceVisible ? value.toFixed(2) : BALANCE_MASK}</strong>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
 }
 
-function WalletQuickActions({onOpenDeposit,onOpenWithdrawal,onOpenTransfer,onHistory,onAddressBook}:{onOpenDeposit:()=>void;onOpenWithdrawal:()=>void;onOpenTransfer:()=>void;onHistory:()=>void;onAddressBook:()=>void}) {
-  const actions=[["Deposit",ArrowDownToLine,onOpenDeposit],["Withdraw",Send,onOpenWithdrawal],["Transfer",ArrowLeftRight,onOpenTransfer],["History",FileClock,onHistory],["Address Book",QrCode,onAddressBook]] as const;
-  return <section className="wallet-glass wallet-actions">{actions.map(([label,Icon,onClick])=><button key={label} onClick={onClick}><span><Icon size={18}/></span><p>{label==="Address Book"?<><b>Address</b><b>Book</b></>:label}</p></button>)}</section>;
+function WalletQuickActions({
+  onOpenDeposit,
+  onOpenWithdrawal,
+  onOpenTransfer,
+  onHistory,
+  onAddressBook,
+}: {
+  onOpenDeposit: () => void;
+  onOpenWithdrawal: () => void;
+  onOpenTransfer: () => void;
+  onHistory: () => void;
+  onAddressBook: () => void;
+}) {
+  const actions = [
+    ["Deposit", ArrowDownToLine, onOpenDeposit],
+    ["Withdraw", Send, onOpenWithdrawal],
+    ["Transfer", ArrowLeftRight, onOpenTransfer],
+    ["History", FileClock, onHistory],
+    ["Address Book", QrCode, onAddressBook],
+  ] as const;
+  return (
+    <section className="wallet-glass wallet-actions">
+      {actions.map(([label, Icon, onClick]) => (
+        <button key={label} onClick={onClick}>
+          <span>
+            <Icon size={18} />
+          </span>
+          <p>
+            {label === "Address Book" ? (
+              <>
+                <b>Address</b>
+                <b>Book</b>
+              </>
+            ) : (
+              label
+            )}
+          </p>
+        </button>
+      ))}
+    </section>
+  );
 }
 
-function WalletBalancesCard({assets,balanceVisible,onOpenDeposit,onOpenWithdrawal}:{assets:(AppCoin&{volume?:number;live?:boolean})[];balanceVisible:boolean;onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
-  return <section className="wallet-glass wallet-balances-card"><div className="wallet-card-head"><h2>Wallet Balances</h2><label><span>Hide Small Balances</span><input type="checkbox" /></label></div><div className="wallet-asset-list">{assets.length?assets.map(asset=><WalletAssetRow key={asset.symbol} asset={asset} balanceVisible={balanceVisible} onOpenDeposit={onOpenDeposit} onOpenWithdrawal={onOpenWithdrawal}/>):<EmptyState title="No wallet assets available" icon={Wallet}/>}</div></section>;
+function WalletBalancesCard({
+  assets,
+  balanceVisible,
+  onOpenDeposit,
+  onOpenWithdrawal,
+}: {
+  assets: (AppCoin & { volume?: number; live?: boolean })[];
+  balanceVisible: boolean;
+  onOpenDeposit: () => void;
+  onOpenWithdrawal: () => void;
+}) {
+  return (
+    <section className="wallet-glass wallet-balances-card">
+      <div className="wallet-card-head">
+        <h2>Wallet Balances</h2>
+        <label>
+          <span>Hide Small Balances</span>
+          <input type="checkbox" />
+        </label>
+      </div>
+      <div className="wallet-asset-list">
+        {assets.length ? (
+          assets.map((asset) => (
+            <WalletAssetRow
+              key={asset.symbol}
+              asset={asset}
+              balanceVisible={balanceVisible}
+              onOpenDeposit={onOpenDeposit}
+              onOpenWithdrawal={onOpenWithdrawal}
+            />
+          ))
+        ) : (
+          <EmptyState title="No wallet assets available" icon={Wallet} />
+        )}
+      </div>
+    </section>
+  );
 }
 
-function WalletAssetRow({asset,balanceVisible,onOpenDeposit,onOpenWithdrawal}:{asset:AppCoin&{volume?:number;live?:boolean};balanceVisible:boolean;onOpenDeposit:()=>void;onOpenWithdrawal:()=>void}) {
-  const value=asset.balance*asset.price;
-  return <article className="wallet-asset-row"><CoinMark symbol={asset.symbol} color={asset.color} logoPath={assetLogoPath(asset.symbol, asset)} /><div className="min-w-0"><div className="flex items-center gap-1.5"><p>{asset.symbol}</p><span>{asset.symbol==="USDT"?"BEP20":asset.symbol==="SHINE"?"Solana":"Spot"}</span></div><em>{asset.name}</em></div><div className="min-w-0 text-right"><strong>{balanceVisible ? compact(asset.balance) : BALANCE_MASK}</strong><small>{balanceVisible ? usd(value) : BALANCE_MASK}</small></div><div className="wallet-asset-actions">{asset.symbol==="USDT"?<><button onClick={onOpenDeposit}>+</button><button onClick={onOpenWithdrawal}>-</button></>:<ChevronRight size={18}/>}</div></article>;
+function WalletAssetRow({
+  asset,
+  balanceVisible,
+  onOpenDeposit,
+  onOpenWithdrawal,
+}: {
+  asset: AppCoin & { volume?: number; live?: boolean };
+  balanceVisible: boolean;
+  onOpenDeposit: () => void;
+  onOpenWithdrawal: () => void;
+}) {
+  const value = asset.balance * asset.price;
+  return (
+    <article className="wallet-asset-row">
+      <CoinMark
+        symbol={asset.symbol}
+        color={asset.color}
+        logoPath={assetLogoPath(asset.symbol, asset)}
+      />
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <p>{asset.symbol}</p>
+          <span>
+            {asset.symbol === "USDT"
+              ? "BEP20"
+              : asset.symbol === "SHINE"
+              ? "Solana"
+              : "Spot"}
+          </span>
+        </div>
+        <em>{asset.name}</em>
+      </div>
+      <div className="min-w-0 text-right">
+        <strong>
+          {balanceVisible ? compact(asset.balance) : BALANCE_MASK}
+        </strong>
+        <small>{balanceVisible ? usd(value) : BALANCE_MASK}</small>
+      </div>
+      <div className="wallet-asset-actions">
+        {asset.symbol === "USDT" ? (
+          <>
+            <button onClick={onOpenDeposit}>+</button>
+            <button onClick={onOpenWithdrawal}>-</button>
+          </>
+        ) : (
+          <ChevronRight size={18} />
+        )}
+      </div>
+    </article>
+  );
 }
 
 function WalletSecurityCard() {
-  return <section className="wallet-glass wallet-security-card"><ShieldLockSvg/><div className="min-w-0 flex-1"><h2>Your assets are safe with Voltix</h2><p>Bank-grade security & instant transactions</p></div><button>Security Center</button></section>;
+  return (
+    <section className="wallet-glass wallet-security-card">
+      <ShieldLockSvg />
+      <div className="min-w-0 flex-1">
+        <h2>Your assets are safe with Voltix</h2>
+        <p>Bank-grade security & instant transactions</p>
+      </div>
+      <button>Security Center</button>
+    </section>
+  );
 }
 
 function ShieldLockSvg() {
-  return <svg width="62" height="62" viewBox="0 0 62 62" className="wallet-shield-svg" aria-hidden="true"><defs><linearGradient id="shieldGrad" x1="15" y1="5" x2="47" y2="55"><stop stopColor="#eafff4"/><stop offset=".42" stopColor="#18ff8a"/><stop offset="1" stopColor="#047a49"/></linearGradient></defs><ellipse cx="31" cy="52" rx="22" ry="6" fill="#18ff8a" opacity=".16"/><path d="M31 5 49 13v15c0 13-8 21-18 27C21 49 13 41 13 28V13Z" fill="url(#shieldGrad)" fillOpacity=".18" stroke="#18ff8a"/><rect x="22" y="28" width="18" height="14" rx="4" fill="#07130f" stroke="#eafff4" strokeOpacity=".55"/><path d="M26 28v-5a5 5 0 0 1 10 0v5" stroke="#18ff8a" strokeWidth="2"/></svg>;
+  return (
+    <svg
+      width="62"
+      height="62"
+      viewBox="0 0 62 62"
+      className="wallet-shield-svg"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="shieldGrad" x1="15" y1="5" x2="47" y2="55">
+          <stop stopColor="#eafff4" />
+          <stop offset=".42" stopColor="#18ff8a" />
+          <stop offset="1" stopColor="#047a49" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="31" cy="52" rx="22" ry="6" fill="#18ff8a" opacity=".16" />
+      <path
+        d="M31 5 49 13v15c0 13-8 21-18 27C21 49 13 41 13 28V13Z"
+        fill="url(#shieldGrad)"
+        fillOpacity=".18"
+        stroke="#18ff8a"
+      />
+      <rect
+        x="22"
+        y="28"
+        width="18"
+        height="14"
+        rx="4"
+        fill="#07130f"
+        stroke="#eafff4"
+        strokeOpacity=".55"
+      />
+      <path d="M26 28v-5a5 5 0 0 1 10 0v5" stroke="#18ff8a" strokeWidth="2" />
+    </svg>
+  );
 }
 
-function ActivityRows({rows,loading=false,emptyMessage="No records available"}:{rows:readonly WalletActivity[];loading?:boolean;emptyMessage?:string}) { return <div className="mt-4 space-y-4" aria-busy={loading}>{loading?<p className="py-6 text-center text-xs text-slate-500">Loading wallet ledger...</p>:rows.length?rows.map(({icon:I,title,amount,status,date,details},index)=><div className="flex items-start gap-3" key={`${title}-${amount}-${index}`}><div className="shrink-0 rounded-xl bg-white/5 p-2.5 text-slate-400"><I size={17}/></div><div className="min-w-0 flex-1"><p className="text-sm font-semibold leading-snug">{title}</p>{details.map(detail=><p key={detail} className="mt-0.5 text-[10px] leading-tight text-slate-400">{detail}</p>)}<p className="mt-1 text-[10px] text-mint">{status}</p><p className="mt-0.5 text-[9px] leading-tight text-slate-500">{date}</p></div><p className="shrink-0 text-right text-xs font-bold">{amount}</p></div>):<p className="py-6 text-center text-xs text-slate-500">{emptyMessage}</p>}</div> }
+function ActivityRows({
+  rows,
+  loading = false,
+  emptyMessage = "No records available",
+}: {
+  rows: readonly WalletActivity[];
+  loading?: boolean;
+  emptyMessage?: string;
+}) {
+  return (
+    <div className="mt-4 space-y-4" aria-busy={loading}>
+      {loading ? (
+        <p className="py-6 text-center text-xs text-slate-500">
+          Loading wallet ledger...
+        </p>
+      ) : rows.length ? (
+        rows.map(({ icon: I, title, amount, status, date, details }, index) => (
+          <div
+            className="flex items-start gap-3"
+            key={`${title}-${amount}-${index}`}
+          >
+            <div className="shrink-0 rounded-xl bg-white/5 p-2.5 text-slate-400">
+              <I size={17} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold leading-snug">{title}</p>
+              {details.map((detail) => (
+                <p
+                  key={detail}
+                  className="mt-0.5 text-[10px] leading-tight text-slate-400"
+                >
+                  {detail}
+                </p>
+              ))}
+              <p className="mt-1 text-[10px] text-mint">{status}</p>
+              <p className="mt-0.5 text-[9px] leading-tight text-slate-500">
+                {date}
+              </p>
+            </div>
+            <p className="shrink-0 text-right text-xs font-bold">{amount}</p>
+          </div>
+        ))
+      ) : (
+        <p className="py-6 text-center text-xs text-slate-500">
+          {emptyMessage}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function walletHistoryEmptyMessage(category: WalletHistoryCategory) {
   if (category === "REFERRAL_INCOME") return "No referral income entries yet.";
@@ -2395,7 +2997,7 @@ function P2PTransferModal({assets,close,sendTransfer}:{assets:P2PAsset[];close:(
   return <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="flex max-h-[92vh] w-full max-w-md flex-col rounded-t-3xl border border-line bg-[#111c18] sm:rounded-3xl"><header className="flex items-start justify-between border-b border-line p-5"><div><h3 className="text-xl font-black">P2P Transfer</h3><p className="mt-1 text-xs text-slate-500">Internal user-to-user Spot Wallet transfer.</p></div><button onClick={close} aria-label="Close P2P transfer"><X/></button></header>{confirming&&selected?<><div className="flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl border border-lime/20 bg-lime/[.06] p-4"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-lime text-ink"><Send size={19}/></span><p className="text-sm font-bold text-white">You are sending {value.toFixed(8).replace(/\.?0+$/,"")} {selected.symbol} to {receiver.trim()}</p></div></div><div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Asset" value={selected.symbol}/><LineItem label="Amount" value={`${value.toFixed(8).replace(/\.?0+$/,"")} ${selected.symbol}`}/><LineItem label="Receiver" value={receiver.trim()}/>{note.trim()&&<LineItem label="Note" value={note.trim()}/>}</div><TransactionPinInput label="Transaction PIN" value={transactionPin} onChange={setTransactionPin} autoFocus/><button type="button" onClick={useBiometric} className="w-full rounded-xl border border-lime/30 bg-lime/10 py-3 text-xs font-black text-lime">{mobileVerificationToken?"Biometric ready":"Use biometric instead"}</button>{error&&<p className="text-xs text-danger">{error}</p>}</div><div className="grid grid-cols-2 gap-3 border-t border-line p-4"><button onClick={()=>setConfirming(false)} disabled={submitting} className="rounded-xl border border-line py-3 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button><button onClick={submit} disabled={submitting||(!mobileVerificationToken&&transactionPin.length!==6)} className="rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60">{submitting?"Sending...":"Confirm"}</button></div></>:<><div className="flex-1 space-y-4 overflow-y-auto p-5"><label className="block text-xs font-bold text-slate-400">Select coin/asset<select value={asset} onChange={e=>{setAsset(e.target.value);reset();}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white">{ordered.length?ordered.map(item=><option key={item.symbol} value={item.symbol}>{item.symbol} - {item.name}</option>):<option value="USDT">No available assets</option>}</select></label><div className="rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Available balance" value={selected?`${selected.balance.toFixed(8).replace(/\.?0+$/,"")} ${selected.symbol}`:"0"}/><LineItem label="Source" value="Spot Wallet"/></div><label className="block text-xs font-bold text-slate-400">Receiver UID or email<input value={receiver} onChange={e=>{setReceiver(e.target.value);reset();}} placeholder="UID or email" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="block text-xs font-bold text-slate-400">Amount<div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);reset();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-white outline-none"/>{selected&&<button onClick={()=>{setAmount(String(selected.balance));reset();}} className="px-4 text-xs font-black text-lime">MAX</button>}<span className="pr-4 text-xs text-slate-500">{selected?.symbol??""}</span></div></label><label className="block text-xs font-bold text-slate-400">Note optional<textarea value={note} onChange={e=>{setNote(e.target.value);reset();}} rows={3} maxLength={160} className="mt-2 w-full resize-none rounded-xl border border-line bg-ink p-3 text-white outline-none focus:border-lime/50"/></label>{error&&<p className="text-xs text-danger">{error}</p>}</div><div className="border-t border-line p-4"><button onClick={review} disabled={!ordered.length} className="w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">Confirm Transfer</button></div></>}</div></div>;
 }
 
-function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{initialFrom:UserWallet;initialTo:UserWallet;balances:Record<UserWallet,number>;close:()=>void;transfer:(from:UserWallet,to:UserWallet,amount:number,idempotencyKey:string)=>Promise<boolean>}) {
+function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{initialFrom:UserWallet;initialTo:UserWallet;balances:Record<UserWallet,number>;close:()=>void;transfer:(from:UserWallet,to:UserWallet,amount:number,idempotencyKey:string,previewOnly?:boolean,acceptEarlyTransferCharge?:boolean)=>Promise<{ok:boolean;preview?:TransferPreview}>}) {
   const sourceWallets:UserWallet[]=["SPOT","FUTURES","AI"];
   const transferWallets:UserWallet[]=["SPOT","FUTURES","AI"];
   const [from,setFrom]=useState<UserWallet>(sourceWallets.includes(initialFrom)?initialFrom:"SPOT");
@@ -2405,79 +3007,563 @@ function WalletTransferModal({initialFrom,initialTo,balances,close,transfer}:{in
   const [confirming,setConfirming]=useState(false);
   const [idempotencyKey,setIdempotencyKey]=useState("");
   const [submitting,setSubmitting]=useState(false);
+  const [preview,setPreview]=useState<TransferPreview|null>(null);
   const destinations=from==="AI"?["SPOT" as const]:transferWallets.filter(wallet=>wallet!==from);
   const value=Number(amount)||0;
   const label=(wallet:UserWallet)=>displayWalletName(wallet);
-  const resetReview=()=>{setConfirming(false);setIdempotencyKey("");setError("");};
+  const resetReview=()=>{setConfirming(false);setPreview(null);setIdempotencyKey("");setError("");};
   const changeFrom=(wallet:UserWallet)=>{setFrom(wallet);if(wallet==="AI")setTo("SPOT");else if(wallet===to)setTo(transferWallets.find(item=>item!==wallet)!);resetReview();};
   const changeTo=(wallet:UserWallet)=>{setTo(wallet);resetReview();};
   const swap=()=>{const nextFrom=to;setTo(from);setFrom(nextFrom);resetReview();};
-  const review=()=>{if(value<=0){setError("Enter a valid amount");return;}if(value>balances[from]){setError(`Insufficient ${displayWalletName(from)} balance`);return;}setIdempotencyKey(crypto.randomUUID());setConfirming(true);};
-  const continueTransfer=async()=>{if(submitting)return;setSubmitting(true);const succeeded=await transfer(from,to,value,idempotencyKey);setSubmitting(false);if(!succeeded){setConfirming(false);setError("Transfer could not be completed");}};
-  return <div className="fixed inset-0 z-[70] bg-[#0a120f] sm:grid sm:place-items-center sm:bg-black/70 sm:p-4 sm:backdrop-blur-sm"><div className="flex min-h-full w-full flex-col bg-[#111c18] sm:min-h-0 sm:max-w-md sm:rounded-3xl sm:border sm:border-line"><header className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="text-xl font-black">Transfer</h3><button onClick={close} aria-label="Close transfer"><X/></button></header>{confirming?<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="rounded-xl border border-line bg-ink/60 p-4 text-xs leading-5 text-slate-400"><p>Review this instant wallet transfer before continuing.</p></section><div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Transfer amount" value={`${value.toFixed(2)} USDT`}/><LineItem label="Receivable amount" value={`${value.toFixed(2)} USDT`}/></div></div><div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={()=>setConfirming(false)} className="rounded-xl border border-line py-4 text-sm font-black text-slate-300">Cancel</button><button onClick={continueTransfer} className="rounded-xl bg-lime py-4 text-sm font-black text-ink">Continue</button></div></>:<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="relative rounded-2xl border border-line bg-ink/60 p-4"><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">From<select value={from} onChange={e=>changeFrom(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{sourceWallets.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><div className="my-4 border-t border-line"/><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">To<select value={to} onChange={e=>changeTo(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{destinations.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><button onClick={swap} className="absolute right-5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-panel text-lime disabled:opacity-30" aria-label="Swap wallets"><ArrowLeftRight size={18} className="rotate-90"/></button></section><label className="block text-xs font-bold text-slate-400">Coin<select className="mt-2 w-full rounded-xl border border-line bg-ink p-4 text-sm font-bold text-white"><option>USDT</option></select></label><div><div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400">Amount</label><span className="text-[11px] text-slate-500">Available {balances[from].toFixed(2)} USDT</span></div><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);resetReview();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-4 text-lg font-bold outline-none"/><button onClick={()=>{setAmount(balances[from].toFixed(2));resetReview();}} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}</div></div><div className="fixed inset-x-0 bottom-0 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={review} className="w-full rounded-xl bg-lime py-4 text-sm font-black text-ink">Confirm Transfer</button></div></>}</div></div>
+  const review=async()=>{if(value<=0){setError("Enter a valid amount");return;}if(value>balances[from]){setError(`Insufficient ${displayWalletName(from)} balance`);return;}setSubmitting(true);const key=crypto.randomUUID();const result=await transfer(from,to,value,key,true);setSubmitting(false);if(!result.ok||!result.preview){setError("Transfer could not be previewed");return;}setIdempotencyKey(key);setPreview(result.preview);setConfirming(true);};
+  const continueTransfer=async()=>{if(submitting||!preview)return;setSubmitting(true);const result=await transfer(from,to,value,idempotencyKey,false,preview.chargeAmount>0);setSubmitting(false);if(!result.ok){setConfirming(false);setPreview(null);setError("Transfer conditions changed. Please review the transfer again.");}};
+  return <div className="fixed inset-0 z-[70] bg-[#0a120f] sm:grid sm:place-items-center sm:bg-black/70 sm:p-4 sm:backdrop-blur-sm"><div className="flex min-h-full w-full flex-col bg-[#111c18] sm:min-h-0 sm:max-w-md sm:rounded-3xl sm:border sm:border-line"><header className="flex items-center justify-between border-b border-line px-5 py-4"><h3 className="text-xl font-black">Transfer</h3><button onClick={close} aria-label="Close transfer"><X/></button></header>{confirming&&preview?<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28">{preview.chargeAmount>0&&<section className="rounded-xl border border-[#f6c85f]/30 bg-[#f6c85f]/10 p-4 text-xs leading-5 text-slate-300"><h3 className="text-lg font-black text-white">Early Transfer Charge</h3><p className="mt-2">Your required AI trading period is not complete. A 20% early transfer charge will apply if you transfer funds from your AI Wallet to your Spot Wallet now.</p></section>}<div className="space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Requested Amount" value={`${preview.requestedAmount.toFixed(2)} USDT`}/><LineItem label="Early Transfer Charge" value={`${preview.chargeRate}%`}/><LineItem label="Charge Amount" value={`${preview.chargeAmount.toFixed(2)} USDT`}/><LineItem label="Amount You Will Receive in Spot Wallet" value={`${preview.receivedAmount.toFixed(2)} USDT`}/>{from==="AI"&&<LineItem label="Trading Progress" value={`${preview.completedPercentage.toFixed(2)}% (${preview.remainingPercentage.toFixed(2)}% remaining)`}/>}</div></div><div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={()=>{setConfirming(false);setPreview(null);}} disabled={submitting} className="rounded-xl border border-line py-4 text-sm font-black text-slate-300 disabled:opacity-60">Cancel</button><button onClick={continueTransfer} disabled={submitting} className="rounded-xl bg-lime py-4 text-sm font-black text-ink disabled:opacity-60">{submitting?"Transferring...":"Confirm Transfer"}</button></div></>:<><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 pb-28"><section className="relative rounded-2xl border border-line bg-ink/60 p-4"><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">From<select value={from} onChange={e=>changeFrom(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{sourceWallets.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><div className="my-4 border-t border-line"/><label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">To<select value={to} onChange={e=>changeTo(e.target.value as UserWallet)} className="mt-2 w-full bg-transparent text-base font-bold text-white outline-none">{destinations.map(wallet=><option key={wallet} value={wallet} className="bg-ink">{label(wallet)}</option>)}</select></label><button onClick={swap} disabled={from==="AI"} className="absolute right-5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-panel text-lime disabled:opacity-30" aria-label="Swap wallets"><ArrowLeftRight size={18} className="rotate-90"/></button></section><label className="block text-xs font-bold text-slate-400">Coin<select className="mt-2 w-full rounded-xl border border-line bg-ink p-4 text-sm font-bold text-white"><option>USDT</option></select></label><div><div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400">Amount</label><span className="text-[11px] text-slate-500">Available {balances[from].toFixed(2)} USDT</span></div><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line focus-within:border-lime/50"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);resetReview();}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-4 text-lg font-bold outline-none"/><button onClick={()=>{setAmount(balances[from].toFixed(2));resetReview();}} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}</div></div><div className="fixed inset-x-0 bottom-0 border-t border-line bg-[#111c18] p-4 sm:static sm:rounded-b-3xl"><button onClick={review} disabled={submitting} className="w-full rounded-xl bg-lime py-4 text-sm font-black text-ink disabled:opacity-60">{submitting?"Checking...":"Confirm Transfer"}</button></div></>}</div></div>
 }
 
-function WithdrawalModal({balances,aiTradeWithdrawalUnlocked:_aiTradeWithdrawalUnlocked,close,withdraw}:{balances:Record<"SPOT"|"AI",number>;aiTradeWithdrawalUnlocked:boolean;close:()=>void;withdraw:(input:WithdrawalInput)=>Promise<WithdrawalResult>}) {
-  const [walletType,setWalletType]=useState<"SPOT"|"AI">("SPOT");
-  const [address,setAddress]=useState("");
-  const [network,setNetwork]=useState("BSC");
-  const [amount,setAmount]=useState("");
-  const [transactionPin,setTransactionPin]=useState("");
-  const [mobileVerificationToken,setMobileVerificationToken]=useState("");
-  const [error,setError]=useState("");
-  const [earlyBreakdown,setEarlyBreakdown]=useState<EarlyWithdrawalBreakdown|null>(null);
-  const [submitting,setSubmitting]=useState(false);
-  const value=Number(amount)||0;
-  const available=balances[walletType];
-  const fixedFee=value>0?2:0;
-  const percentageFee=value*.05;
-  const totalFee=fixedFee+percentageFee;
-  const received=Math.max(0,value-totalFee);
-  const label=(wallet:"SPOT"|"AI")=>displayWalletName(wallet).replace(" Wallet","");
-  const useBiometric=async()=>{setError("");const token=await requestMobileTransactionToken("withdrawal").catch(()=>null);if(!token){setError("Biometric unavailable. Use Transaction PIN.");return;}setMobileVerificationToken(token);};
-  const submit=async(acceptEarlyWithdrawalCharge=false)=>{setError("");if(!address.trim()){setError("Enter an external wallet or exchange address");return;}if(value<=0){setError("Enter a valid withdrawal amount");return;}if(value>available){setError(`Insufficient ${displayWalletName(walletType)} balance`);return;}if(received<=0){setError("Withdrawal amount must exceed the total fee");return;}if(!mobileVerificationToken&&!transactionPin){setError("Transaction PIN required.");return;}if(!mobileVerificationToken&&transactionPin.length<6){setError("Enter a valid 6-digit Transaction PIN.");return;}setSubmitting(true);const result=await withdraw({walletType,amount:value,address,network,transactionPin,mobileVerificationToken,acceptEarlyWithdrawalCharge});setSubmitting(false);if(result.requiresConfirmation&&result.breakdown){setEarlyBreakdown(result.breakdown);return;}if(!result.ok){setTransactionPin("");setMobileVerificationToken("");setError(result.message||"Withdrawal request failed");return;}setTransactionPin("");setMobileVerificationToken("");};
-  const early=earlyBreakdown;
-  return <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4"><div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl"><div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Send</h3><p className="mt-1 text-xs text-slate-500">Spot payouts are automatic; AI withdrawals require admin approval.</p></div><button onClick={close} aria-label="Close withdrawal"><X/></button></div>{early?<><div className="mt-5 rounded-xl border border-lime/20 bg-ink/60 p-4 text-xs leading-5 text-slate-300"><h3 className="text-lg font-black text-white">Early Withdrawal</h3><div className="mt-3 rounded-xl border border-white/[.08] bg-black/20 p-3"><p className="font-bold text-lime">Current Progress:</p><p className="mt-1">{early.completedPercentage.toFixed(2)}% Completed</p></div><div className="mt-3"><p className="font-bold text-lime">Early Withdrawal Charges:</p><p className="mt-1">- 20%</p><p>- 5% Withdrawal Fee</p><p>- $2 Fixed Fee</p></div><p className="mt-3">Press "Confirm Withdrawal" to continue.</p></div><div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Capital Amount" value={`$${early.capitalAmount.toFixed(2)}`}/><LineItem label="Earned Profit" value={`$${early.earnedProfit.toFixed(2)}`}/><LineItem label="Required Profit" value={`$${early.requiredProfit.toFixed(2)}`}/><LineItem label="Withdrawal Amount" value={`$${early.withdrawalAmount.toFixed(2)}`}/><LineItem label="20% Early Withdrawal Charge" value={`$${early.earlyWithdrawalCharge.toFixed(2)}`}/><LineItem label="5% Withdrawal Fee" value={`$${early.percentageFee.toFixed(2)}`}/><LineItem label="Fixed Fee" value={`$${early.fixedFee.toFixed(2)}`}/><LineItem label="Total Fees" value={`$${early.totalFees.toFixed(2)}`}/><LineItem label="Net Receivable" value={`$${early.netAmount.toFixed(2)}`}/></div><div className="mt-5 grid grid-cols-2 gap-3"><button onClick={()=>setEarlyBreakdown(null)} disabled={submitting} className="rounded-xl border border-line py-3 text-xs font-black text-slate-300 disabled:opacity-60">Cancel</button><button onClick={()=>submit(true)} disabled={submitting} className="rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60">{submitting?"Submitting...":"Confirm Withdrawal"}</button></div></>:<><label className="mt-5 block text-xs font-bold text-slate-400">Wallet<select value={walletType} onChange={e=>{setWalletType(e.target.value as "SPOT"|"AI");setError("");setMobileVerificationToken("");setEarlyBreakdown(null);}} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="SPOT">Spot Wallet</option><option value="AI">AI Wallet</option></select></label><label className="mt-4 block text-xs font-bold text-slate-400">Amount</label><div className={`mt-2 flex items-center rounded-xl border bg-ink ${error?"border-danger/60":"border-line"}`}><input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setError("");setMobileVerificationToken("");setEarlyBreakdown(null);}} placeholder="0.00" className="min-w-0 flex-1 bg-transparent px-4 py-3.5 outline-none"/><button onClick={()=>setAmount(available.toFixed(2))} className="px-4 text-xs font-black text-lime">MAX</button><span className="pr-4 text-xs text-slate-500">USDT</span></div><p className="mt-1 text-[10px] text-slate-500">Available: {available.toFixed(2)} USDT</p><label className="mt-4 block text-xs font-bold text-slate-400">External wallet or exchange address<input value={address} onChange={e=>{setAddress(e.target.value);setError("");setMobileVerificationToken("");setEarlyBreakdown(null);}} placeholder="0x... or exchange deposit address" className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"/></label><label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={e=>setNetwork(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option></select></label><div className="mt-4"><TransactionPinInput label="Transaction PIN" value={transactionPin} onChange={setTransactionPin} autoFocus/></div><button type="button" onClick={useBiometric} className="mt-3 w-full rounded-xl border border-lime/30 bg-lime/10 py-3 text-xs font-black text-lime">{mobileVerificationToken?"Biometric ready":"Use biometric instead"}</button>{error&&<p className="mt-2 text-xs text-danger">{error}</p>}<div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4"><LineItem label="Wallet" value={`${label(walletType)} Wallet`}/><LineItem label="Withdrawal Amount" value={`${value.toFixed(2)} USDT`}/><LineItem label="5% Withdrawal Fee" value={`${percentageFee.toFixed(2)} USDT`}/><LineItem label="$2 Fixed Fee" value={`${fixedFee.toFixed(2)} USDT`}/><LineItem label="Net Receivable" value={`${received.toFixed(2)} USDT`}/></div><button onClick={()=>submit()} disabled={submitting||(!mobileVerificationToken&&transactionPin.length!==6)} className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60">{submitting?"Submitting...":"Confirm Send"}</button></>}</div></div>
+function WithdrawalModal({
+  balances,
+  aiTradeWithdrawalUnlocked: _aiTradeWithdrawalUnlocked,
+  close,
+  withdraw,
+}: {
+  balances: Record<"SPOT" | "AI", number>;
+  aiTradeWithdrawalUnlocked: boolean;
+  close: () => void;
+  withdraw: (input: WithdrawalInput) => Promise<WithdrawalResult>;
+}) {
+  const [walletType, setWalletType] = useState<"SPOT">("SPOT");
+  const [address, setAddress] = useState("");
+  const [network, setNetwork] = useState("BSC");
+  const [amount, setAmount] = useState("");
+  const [transactionPin, setTransactionPin] = useState("");
+  const [mobileVerificationToken, setMobileVerificationToken] = useState("");
+  const [error, setError] = useState("");
+  const [earlyBreakdown, setEarlyBreakdown] =
+    useState<EarlyWithdrawalBreakdown | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const value = Number(amount) || 0;
+  const available = balances[walletType];
+  const fixedFee = value > 0 ? 2 : 0;
+  const percentageFee = value * 0.05;
+  const totalFee = fixedFee + percentageFee;
+  const received = Math.max(0, value - totalFee);
+  const label = (wallet: "SPOT" | "AI") =>
+    displayWalletName(wallet).replace(" Wallet", "");
+  const useBiometric = async () => {
+    setError("");
+    const token = await requestMobileTransactionToken("withdrawal").catch(
+      () => null
+    );
+    if (!token) {
+      setError("Biometric unavailable. Use Transaction PIN.");
+      return;
+    }
+    setMobileVerificationToken(token);
+  };
+  const submit = async () => {
+    setError("");
+    if (!address.trim()) {
+      setError("Enter an external wallet or exchange address");
+      return;
+    }
+    if (value <= 0) {
+      setError("Enter a valid withdrawal amount");
+      return;
+    }
+    if (value > available) {
+      setError(`Insufficient ${displayWalletName(walletType)} balance`);
+      return;
+    }
+    if (received <= 0) {
+      setError("Withdrawal amount must exceed the total fee");
+      return;
+    }
+    if (!mobileVerificationToken && !transactionPin) {
+      setError("Transaction PIN required.");
+      return;
+    }
+    if (!mobileVerificationToken && transactionPin.length < 6) {
+      setError("Enter a valid 6-digit Transaction PIN.");
+      return;
+    }
+    setSubmitting(true);
+    const result = await withdraw({
+      walletType,
+      amount: value,
+      address,
+      network,
+      transactionPin,
+      mobileVerificationToken,
+    });
+    setSubmitting(false);
+    if (result.requiresConfirmation && result.breakdown) {
+      setEarlyBreakdown(result.breakdown);
+      return;
+    }
+    if (!result.ok) {
+      setTransactionPin("");
+      setMobileVerificationToken("");
+      setError(result.message || "Withdrawal request failed");
+      return;
+    }
+    setTransactionPin("");
+    setMobileVerificationToken("");
+  };
+  const early = earlyBreakdown;
+  return (
+    <div className="fixed inset-0 z-[70] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4">
+      <div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-xl font-black">Send</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Withdrawals are available from Spot Wallet only.
+            </p>
+          </div>
+          <button onClick={close} aria-label="Close withdrawal">
+            <X />
+          </button>
+        </div>
+        {early ? (
+          <>
+            <div className="mt-5 rounded-xl border border-lime/20 bg-ink/60 p-4 text-xs leading-5 text-slate-300">
+              <h3 className="text-lg font-black text-white">
+                Early Withdrawal
+              </h3>
+              <div className="mt-3 rounded-xl border border-white/[.08] bg-black/20 p-3">
+                <p className="font-bold text-lime">Current Progress:</p>
+                <p className="mt-1">
+                  {early.completedPercentage.toFixed(2)}% Completed
+                </p>
+              </div>
+              <div className="mt-3">
+                <p className="font-bold text-lime">Early Withdrawal Charges:</p>
+                <p className="mt-1">- 20%</p>
+                <p>- 5% Withdrawal Fee</p>
+                <p>- $2 Fixed Fee</p>
+              </div>
+              <p className="mt-3">Press "Confirm Withdrawal" to continue.</p>
+            </div>
+            <div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4">
+              <LineItem
+                label="Capital Amount"
+                value={`$${early.capitalAmount.toFixed(2)}`}
+              />
+              <LineItem
+                label="Earned Profit"
+                value={`$${early.earnedProfit.toFixed(2)}`}
+              />
+              <LineItem
+                label="Required Profit"
+                value={`$${early.requiredProfit.toFixed(2)}`}
+              />
+              <LineItem
+                label="Withdrawal Amount"
+                value={`$${early.withdrawalAmount.toFixed(2)}`}
+              />
+              <LineItem
+                label="20% Early Withdrawal Charge"
+                value={`$${early.earlyWithdrawalCharge.toFixed(2)}`}
+              />
+              <LineItem
+                label="5% Withdrawal Fee"
+                value={`$${early.percentageFee.toFixed(2)}`}
+              />
+              <LineItem
+                label="Fixed Fee"
+                value={`$${early.fixedFee.toFixed(2)}`}
+              />
+              <LineItem
+                label="Total Fees"
+                value={`$${early.totalFees.toFixed(2)}`}
+              />
+              <LineItem
+                label="Net Receivable"
+                value={`$${early.netAmount.toFixed(2)}`}
+              />
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setEarlyBreakdown(null)}
+                disabled={submitting}
+                className="rounded-xl border border-line py-3 text-xs font-black text-slate-300 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submit}
+                disabled={submitting}
+                className="rounded-xl bg-lime py-3 text-xs font-black text-ink disabled:opacity-60"
+              >
+                {submitting ? "Submitting..." : "Confirm Withdrawal"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <label className="mt-5 block text-xs font-bold text-slate-400">
+              Wallet
+              <select
+                value={walletType}
+                onChange={(e) => {
+                  setWalletType("SPOT");
+                  setError("");
+                  setMobileVerificationToken("");
+                  setEarlyBreakdown(null);
+                }}
+                className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"
+              >
+                <option value="SPOT">Spot Wallet</option>
+              </select>
+            </label>
+            <label className="mt-4 block text-xs font-bold text-slate-400">
+              Amount
+            </label>
+            <div
+              className={`mt-2 flex items-center rounded-xl border bg-ink ${
+                error ? "border-danger/60" : "border-line"
+              }`}
+            >
+              <input
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setError("");
+                  setMobileVerificationToken("");
+                  setEarlyBreakdown(null);
+                }}
+                placeholder="0.00"
+                className="min-w-0 flex-1 bg-transparent px-4 py-3.5 outline-none"
+              />
+              <button
+                onClick={() => setAmount(available.toFixed(2))}
+                className="px-4 text-xs font-black text-lime"
+              >
+                MAX
+              </button>
+              <span className="pr-4 text-xs text-slate-500">USDT</span>
+            </div>
+            <p className="mt-1 text-[10px] text-slate-500">
+              Available: {available.toFixed(2)} USDT
+            </p>
+            <label className="mt-4 block text-xs font-bold text-slate-400">
+              External wallet or exchange address
+              <input
+                value={address}
+                onChange={(e) => {
+                  setAddress(e.target.value);
+                  setError("");
+                  setMobileVerificationToken("");
+                  setEarlyBreakdown(null);
+                }}
+                placeholder="0x... or exchange deposit address"
+                className="mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-white outline-none focus:border-lime/50"
+              />
+            </label>
+            <label className="mt-4 block text-xs font-bold text-slate-400">
+              Network
+              <select
+                value={network}
+                onChange={(e) => setNetwork(e.target.value)}
+                className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white"
+              >
+                <option value="BSC">BNB Smart Chain (BEP20)</option>
+                <option value="TRON">TRON (TRC20)</option>
+              </select>
+            </label>
+            <div className="mt-4">
+              <TransactionPinInput
+                label="Transaction PIN"
+                value={transactionPin}
+                onChange={setTransactionPin}
+                autoFocus
+              />
+            </div>
+            <button
+              type="button"
+              onClick={useBiometric}
+              className="mt-3 w-full rounded-xl border border-lime/30 bg-lime/10 py-3 text-xs font-black text-lime"
+            >
+              {mobileVerificationToken
+                ? "Biometric ready"
+                : "Use biometric instead"}
+            </button>
+            {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+            <div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/60 p-4">
+              <LineItem label="Wallet" value={`${label(walletType)} Wallet`} />
+              <LineItem
+                label="Withdrawal Amount"
+                value={`${value.toFixed(2)} USDT`}
+              />
+              <LineItem
+                label="5% Withdrawal Fee"
+                value={`${percentageFee.toFixed(2)} USDT`}
+              />
+              <LineItem
+                label="$2 Fixed Fee"
+                value={`${fixedFee.toFixed(2)} USDT`}
+              />
+              <LineItem
+                label="Net Receivable"
+                value={`${received.toFixed(2)} USDT`}
+              />
+            </div>
+            <button
+              onClick={() => submit()}
+              disabled={
+                submitting ||
+                (!mobileVerificationToken && transactionPin.length !== 6)
+              }
+              className="mt-5 w-full rounded-xl bg-lime py-3.5 text-xs font-black text-ink disabled:opacity-60"
+            >
+              {submitting ? "Submitting..." : "Confirm Send"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
-function VerificationRequestModal({close,notify,user}:{close:()=>void;notify:(message:string)=>void;user:CurrentUser|null}) {
-  const [fullName,setFullName]=useState(user?.name?.trim() ?? "");
-  const [dateOfBirth,setDateOfBirth]=useState("");
-  const [country,setCountry]=useState(user?.country?.trim() ?? "");
-  const [address,setAddress]=useState("");
-  const [governmentIdType,setGovernmentIdType]=useState(getKycDocumentTypes(user?.country)[0]);
-  const [governmentIdNumber,setGovernmentIdNumber]=useState("");
-  const [frontIdImageUrl,setFrontIdImageUrl]=useState("");
-  const [backIdImageUrl,setBackIdImageUrl]=useState("");
-  const [selfieImageUrl,setSelfieImageUrl]=useState("");
-  const [kyc,setKyc]=useState<KycSnapshot|null>(null);
-  const [error,setError]=useState("");
-  const [loading,setLoading]=useState(false);
-  useEffect(()=>{let active=true;if(!user){setKyc(null);return;}fetch("/api/kyc",{cache:"no-store",credentials:"include"}).then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(!active)return;const snapshot=data as KycSnapshot;setKyc(snapshot);const request=snapshot.request;if(request){setFullName(request.fullName??"");setDateOfBirth(request.dateOfBirth??"");setCountry(request.country??user.country??"");setAddress(request.address??"");setGovernmentIdType(request.governmentIdType??"Aadhaar Card");setGovernmentIdNumber(request.governmentIdNumber??"");setFrontIdImageUrl(request.frontIdImageUrl??"");setBackIdImageUrl(request.backIdImageUrl??"");setSelfieImageUrl(request.selfieImageUrl??"");}}).catch(()=>{if(active)setKyc(null);});return()=>{active=false};},[user]);
-  const locked=kyc?.status==="APPROVED"||kyc?.status==="PENDING"||kyc?.status==="UNDER_REVIEW";
-  const documentTypes=useMemo(()=>getKycDocumentTypes(country),[country]);
-  const backRequired=kycDocumentRequiresBackPhoto(governmentIdType);
-  useEffect(()=>{if(!documentTypes.includes(governmentIdType))setGovernmentIdType(documentTypes[0]);},[documentTypes,governmentIdType]);
-  const submit=async()=>{setError("");if(!user){setError("Login required");notify("Login required");return;}if(locked){setError(kyc?.status==="APPROVED"?"Verification is already approved":"Verification request is pending");return;}if(!fullName.trim()||!dateOfBirth.trim()||!country.trim()||!address.trim()||!governmentIdNumber.trim()||!frontIdImageUrl.trim()||backRequired&&!backIdImageUrl.trim()||!selfieImageUrl.trim()){setError("Complete all verification fields");return;}setLoading(true);const response=await fetch("/api/kyc",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,dateOfBirth,country,address,governmentIdType,governmentIdNumber,frontIdImageUrl,backIdImageUrl,selfieImageUrl})});const data=await response.json().catch(()=>({}));setLoading(false);if(!response.ok){setError(data.error||"Verification request failed");return;}notify(data.message||"Your KYC has been submitted successfully. It is now under review.");close();};
+function VerificationRequestModal({
+  close,
+  notify,
+  user,
+}: {
+  close: () => void;
+  notify: (message: string) => void;
+  user: CurrentUser | null;
+}) {
+  const [fullName, setFullName] = useState(user?.name?.trim() ?? "");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [country, setCountry] = useState(user?.country?.trim() ?? "");
+  const [address, setAddress] = useState("");
+  const [governmentIdType, setGovernmentIdType] = useState(
+    getKycDocumentTypes(user?.country)[0]
+  );
+  const [governmentIdNumber, setGovernmentIdNumber] = useState("");
+  const [frontIdImageUrl, setFrontIdImageUrl] = useState("");
+  const [backIdImageUrl, setBackIdImageUrl] = useState("");
+  const [selfieImageUrl, setSelfieImageUrl] = useState("");
+  const [kyc, setKyc] = useState<KycSnapshot | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setKyc(null);
+      return;
+    }
+    fetch("/api/kyc", { cache: "no-store", credentials: "include" })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data) => {
+        if (!active) return;
+        const snapshot = data as KycSnapshot;
+        setKyc(snapshot);
+        const request = snapshot.request;
+        if (request) {
+          setFullName(request.fullName ?? "");
+          setDateOfBirth(request.dateOfBirth ?? "");
+          setCountry(request.country ?? user.country ?? "");
+          setAddress(request.address ?? "");
+          setGovernmentIdType(request.governmentIdType ?? "Aadhaar Card");
+          setGovernmentIdNumber(request.governmentIdNumber ?? "");
+          setFrontIdImageUrl(request.frontIdImageUrl ?? "");
+          setBackIdImageUrl(request.backIdImageUrl ?? "");
+          setSelfieImageUrl(request.selfieImageUrl ?? "");
+        }
+      })
+      .catch(() => {
+        if (active) setKyc(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user]);
+  const locked =
+    kyc?.status === "APPROVED" ||
+    kyc?.status === "PENDING" ||
+    kyc?.status === "UNDER_REVIEW";
+  const documentTypes = useMemo(() => getKycDocumentTypes(country), [country]);
+  const backRequired = kycDocumentRequiresBackPhoto(governmentIdType);
+  useEffect(() => {
+    if (!documentTypes.includes(governmentIdType))
+      setGovernmentIdType(documentTypes[0]);
+  }, [documentTypes, governmentIdType]);
+  const submit = async () => {
+    setError("");
+    if (!user) {
+      setError("Login required");
+      notify("Login required");
+      return;
+    }
+    if (locked) {
+      setError(
+        kyc?.status === "APPROVED"
+          ? "Verification is already approved"
+          : "Verification request is pending"
+      );
+      return;
+    }
+    if (
+      !fullName.trim() ||
+      !dateOfBirth.trim() ||
+      !country.trim() ||
+      !address.trim() ||
+      !governmentIdNumber.trim() ||
+      !frontIdImageUrl.trim() ||
+      (backRequired && !backIdImageUrl.trim()) ||
+      !selfieImageUrl.trim()
+    ) {
+      setError("Complete all verification fields");
+      return;
+    }
+    setLoading(true);
+    const response = await fetch("/api/kyc", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fullName,
+        dateOfBirth,
+        country,
+        address,
+        governmentIdType,
+        governmentIdNumber,
+        frontIdImageUrl,
+        backIdImageUrl,
+        selfieImageUrl,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setLoading(false);
+    if (!response.ok) {
+      setError(data.error || "Verification request failed");
+      return;
+    }
+    notify(
+      data.message ||
+        "Your KYC has been submitted successfully. It is now under review."
+    );
+    close();
+  };
   return (
     <div className="fixed inset-0 z-[80] grid place-items-end bg-black/70 backdrop-blur-sm sm:place-items-center sm:p-4">
       <div className="w-full max-w-md rounded-t-3xl border border-line bg-[#111c18] p-6 sm:rounded-3xl">
-        <div className="flex items-start justify-between"><div><h3 className="text-xl font-black">Verification Request</h3><p className="mt-1 text-xs text-slate-500">Submit identity details for review.</p></div><button onClick={close}><X/></button></div>
-        {kyc&&<div className="mt-4 rounded-xl border border-line bg-ink/70 p-3 text-xs text-slate-400">Status: <span className="font-bold text-lime">{kyc.status}</span>{kyc.request?.rejectionReason&&<span> · {kyc.request.rejectionReason}</span>}</div>}
-        <div className="mt-5 max-h-[62vh] space-y-4 overflow-y-auto pr-1">
-          <FormField label="Full name" value={fullName} onChange={setFullName} readOnly={locked}/>
-          <FormField label="Date of birth" value={dateOfBirth} onChange={setDateOfBirth} placeholder="YYYY-MM-DD" readOnly={locked}/>
-          <FormField label="Country" value={country} onChange={setCountry} readOnly={locked}/>
-          <FormField label="Address" value={address} onChange={setAddress} readOnly={locked}/>
-          <label className="block text-xs font-bold text-slate-400">UID<input value={user?.uid?.trim() || "Unavailable"} readOnly className="mt-2 w-full rounded-xl border border-line bg-ink/70 p-3 text-slate-500 outline-none"/></label>
-          <label className="block text-xs font-bold text-slate-400">Government ID type<select value={governmentIdType} disabled={locked} onChange={e=>setGovernmentIdType(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white disabled:text-slate-500">{documentTypes.map(type=><option key={type} value={type}>{type}</option>)}</select></label>
-          <FormField label="Government ID number" value={governmentIdNumber} onChange={setGovernmentIdNumber} placeholder="Enter document number" readOnly={locked}/>
-          <FormField label="Front ID image URL" value={frontIdImageUrl} onChange={setFrontIdImageUrl} placeholder="https://..." readOnly={locked}/>
-          <FormField label={backRequired?"Back ID image URL":"Back ID image URL optional"} value={backIdImageUrl} onChange={setBackIdImageUrl} placeholder="https://..." readOnly={locked}/>
-          <FormField label="Selfie image URL" value={selfieImageUrl} onChange={setSelfieImageUrl} placeholder="https://..." readOnly={locked}/>
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-xl font-black">Verification Request</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Submit identity details for review.
+            </p>
+          </div>
+          <button onClick={close}>
+            <X />
+          </button>
         </div>
-        {error&&<p className="mt-3 text-xs text-danger">{error}</p>}
-        <button onClick={submit} disabled={loading||locked} className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60">{loading?"Submitting...":locked?kyc?.status==="APPROVED"?"Approved":"Pending review":"Submit request"}</button>
+        {kyc && (
+          <div className="mt-4 rounded-xl border border-line bg-ink/70 p-3 text-xs text-slate-400">
+            Status: <span className="font-bold text-lime">{kyc.status}</span>
+            {kyc.request?.rejectionReason && (
+              <span> · {kyc.request.rejectionReason}</span>
+            )}
+          </div>
+        )}
+        <div className="mt-5 max-h-[62vh] space-y-4 overflow-y-auto pr-1">
+          <FormField
+            label="Full name"
+            value={fullName}
+            onChange={setFullName}
+            readOnly={locked}
+          />
+          <FormField
+            label="Date of birth"
+            value={dateOfBirth}
+            onChange={setDateOfBirth}
+            placeholder="YYYY-MM-DD"
+            readOnly={locked}
+          />
+          <FormField
+            label="Country"
+            value={country}
+            onChange={setCountry}
+            readOnly={locked}
+          />
+          <FormField
+            label="Address"
+            value={address}
+            onChange={setAddress}
+            readOnly={locked}
+          />
+          <label className="block text-xs font-bold text-slate-400">
+            UID
+            <input
+              value={user?.uid?.trim() || "Unavailable"}
+              readOnly
+              className="mt-2 w-full rounded-xl border border-line bg-ink/70 p-3 text-slate-500 outline-none"
+            />
+          </label>
+          <label className="block text-xs font-bold text-slate-400">
+            Government ID type
+            <select
+              value={governmentIdType}
+              disabled={locked}
+              onChange={(e) => setGovernmentIdType(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-white disabled:text-slate-500"
+            >
+              {documentTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </label>
+          <FormField
+            label="Government ID number"
+            value={governmentIdNumber}
+            onChange={setGovernmentIdNumber}
+            placeholder="Enter document number"
+            readOnly={locked}
+          />
+          <FormField
+            label="Front ID image URL"
+            value={frontIdImageUrl}
+            onChange={setFrontIdImageUrl}
+            placeholder="https://..."
+            readOnly={locked}
+          />
+          <FormField
+            label={
+              backRequired ? "Back ID image URL" : "Back ID image URL optional"
+            }
+            value={backIdImageUrl}
+            onChange={setBackIdImageUrl}
+            placeholder="https://..."
+            readOnly={locked}
+          />
+          <FormField
+            label="Selfie image URL"
+            value={selfieImageUrl}
+            onChange={setSelfieImageUrl}
+            placeholder="https://..."
+            readOnly={locked}
+          />
+        </div>
+        {error && <p className="mt-3 text-xs text-danger">{error}</p>}
+        <button
+          onClick={submit}
+          disabled={loading || locked}
+          className="mt-6 w-full rounded-xl bg-lime py-3.5 text-sm font-black text-ink disabled:opacity-60"
+        >
+          {loading
+            ? "Submitting..."
+            : locked
+            ? kyc?.status === "APPROVED"
+              ? "Approved"
+              : "Pending review"
+            : "Submit request"}
+        </button>
       </div>
     </div>
   );
@@ -2502,7 +3588,4 @@ function LineItem({label,value}:{label:string;value:string}) { return <div class
 
 
 function Stat({label,value,trend}:{label:string;value:string;trend?:string}) { return <div className="rounded-xl border border-line bg-ink/50 p-3"><p className="text-[10px] text-slate-500">{label}</p><div className="mt-1 flex items-end gap-1"><p className="font-black">{value}</p>{trend&&<span className="text-[9px] text-mint">{trend}</span>}</div></div> }
-
-
-
 

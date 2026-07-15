@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserWalletSnapshot } from "@/lib/domain/user-wallets";
-import { transferWallet } from "@/lib/domain/wallet-service";
+import { previewWalletTransfer, transferWallet } from "@/lib/domain/wallet-service";
 import { prisma } from "@/lib/prisma";
 import { auditFailure, auditSuccess } from "@/lib/audit";
 import { displayWalletName } from "@/lib/wallet-labels";
@@ -13,6 +13,7 @@ const transferSchema = z.object({
   toWallet: z.enum(["SPOT", "FUTURES", "AI"]),
   amount: z.coerce.number().positive(),
   idempotencyKey: z.string().trim().min(8).max(120),
+  acceptEarlyTransferCharge: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -33,12 +34,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid wallet transfer" }, { status: 400 });
   }
   try {
+    if (new URL(request.url).searchParams.get("preview") === "true") {
+      const preview = await previewWalletTransfer({
+        userId: user.id,
+        fromWallet: parsed.data.fromWallet,
+        toWallet: parsed.data.toWallet,
+        amount: new Prisma.Decimal(parsed.data.amount),
+      });
+      return NextResponse.json({ preview });
+    }
     const transfer = await transferWallet({
       userId: user.id,
       fromWallet: parsed.data.fromWallet,
       toWallet: parsed.data.toWallet,
       amount: new Prisma.Decimal(parsed.data.amount),
       idempotencyKey: `${user.id}:${parsed.data.idempotencyKey}`,
+      acceptEarlyTransferCharge: parsed.data.acceptEarlyTransferCharge === true,
     });
     await auditSuccess({ request, userId: user.id, role: "USER", action: "WALLET_TRANSFER", module: "WALLET", description: "User transferred funds between wallets", newValue: { id: transfer.id, fromWallet: transfer.fromWallet, toWallet: transfer.toWallet, amount: transfer.amount.toString(), status: transfer.status } }).catch(() => null);
     return NextResponse.json({
@@ -49,6 +60,7 @@ export async function POST(request: Request) {
         fromWalletName: displayWalletName(transfer.fromWallet),
         toWalletName: displayWalletName(transfer.toWallet),
         amount: Number(transfer.amount.toString()),
+        feeAmount: Number(transfer.feeAmount.toString()),
         receivedAmount: Number(transfer.receivedAmount.toString()),
         status: transfer.status,
         createdAt: transfer.createdAt.toISOString(),

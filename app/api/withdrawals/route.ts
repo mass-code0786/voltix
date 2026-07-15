@@ -29,6 +29,13 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
+  const parsed = withdrawalSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid withdrawal request" }, { status: 400 });
+  }
+  if (parsed.data.walletType === "AI") {
+    return NextResponse.json({ error: "Direct withdrawal from AI Wallet is no longer available. Please transfer funds to your Spot Wallet first." }, { status: 400 });
+  }
   try {
     await requireVerifiedAccount(prisma, user.id);
   } catch (error) {
@@ -37,10 +44,6 @@ export async function POST(request: Request) {
   }
   const limited = rateLimitByUser(user.id, "withdrawals", 10, 60 * 60 * 1000);
   if (limited) return limited;
-  const parsed = withdrawalSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid withdrawal request" }, { status: 400 });
-  }
   const idempotencyKey = request.headers.get("idempotency-key")?.trim();
   if (!idempotencyKey || idempotencyKey.length > 120) return NextResponse.json({ error: "A valid Idempotency-Key header is required" }, { status: 400 });
   try {

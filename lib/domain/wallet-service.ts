@@ -4,6 +4,7 @@ import { postBalancedJournal } from "./ledger";
 import { ensureUserWalletAccounts } from "./user-wallets";
 import { recalculateVipRanksForUserAndUplines } from "./vip-rank-service";
 import { displayWalletName } from "@/lib/wallet-labels";
+import { createNotification } from "./notification-service";
 
 const WITHDRAWAL_FIXED_FEE = new Prisma.Decimal(2);
 const WITHDRAWAL_PERCENTAGE_RATE = new Prisma.Decimal("0.05");
@@ -23,6 +24,7 @@ export async function transferWallet(input: {
   toWallet: UserWallet;
   amount: Prisma.Decimal;
   idempotencyKey: string;
+  acceptEarlyTransferCharge?: boolean;
 }) {
   if (!input.idempotencyKey.trim()) throw new Error("Idempotency key is required");
   if (input.amount.lte(0)) throw new Error("Transfer amount must be positive");
@@ -32,7 +34,14 @@ export async function transferWallet(input: {
     const existing = await tx.walletTransfer.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) return existing;
 
-    const receivedAmount = input.amount;
+    const eligibility = input.fromWallet === "AI" && input.toWallet === "SPOT"
+      ? await getAiTransferEligibility(tx, input.userId, input.amount)
+      : null;
+    const feeAmount = eligibility?.earlyTransferCharge ?? new Prisma.Decimal(0);
+    if (feeAmount.gt(0) && !input.acceptEarlyTransferCharge) {
+      throw new Error("Early transfer charge confirmation is required");
+    }
+    const receivedAmount = input.amount.sub(feeAmount);
     const reason = `${input.fromWallet}_TO_${input.toWallet}`;
 
     const sourceField = balanceField(input.fromWallet);
@@ -62,22 +71,87 @@ export async function transferWallet(input: {
     ]);
 
     const transfer = await tx.walletTransfer.create({
-      data: { userId: input.userId, fromWallet: input.fromWallet, toWallet: input.toWallet, amount: input.amount, feeAmount: new Prisma.Decimal(0), receivedAmount, reason, idempotencyKey: input.idempotencyKey },
+      data: { userId: input.userId, fromWallet: input.fromWallet, toWallet: input.toWallet, amount: input.amount, feeAmount, receivedAmount, reason, idempotencyKey: input.idempotencyKey },
     });
+    const feeAccount = feeAmount.gt(0)
+      ? await tx.walletAccount.findFirstOrThrow({ where: { userId: null, assetId: asset.id, type: "FEE" } })
+      : null;
     const journal = await postBalancedJournal(tx, {
-      referenceType: "WALLET_TRANSFER",
+      referenceType: eligibility ? "AI_TO_SPOT_TRANSFER" : "WALLET_TRANSFER",
       referenceId: transfer.id,
-      idempotencyKey: `wallet-transfer:${input.idempotencyKey}`,
+      idempotencyKey: eligibility ? `ai-to-spot-transfer:${transfer.id}` : `wallet-transfer:${input.idempotencyKey}`,
       memo: reason,
       lines: [
         { accountId: source.id, direction: "DEBIT", amount: input.amount },
         { accountId: destination.id, direction: "CREDIT", amount: receivedAmount },
+        ...(feeAccount ? [{ accountId: feeAccount.id, direction: "CREDIT" as const, amount: feeAmount }] : []),
       ],
     });
 
     const completed = await tx.walletTransfer.update({ where: { id: transfer.id }, data: { status: "COMPLETED", ledgerJournalId: journal.id, completedAt: new Date() } });
+    if (eligibility) {
+      await createNotification(tx, {
+        userId: input.userId,
+        type: "WITHDRAWAL_STATUS",
+        title: feeAmount.gt(0) ? "Transfer Completed with Early Charge" : "Transfer Completed",
+        message: feeAmount.gt(0)
+          ? "Your AI Wallet transfer was completed. A 20% early transfer charge was applied."
+          : `${input.amount.toString()} USDT has been transferred from your AI Wallet to your Spot Wallet.`,
+        metadata: {
+          transferId: transfer.id,
+          requestedAmount: input.amount.toString(),
+          chargeAmount: feeAmount.toString(),
+          spotWalletCreditedAmount: receivedAmount.toString(),
+          completedPercentage: eligibility.completedPercentage.toString(),
+        },
+      });
+    }
     return completed;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function previewWalletTransfer(input: { userId: string; fromWallet: UserWallet; toWallet: UserWallet; amount: Prisma.Decimal }) {
+  if (input.amount.lte(0)) throw new Error("Transfer amount must be positive");
+  if (!allowedRoutes.has(`${input.fromWallet}:${input.toWallet}`)) throw new Error("Wallet transfer route is not supported");
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { spotBalance: true, futuresBalance: true, aiWalletBalance: true } });
+  const availableBalance = user[balanceField(input.fromWallet)];
+  if (availableBalance.lt(input.amount)) throw new Error(`Insufficient ${displayWalletName(input.fromWallet)} balance`);
+  const eligibility = input.fromWallet === "AI" && input.toWallet === "SPOT"
+    ? await getAiTransferEligibility(prisma, input.userId, input.amount)
+    : null;
+  const chargeAmount = eligibility?.earlyTransferCharge ?? new Prisma.Decimal(0);
+  return {
+    requestedAmount: Number(input.amount.toString()),
+    chargeRate: chargeAmount.gt(0) ? 20 : 0,
+    chargeAmount: Number(chargeAmount.toString()),
+    receivedAmount: Number(input.amount.sub(chargeAmount).toString()),
+    eligible: eligibility?.eligible ?? true,
+    completedPercentage: Number(eligibility?.completedPercentage.toString() ?? 100),
+    remainingPercentage: Number(eligibility?.remainingPercentage.toString() ?? 0),
+    requiredProfit: Number(eligibility?.requiredProfit.toString() ?? 0),
+    earnedProfit: Number(eligibility?.earnedProfit.toString() ?? 0),
+  };
+}
+
+type AiEligibilityClient = Pick<Prisma.TransactionClient, "user" | "income"> | typeof prisma;
+
+async function getAiTransferEligibility(client: AiEligibilityClient, userId: string, amount: Prisma.Decimal) {
+  const [user, income] = await Promise.all([
+    client.user.findUniqueOrThrow({ where: { id: userId }, select: { aiTradePrincipal: true } }),
+    client.income.aggregate({ where: { userId, type: "COPY_TRADE" }, _sum: { amount: true } }),
+  ]);
+  const earnedProfit = income._sum.amount ?? new Prisma.Decimal(0);
+  const requiredProfit = user.aiTradePrincipal.mul(AI_WITHDRAWAL_ELIGIBILITY_RATE);
+  const eligible = requiredProfit.eq(0) || earnedProfit.gte(requiredProfit);
+  const completedPercentage = requiredProfit.gt(0) ? Prisma.Decimal.min(earnedProfit.div(requiredProfit).mul(100), 100) : new Prisma.Decimal(100);
+  return {
+    eligible,
+    earnedProfit,
+    requiredProfit,
+    completedPercentage,
+    remainingPercentage: Prisma.Decimal.max(new Prisma.Decimal(100).sub(completedPercentage), 0),
+    earlyTransferCharge: eligible ? new Prisma.Decimal(0) : amount.mul(AI_EARLY_WITHDRAWAL_RATE),
+  };
 }
 
 export async function creditConfirmedDepositToSpot(depositId: string) {
@@ -101,7 +175,7 @@ export async function createWithdrawal(input: { userId: string; walletType: With
   if (!input.idempotencyKey.trim()) throw new Error("Idempotency key is required");
   if (!input.address.trim()) throw new Error("External wallet address is required");
   if (input.amount.lte(0)) throw new Error("Withdrawal amount must be positive");
-  if (input.walletType !== "SPOT" && input.walletType !== "AI") throw new Error("Only Spot and AI withdrawals are supported");
+  if (input.walletType === "AI") throw new Error("Direct withdrawal from AI Wallet is no longer available. Please transfer funds to your Spot Wallet first.");
   return prisma.$transaction(async (tx) => {
     const existing = await tx.withdrawal.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) return existing;
@@ -181,6 +255,8 @@ export const createSpotWithdrawal = (input: { userId: string; networkId: string;
   createWithdrawal({ ...input, walletType: "SPOT", address: input.toAddress });
 
 export async function approveAiWalletWithdrawal(input: { withdrawalId: string; adminUserId: string }) {
+  throw new Error("Legacy AI withdrawals are read-only and can no longer be approved.");
+  /* Legacy implementation retained below for historical data compatibility.
   return prisma.$transaction(async (tx) => {
     const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: input.withdrawalId } });
     if (withdrawal.walletType !== "AI") throw new Error("Only AI withdrawals require approval");
@@ -197,15 +273,19 @@ export async function approveAiWalletWithdrawal(input: { withdrawalId: string; a
     const journal = await postBalancedJournal(tx, { referenceType: "AI_WALLET_WITHDRAWAL", referenceId: withdrawal.id, idempotencyKey: `ai-wallet-withdrawal:${withdrawal.id}`, memo: "Approved AI withdrawal", lines });
     return tx.withdrawal.update({ where: { id: withdrawal.id }, data: { status: "APPROVED", adminActionBy: input.adminUserId, adminActionAt: new Date(), ledgerJournalId: journal.id } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  */
 }
 
 export async function rejectAiWalletWithdrawal(input: { withdrawalId: string; adminUserId: string; rejectionReason?: string }) {
+  throw new Error("Legacy AI withdrawals are read-only and can no longer be rejected.");
+  /* Legacy implementation retained below for historical data compatibility.
   return prisma.$transaction(async (tx) => {
     const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: input.withdrawalId } });
     if (withdrawal.walletType !== "AI") throw new Error("Only AI withdrawals require approval");
     if (withdrawal.status !== "PENDING") throw new Error("Withdrawal has already been actioned");
     return tx.withdrawal.update({ where: { id: withdrawal.id }, data: { status: "REJECTED", adminActionBy: input.adminUserId, adminActionAt: new Date(), rejectionReason: input.rejectionReason?.trim() || null } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  */
 }
 
 function balanceField(wallet: UserWallet): "spotBalance" | "futuresBalance" | "aiWalletBalance" {
