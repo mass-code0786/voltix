@@ -325,11 +325,16 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload, verific
   const payloadConfirmations = Number(payload.confirmations ?? 0);
   const now = new Date();
 
-  return prisma.$transaction(async (tx) => {
+  let matchMethod = "none";
+  const result = await prisma.$transaction(async (tx) => {
     let target = paymentId
       ? await tx.deposit.findUnique({ where: { providerPaymentId: paymentId }, include: { asset: true, network: true } })
       : null;
-    target ??= orderId ? await tx.deposit.findFirst({ where: { OR: [{ id: orderId }, { providerOrderId: orderId }] }, include: { asset: true, network: true } }) : null;
+    if (target) matchMethod = "payment_id";
+    if (!target && orderId) {
+      target = await tx.deposit.findFirst({ where: { OR: [{ id: orderId }, { providerOrderId: orderId }] }, include: { asset: true, network: true } });
+      if (target) matchMethod = "order_id";
+    }
     if (!target && parentPaymentId && paymentId) {
       const address = await tx.depositAddress.findUnique({ where: { providerPaymentId: parentPaymentId }, include: { asset: true, network: true } });
       if (address) {
@@ -364,6 +369,7 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload, verific
           },
           include: { asset: true, network: true },
         });
+        matchMethod = pendingRequest ? "permanent_address_pending_request" : "permanent_address_new_payment";
       }
     }
     if (!target) throw new Error("NOWPayments deposit was not found");
@@ -465,6 +471,18 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload, verific
     });
     return formatDeposit(credited);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  console.info("NOWPayments deposit transaction committed", {
+    paymentId,
+    orderId,
+    depositId: result.id,
+    matchMethod,
+    providerStatus: paymentStatus,
+    localStatus: result.status,
+    actuallyPaid: result.actuallyPaid,
+    txHash: result.txHash,
+    creditedAt: result.creditedAt,
+  });
+  return result;
 }
 
 export async function getUserWithdrawals(userId: string) {

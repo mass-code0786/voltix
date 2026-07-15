@@ -12,6 +12,8 @@ export async function GET() {
   });
   return NextResponse.json({
     status: process.env.NOWPAYMENTS_IPN_SECRET ? "configured" : "missing_secret",
+    callbackUrl: process.env.NOWPAYMENTS_IPN_CALLBACK_URL?.trim() || `${(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "").replace(/\/$/, "")}/api/webhooks/nowpayments`,
+    callbackUrlMatchesProduction: (process.env.NOWPAYMENTS_IPN_CALLBACK_URL?.trim() || `${(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "").replace(/\/$/, "")}/api/webhooks/nowpayments`) === "https://voltix.zenithsoftech.com/api/webhooks/nowpayments",
     latestDeposits: deposits.map(deposit => ({
       id: deposit.id,
       user: deposit.user.name,

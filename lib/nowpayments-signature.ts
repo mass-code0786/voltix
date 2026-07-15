@@ -1,19 +1,25 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
 export function verifyNowPaymentsSignature(rawBody: string, signature: string, secret: string) {
-  if (!signature) return false;
+  return validateNowPaymentsSignature(rawBody, signature, secret).verified;
+}
+
+export function validateNowPaymentsSignature(rawBody: string, signature: string, secret: string): { verified: boolean; reason: string | null } {
+  if (!signature) return { verified: false, reason: "missing_x_nowpayments_sig" };
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawBody);
   } catch {
-    return false;
+    return { verified: false, reason: "invalid_json_body" };
   }
   const expected = createHmac("sha512", secret).update(stableStringify(parsed)).digest("hex");
   const received = signature.trim();
-  if (!/^[a-f\d]+$/i.test(received) || received.length % 2 !== 0) return false;
+  if (!/^[a-f\d]+$/i.test(received) || received.length % 2 !== 0) return { verified: false, reason: "malformed_x_nowpayments_sig" };
   const expectedBuffer = Buffer.from(expected, "hex");
   const receivedBuffer = Buffer.from(received, "hex");
-  return expectedBuffer.length === receivedBuffer.length && timingSafeEqual(expectedBuffer, receivedBuffer);
+  if (expectedBuffer.length !== receivedBuffer.length) return { verified: false, reason: "signature_length_mismatch" };
+  if (!timingSafeEqual(expectedBuffer, receivedBuffer)) return { verified: false, reason: "signature_digest_mismatch" };
+  return { verified: true, reason: null };
 }
 
 function stableStringify(value: unknown): string {
