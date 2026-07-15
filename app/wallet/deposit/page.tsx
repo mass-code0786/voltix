@@ -47,6 +47,7 @@ export default function WalletDepositPage() {
     setError("");
     setMessage("");
     if(value<=0){setError("Enter a valid deposit amount");return;}
+    if(value<10){setError("Minimum deposit is 10 USDT.");return;}
     setSubmitting(true);
     const response=await fetch("/api/deposits/nowpayments/create",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount:value,network,payCurrency})});
     const data=await response.json().catch(()=>({}));
@@ -95,7 +96,6 @@ export default function WalletDepositPage() {
           <label className="block text-xs font-bold text-slate-400">Amount<input inputMode="decimal" value={amount} onChange={event=>{setAmount(event.target.value);setError("");setMessage("");}} placeholder="0.00" className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"/></label>
           <label className="mt-4 block text-xs font-bold text-slate-400">Network<select value={network} onChange={event=>changeNetwork(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="BSC">BNB Smart Chain (BEP20)</option><option value="TRON">TRON (TRC20)</option></select></label>
           <label className="mt-4 block text-xs font-bold text-slate-400">Payment currency<select value={payCurrency} onChange={event=>{setPayCurrency(event.target.value);setError("");setMessage("");}} className="mt-2 w-full rounded-2xl border border-white/[.08] bg-black/25 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#18ff8a]/50"><option value="usdtbsc">USDT BSC</option><option value="usdttrc20">USDT TRC20</option></select></label>
-          <div className="mt-4 rounded-2xl bg-[#2a2412] p-3 text-[11px] leading-5 text-[#c9b98d]">Minimum deposit: 10 USDT. Send only the selected coin/network via NOWPayments. Manual tx hashes are not accepted.</div>
         </>}
         {error&&<p className="mt-3 rounded-2xl border border-[#ff4f6d]/30 bg-[#ff4f6d]/10 p-3 text-xs font-bold text-[#ff8aa0]">{error}</p>}
         {!deposit&&<div className="sticky bottom-0 -mx-4 mt-5 border-t border-white/[.08] bg-[#111c18]/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
