@@ -37,6 +37,8 @@ export default function WalletDepositPage() {
   const [creditedDeposit,setCreditedDeposit]=useState<DepositResult|null>(null);
   const clientRequestIdRef=useRef<string|null>(null);
   const submittingRef=useRef(false);
+  const popupTimerRef=useRef<number|null>(null);
+  const walletNavigationStartedRef=useRef(false);
   const value=Number(amount);
   const payAddress=deposit?.payAddress??"";
   const qrValue=payAddress||deposit?.providerPaymentId||"";
@@ -56,7 +58,6 @@ export default function WalletDepositPage() {
           if(!sessionStorage.getItem(key)){
             sessionStorage.setItem(key,"1");
             setCreditedDeposit(current);
-            window.setTimeout(()=>setCreditedDeposit(value=>value?.id===current.id?null:value),10000);
           }
           await Promise.allSettled([
             fetch("/api/assets",{credentials:"include",cache:"no-store"}),
@@ -70,6 +71,22 @@ export default function WalletDepositPage() {
     const timer=window.setInterval(poll,4000);
     return()=>{stopped=true;window.clearInterval(timer);};
   },[deposit?.id,deposit?.status,deposit?.creditedAt,router]);
+
+  const closePopupAndNavigate=()=>{
+    if(walletNavigationStartedRef.current)return;
+    walletNavigationStartedRef.current=true;
+    if(popupTimerRef.current!==null){window.clearTimeout(popupTimerRef.current);popupTimerRef.current=null;}
+    setCreditedDeposit(null);
+    router.replace("/wallet");
+  };
+
+  useEffect(()=>{
+    if(!creditedDeposit?.creditedAt)return;
+    popupTimerRef.current=window.setTimeout(closePopupAndNavigate,5000);
+    return()=>{
+      if(popupTimerRef.current!==null){window.clearTimeout(popupTimerRef.current);popupTimerRef.current=null;}
+    };
+  },[creditedDeposit?.id,creditedDeposit?.creditedAt]);
 
   const changeNetwork=(next:string)=>{
     setNetwork(next);
@@ -110,7 +127,7 @@ export default function WalletDepositPage() {
   };
 
   return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-3 text-white sm:px-6">
-    {creditedDeposit&&creditedDeposit.creditedAt&&<div role="dialog" aria-modal="true" aria-labelledby="deposit-success-title" className="fixed inset-0 z-[90] grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-sm rounded-3xl border border-[#18ff8a]/25 bg-[#111c18] p-6 shadow-2xl"><button onClick={()=>setCreditedDeposit(null)} aria-label="Close" className="float-right text-xl text-slate-400">×</button><h2 id="deposit-success-title" className="text-2xl font-black text-white">Congratulations!</h2><p className="mt-2 text-sm text-slate-300">Your deposit has been successfully credited.</p><div className="mt-5 space-y-3 rounded-2xl border border-white/[.08] bg-black/25 p-4"><LineItem label="Amount Credited" value={`${(creditedDeposit.actuallyPaid??creditedDeposit.amount).toFixed(2)} ${creditedDeposit.asset}`}/><LineItem label="Wallet" value="Spot Wallet"/><LineItem label="Network" value={creditedDeposit.networkName}/><LineItem label="Status" value="Completed"/></div></div></div>}
+    {creditedDeposit&&creditedDeposit.creditedAt&&<div role="dialog" aria-modal="true" aria-labelledby="deposit-success-title" className="fixed inset-0 z-[90] grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-sm rounded-3xl border border-[#18ff8a]/25 bg-[#111c18] p-6 shadow-2xl"><button onClick={closePopupAndNavigate} aria-label="Close" className="float-right text-xl text-slate-400">×</button><h2 id="deposit-success-title" className="text-2xl font-black text-white">Congratulations!</h2><p className="mt-2 text-sm text-slate-300">Your deposit has been successfully credited.</p><div className="mt-5 space-y-3 rounded-2xl border border-white/[.08] bg-black/25 p-4"><LineItem label="Amount Credited" value={`${(creditedDeposit.actuallyPaid??creditedDeposit.amount).toFixed(2)} ${creditedDeposit.asset}`}/><LineItem label="Wallet" value="Spot Wallet"/><LineItem label="Network" value={creditedDeposit.networkName}/><LineItem label="Status" value="Completed"/></div></div></div>}
     <div className="mx-auto max-w-2xl pb-[calc(7rem+env(safe-area-inset-bottom))]">
       <header className="flex h-12 items-center gap-3">
         <Link href="/dashboard?view=wallet" className="grid h-10 w-10 place-items-center text-white" aria-label="Back to wallet"><ArrowLeft size={22}/></Link>
