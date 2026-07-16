@@ -574,7 +574,7 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
       });
     }
     const pair = isAiAutoTrade
-      ? normalizeTradePair(persistedSignal!.recommendedPair)
+      ? persistedSignal!.recommendedPair
       : input.pair
         ? normalizeTradePair(input.pair)
         : await defaultTradePair(tx);
@@ -585,6 +585,8 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
         slotId: slot.id,
         source: input.source ?? "MANUAL",
         pair,
+        signalId: persistedSignal?.id ?? null,
+        occurrenceKey: persistedSignal?.occurrenceKey ?? null,
         idempotencyKey: input.idempotencyKey ?? null,
         principalAmount: tradeAmount,
         returnPercent: perTradePercent,
@@ -593,6 +595,15 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
         ...timeline,
       },
     });
+    if (isAiAutoTrade) {
+      console.info("[AI_TRADE_PERSISTED_SIGNAL_PAIR]", {
+        occurrenceKey: persistedSignal!.occurrenceKey,
+        signalId: persistedSignal!.id,
+        persistedSignalPair: persistedSignal!.recommendedPair,
+        storedCopyTradePair: trade.pair,
+        tradeId: trade.id,
+      });
+    }
     await tx.auditLog.create({
       data: {
         actorId: input.userId,
@@ -612,6 +623,8 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
           pair,
           signalId: persistedSignal?.id ?? null,
           occurrenceKey: persistedSignal?.occurrenceKey ?? null,
+          persistedSignalPair: persistedSignal?.recommendedPair ?? null,
+          storedCopyTradePair: trade.pair,
           idempotencyKey: input.idempotencyKey ?? null,
           dailyPercent: dailyPercent.toString(),
           perTradePercent: perTradePercent.toString(),

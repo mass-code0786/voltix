@@ -24,7 +24,8 @@
     "promotion:test": "tsx scripts/test-new-depositor-promotion.ts",
     "nowpayments:test": "tsx scripts/test-nowpayments-deposits.ts",
     "nowpayments:reconcile": "tsx scripts/reconcile-nowpayments-deposits.ts",
-    "ai-trade-pair:test": "tsx scripts/test-ai-trade-pair.ts"
+    "ai-trade-pair:test": "tsx scripts/test-ai-trade-pair.ts",
+    "ai-trade-pair:repair": "tsx scripts/repair-ai-trade-pairs.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",

@@ -729,6 +729,8 @@ model CopyTrade {
   slot             TradeSlot   @relation(fields: [slotId], references: [id])
   source           String      @default("MANUAL")
   pair             String?
+  signalId         String?
+  occurrenceKey    String?
   promotionDay     Int?
   walletSnapshotAtTrade Decimal?    @db.Decimal(36, 18)
   selectedRate     Decimal?    @db.Decimal(10, 6)
@@ -757,6 +759,8 @@ model CopyTrade {
   @@index([slotId, windowStartAt, creditDueAt, status])
   @@index([codeId])
   @@index([source, startedAt])
+  @@index([signalId])
+  @@index([occurrenceKey])
   @@index([source, promotionDay, status])
 }
 

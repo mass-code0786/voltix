@@ -11,7 +11,7 @@ const signal = {
   slotId: window.slotId,
   windowStartAt: window.windowStartAt,
   windowCloseAt: window.windowCloseAt,
-  recommendedPair: "SUIUSDT",
+  recommendedPair: "FONKUSDT",
 };
 
 assert.equal(matchesTradeWindowSignalOccurrence(signal, window), true);
@@ -31,11 +31,12 @@ const nextSignal = {
   occurrenceKey: tradeWindowSignalOccurrenceKey(nextWindow.slotId, nextWindow.windowStartAt),
   windowStartAt: nextWindow.windowStartAt,
   windowCloseAt: nextWindow.windowCloseAt,
-  recommendedPair: "ETHUSDT",
+  recommendedPair: "UNIUSDT",
 };
 
 assert.equal(matchesTradeWindowSignalOccurrence(signal, nextWindow), false);
 assert.equal(matchesTradeWindowSignalOccurrence(nextSignal, nextWindow), true);
-assert.equal(signal.recommendedPair, "SUIUSDT");
+assert.equal(signal.recommendedPair, "FONKUSDT");
+assert.equal(nextSignal.recommendedPair, "UNIUSDT");
 
 console.info("AI trade pair occurrence tests passed");
