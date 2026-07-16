@@ -385,6 +385,7 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
 }
 
 export async function runAiAutoTradeScheduler(now = new Date()) {
+  const schedulerStartedAt = Date.now();
   await logAiAutoTradeEvent("scheduler started", { currentUtc: now.toISOString(), currentIst: formatTradeDebugIst(now) });
   await ensureRequiredTradeSlots();
   const settlement = await settleDueCopyTrades(undefined, now);
@@ -417,6 +418,15 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
   const slotStart = tradeSlotStart(slot.utcTime, now);
   const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
   const settlementTime = tradeSlotSettlementTime(slotStart);
+  const occurrenceKey = tradeWindowSignalOccurrenceKey(slot.id, slotStart);
+  const persistedSignal = await getPersistedTradeWindowSignal({ slotId: slot.id, windowStartAt: slotStart, windowCloseAt: slotEnd });
+  const recoveryAttempted = now.getTime() >= slotStart.getTime() + Number(process.env.AI_AUTO_TRADE_INTERVAL_MS ?? 30_000);
+  if (recoveryAttempted) await logAiAutoTradeEvent("missed-window recovery attempted", {
+    occurrenceKey,
+    currentTime: now.toISOString(),
+    windowCloseAt: slotEnd.toISOString(),
+    result: "scanning exact live occurrence",
+  });
   await logAiAutoTradeEvent("live slot detected", { slotId: slot.id, label: slot.label, utcTime: slot.utcTime, currentUtc: now.toISOString(), currentIst: formatTradeDebugIst(now), windowStart: slotStart.toISOString(), windowClose: slotEnd.toISOString(), settlementTime: settlementTime.toISOString(), windows: await tradeWindowComparisons(now) });
   const subscriptions = await prisma.aiSubscription.findMany({
     where: { active: true, startsAt: { lte: now }, expiresAt: { gt: now } },
@@ -428,6 +438,10 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
   let tradesPlacedThisCycle = 0;
   let aiTradesAlreadyExecutedThisWindow = 0;
   let manualTradesAlreadyPlacedThisWindow = 0;
+  let skippedSubscriptionInactive = 0;
+  let skippedInsufficientBalance = 0;
+  let skippedDailyLimit = 0;
+  let skippedMissingSignal = 0;
   const skipped: { userId: string; reason: string }[] = [];
   const errors: { userId: string; error: string }[] = [];
   for (const subscription of subscriptions) {
@@ -439,6 +453,10 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
         const reason = result.reason ?? "Skipped";
         if (reason === AI_ALREADY_TRADED_IN_WINDOW_MESSAGE) aiTradesAlreadyExecutedThisWindow += 1;
         if (reason === MANUAL_ALREADY_TRADED_IN_WINDOW_MESSAGE) manualTradesAlreadyPlacedThisWindow += 1;
+        if (reason === "AI Subscription is not active") skippedSubscriptionInactive += 1;
+        if (reason === AI_TRADE_SIGNAL_PAIR_NOT_FOUND) skippedMissingSignal += 1;
+        if (reason === "Daily trade limit reached") skippedDailyLimit += 1;
+        if (reason.includes("AI Wallet") || reason.includes("balance") || reason.includes("stake must be at least")) skippedInsufficientBalance += 1;
         skipped.push({ userId: subscription.userId, reason });
       }
       const diagnostic = await debugAiAutoTradeForUser({ userId: subscription.userId, now });
@@ -467,22 +485,39 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
     where: { slotId: slot.id, windowStartAt: slotStart, windowCloseAt: slotEnd },
   });
   const summary = {
+    occurrenceKey,
     currentUtc: now.toISOString(),
     currentIst: formatTradeDebugIst(now),
     liveWindow: slot.label,
     windowStart: slotStart.toISOString(),
     windowClose: slotEnd.toISOString(),
     settlementTime: settlementTime.toISOString(),
+    signalPair: persistedSignal?.recommendedPair ?? null,
     usersScanned: subscriptions.length,
+    eligibleUsers: Math.max(0, subscriptions.length - skippedSubscriptionInactive - skippedInsufficientBalance - skippedDailyLimit - skippedMissingSignal - errors.length),
     tradesPlacedThisCycle,
+    placed: tradesPlacedThisCycle,
     aiTradesAlreadyExecutedThisWindow,
+    skippedAIAlreadyPlaced: aiTradesAlreadyExecutedThisWindow,
     manualTradesAlreadyPlacedThisWindow,
+    skippedManualAlreadyPlaced: manualTradesAlreadyPlacedThisWindow,
+    skippedSubscriptionInactive,
+    skippedInsufficientBalance,
+    skippedDailyLimit,
+    skippedMissingSignal,
     totalTradesForWindow,
     skipped: skipped.length,
     errors: errors.length,
+    durationMs: Date.now() - schedulerStartedAt,
     settlement,
   };
   await logAiAutoTradeEvent("scheduler complete", summary);
+  if (recoveryAttempted) await logAiAutoTradeEvent("missed-window recovery attempted", {
+    occurrenceKey,
+    currentTime: now.toISOString(),
+    windowCloseAt: slotEnd.toISOString(),
+    result: tradesPlacedThisCycle ? `placed ${tradesPlacedThisCycle}` : `placed 0; skipped ${skipped.length}; errors ${errors.length}`,
+  });
   return {
     lastRunAt: now.toISOString(),
     currentUtc: summary.currentUtc,
@@ -534,6 +569,8 @@ async function executeVipCopyTrade(input: { userId: string; rowId: string; pair?
     const slotStart = tradeSlotStart(slot.utcTime, now);
     const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
     const creditDueAt = tradeSlotSettlementTime(slotStart);
+    const occurrenceLockKey = `${input.userId}:${slot.id}:${slotStart.toISOString()}`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${occurrenceLockKey}))`;
     const existingSlotTrade = await tx.copyTrade.findFirst({
       where: { userId: input.userId, slotId: slot.id, windowStartAt: slotStart, windowCloseAt: slotEnd },
       select: { id: true, source: true },
