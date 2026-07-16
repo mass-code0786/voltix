@@ -384,14 +384,28 @@ export async function autoExecuteVipCopyTrade(input: { userId: string; now?: Dat
   }
 }
 
-export async function runAiAutoTradeScheduler(now = new Date()) {
+export async function runAiAutoTradeScheduler(nowInput?: Date) {
+  let now = nowInput ?? new Date();
   const schedulerStartedAt = Date.now();
   await logAiAutoTradeEvent("scheduler started", { currentUtc: now.toISOString(), currentIst: formatTradeDebugIst(now) });
   await ensureRequiredTradeSlots();
   const settlement = await settleDueCopyTrades(undefined, now);
   await prisma.aiSubscription.updateMany({ where: { active: true, expiresAt: { lte: now } }, data: { active: false } });
-  const slot = await findOpenTradeSlot(now);
-  if (!slot) {
+  // Production ticks must evaluate boundaries with a fresh clock after preliminary
+  // database/settlement work. Explicit timestamps remain stable for deterministic tests.
+  if (!nowInput) now = new Date();
+  const configuredWindows = await configuredTradeSlots();
+  const evaluatedWindows = tradeWindowCandidates(configuredWindows, now);
+  const liveWindow = evaluatedWindows.find(candidate => candidate.isLive) ?? null;
+  const windowEvaluation = evaluatedWindows.map(serializeWindowComparison);
+  await logAiAutoTradeEvent("trade window evaluation", {
+    currentUtc: now.toISOString(),
+    currentLocal: formatTradeDebugIst(now),
+    serverTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    configuredWindows: windowEvaluation,
+    finalSelectedLiveWindow: liveWindow?.slot.id ?? null,
+  });
+  if (!liveWindow) {
     const inactiveWindowLogs = await logActiveSubscriptionsSkippedOutsideLiveWindow(now);
     const noLiveSummary = {
       currentUtc: now.toISOString(),
@@ -409,14 +423,15 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
       errors: [] as { userId: string; error: string }[],
       settlement,
     };
-    await logAiAutoTradeEvent("No live trade window.", { ...noLiveSummary, windows: await tradeWindowComparisons(now) });
+    await logAiAutoTradeEvent("No live trade window.", { ...noLiveSummary, windows: await tradeWindowComparisons(now), finalSelectedLiveWindow: null });
     return {
       lastRunAt: now.toISOString(),
       ...noLiveSummary,
     };
   }
-  const slotStart = tradeSlotStart(slot.utcTime, now);
-  const slotEnd = new Date(slotStart.getTime() + effectiveTradeSlotDuration(slot.durationMinutes) * 60_000);
+  const slot = liveWindow.slot;
+  const slotStart = liveWindow.start;
+  const slotEnd = liveWindow.end;
   const settlementTime = tradeSlotSettlementTime(slotStart);
   const occurrenceKey = tradeWindowSignalOccurrenceKey(slot.id, slotStart);
   const persistedSignal = await getPersistedTradeWindowSignal({ slotId: slot.id, windowStartAt: slotStart, windowCloseAt: slotEnd });
@@ -427,7 +442,7 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
     windowCloseAt: slotEnd.toISOString(),
     result: "scanning exact live occurrence",
   });
-  await logAiAutoTradeEvent("live slot detected", { slotId: slot.id, label: slot.label, utcTime: slot.utcTime, currentUtc: now.toISOString(), currentIst: formatTradeDebugIst(now), windowStart: slotStart.toISOString(), windowClose: slotEnd.toISOString(), settlementTime: settlementTime.toISOString(), windows: await tradeWindowComparisons(now) });
+  await logAiAutoTradeEvent("live slot detected", { slotId: slot.id, label: slot.label, utcTime: slot.utcTime, currentUtc: now.toISOString(), currentIst: formatTradeDebugIst(now), windowStart: slotStart.toISOString(), windowClose: slotEnd.toISOString(), settlementTime: settlementTime.toISOString(), finalSelectedLiveWindow: slot.id, windows: await tradeWindowComparisons(now) });
   const subscriptions = await prisma.aiSubscription.findMany({
     where: { active: true, startsAt: { lte: now }, expiresAt: { gt: now } },
     select: { userId: true, expiresAt: true },
@@ -488,7 +503,8 @@ export async function runAiAutoTradeScheduler(now = new Date()) {
     occurrenceKey,
     currentUtc: now.toISOString(),
     currentIst: formatTradeDebugIst(now),
-    liveWindow: slot.label,
+    liveWindow: slot.id,
+    liveWindowLabel: slot.label,
     windowStart: slotStart.toISOString(),
     windowClose: slotEnd.toISOString(),
     settlementTime: settlementTime.toISOString(),
@@ -1096,7 +1112,13 @@ async function tradeWindowComparisons(now: Date) {
 }
 
 function serializeWindowComparison(window: ReturnType<typeof tradeWindowCandidates>[number]) {
+  const rejectedBecause = window.isLive
+    ? null
+    : window.startsInSeconds > 0
+      ? "current time is before window start"
+      : "current time is at or after window close";
   return {
+    slotId: window.slot.id,
     label: window.slot.label,
     configuredUtcTime: window.slot.utcTime,
     dayOffset: window.dayOffset,
@@ -1110,6 +1132,8 @@ function serializeWindowComparison(window: ReturnType<typeof tradeWindowCandidat
     nowAfterOrEqualOpen: window.isLive || window.startsInSeconds <= 0,
     nowBeforeClose: window.isLive || window.endedSecondsAgo <= 0,
     isLive: window.isLive,
+    accepted: window.isLive,
+    rejectedBecause,
     startsInSeconds: window.startsInSeconds,
     endedSecondsAgo: window.endedSecondsAgo,
   };

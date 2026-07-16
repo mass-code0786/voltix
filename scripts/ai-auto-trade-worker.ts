@@ -28,7 +28,7 @@ async function tick() {
     ]);
     log("scheduler started");
     const promotion = await runNewDepositorExtraTradeScheduler(new Date());
-    const result = await runAiAutoTradeScheduler(new Date());
+    const result = await runAiAutoTradeScheduler();
     log("scheduler completed", {
       currentUtc: result.currentUtc,
       currentIst: result.currentIst,
