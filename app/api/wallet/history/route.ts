@@ -212,7 +212,13 @@ function walletEventOrder(referenceType: string) {
 }
 
 function referenceKey(referenceType: string, referenceId: string) {
-  return `${referenceType}:${referenceId}`;
+  return `${canonicalReferenceType(referenceType)}:${referenceId}`;
+}
+
+function canonicalReferenceType(referenceType: string) {
+  const normalized = referenceType.trim().toUpperCase();
+  if (normalized === "NOWPAYMENTS_DEPOSIT" || normalized === "DEPOSIT_APPROVAL") return "DEPOSIT";
+  return normalized;
 }
 
 function displayTradePair(pair: string | null) {

@@ -13,10 +13,23 @@ type LedgerDisplayInput = {
 export function getLedgerDisplay(entry: LedgerDisplayInput) {
   const tradePlacement = isTradePlacement(entry);
   return {
-    title: tradePlacement ? tradePlacementTitle(entry.source) : safeLedgerTitle(entry.title),
+    title: tradePlacement ? tradePlacementTitle(entry.source) : referenceTypeTitle(entry.referenceType) ?? safeLedgerTitle(entry.title),
     statusLabel: formatLedgerStatus(entry.status || ""),
     dateTimeLabel: formatLedgerDateTime(entry.createdAt),
   };
+}
+
+const userFacingDepositReferenceTypes = new Set([
+  "DEPOSIT",
+  "DEPOSIT_APPROVAL",
+  "NOWPAYMENTS_DEPOSIT",
+]);
+
+/** Maps stored journal types to user-facing labels without changing audit data. */
+export function referenceTypeTitle(referenceType?: string | null) {
+  const normalized = referenceType?.trim().toUpperCase();
+  if (normalized && userFacingDepositReferenceTypes.has(normalized)) return "Deposit";
+  return null;
 }
 
 export function formatLedgerDateTime(timestamp: string | Date | null | undefined) {
