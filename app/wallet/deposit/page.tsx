@@ -42,7 +42,7 @@ export default function WalletDepositPage() {
   const qrValue=payAddress||deposit?.providerPaymentId||"";
 
   useEffect(()=>{
-    if(!deposit||["COMPLETED","FAILED","EXPIRED","REVIEW_REQUIRED","UNDERPAID","OVERPAID"].includes(deposit.status))return;
+    if(!deposit||["COMPLETED","FAILED","EXPIRED","UNDERPAID","OVERPAID"].includes(deposit.status))return;
     let stopped=false;
     const poll=async()=>{
       try{
@@ -110,7 +110,7 @@ export default function WalletDepositPage() {
   };
 
   return <main className="profile-page min-h-screen overflow-x-hidden px-4 py-3 text-white sm:px-6">
-    {creditedDeposit&&<div role="dialog" aria-modal="true" aria-labelledby="deposit-success-title" className="fixed inset-0 z-[90] grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-sm rounded-3xl border border-[#18ff8a]/25 bg-[#111c18] p-6 shadow-2xl"><button onClick={()=>setCreditedDeposit(null)} aria-label="Close" className="float-right text-xl text-slate-400">×</button><h2 id="deposit-success-title" className="text-2xl font-black text-white">Congratulations!</h2><p className="mt-2 text-sm text-slate-300">Your deposit has been successfully credited.</p><div className="mt-5 space-y-3 rounded-2xl border border-white/[.08] bg-black/25 p-4"><LineItem label="Amount Credited" value={`${(creditedDeposit.actuallyPaid??0).toFixed(2)} ${creditedDeposit.asset}`}/><LineItem label="Wallet" value="Spot Wallet"/><LineItem label="Network" value={creditedDeposit.networkName}/><LineItem label="Status" value="Completed"/></div></div></div>}
+    {creditedDeposit&&creditedDeposit.creditedAt&&<div role="dialog" aria-modal="true" aria-labelledby="deposit-success-title" className="fixed inset-0 z-[90] grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-sm rounded-3xl border border-[#18ff8a]/25 bg-[#111c18] p-6 shadow-2xl"><button onClick={()=>setCreditedDeposit(null)} aria-label="Close" className="float-right text-xl text-slate-400">×</button><h2 id="deposit-success-title" className="text-2xl font-black text-white">Congratulations!</h2><p className="mt-2 text-sm text-slate-300">Your deposit has been successfully credited.</p><div className="mt-5 space-y-3 rounded-2xl border border-white/[.08] bg-black/25 p-4"><LineItem label="Amount Credited" value={`${(creditedDeposit.actuallyPaid??creditedDeposit.amount).toFixed(2)} ${creditedDeposit.asset}`}/><LineItem label="Wallet" value="Spot Wallet"/><LineItem label="Network" value={creditedDeposit.networkName}/><LineItem label="Status" value="Completed"/></div></div></div>}
     <div className="mx-auto max-w-2xl pb-[calc(7rem+env(safe-area-inset-bottom))]">
       <header className="flex h-12 items-center gap-3">
         <Link href="/dashboard?view=wallet" className="grid h-10 w-10 place-items-center text-white" aria-label="Back to wallet"><ArrowLeft size={22}/></Link>

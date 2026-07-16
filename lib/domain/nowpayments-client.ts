@@ -65,6 +65,15 @@ export async function createNowPaymentsStandardPayment(input: {
   });
 }
 
+/** Fetches the authoritative standard-payment status using the same API key that created it. */
+export async function getNowPaymentsPayment(paymentId: string) {
+  if (!/^\d+$/.test(paymentId.trim())) throw new Error("Invalid NOWPayments payment ID");
+  return request(`/v1/payment/${encodeURIComponent(paymentId.trim())}`, {
+    method: "GET",
+    diagnostics: {},
+  });
+}
+
 export async function validateNowPaymentsPayoutAddress(address: string, currency: string) {
   const data = await request("/v1/payout/validate-address", {
     method: "POST",

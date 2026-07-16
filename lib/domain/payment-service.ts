@@ -8,6 +8,7 @@ import { recalculateVipRanksForUserAndUplines } from "./vip-rank-service";
 import { displayWalletName } from "@/lib/wallet-labels";
 import {
   createNowPaymentsStandardPayment,
+  getNowPaymentsPayment,
   createNowPaymentsPayout,
   NowPaymentsApiError,
   nowPaymentsCurrencyForNetwork,
@@ -167,20 +168,54 @@ export async function getUserDepositStatus(input: { userId: string; depositId: s
     where: { id: input.depositId, userId: input.userId },
     include: { asset: true, network: true },
   });
+  if (deposit.provider === "NOWPAYMENTS" && deposit.addressMode === "PER_PAYMENT" && deposit.providerPaymentId && !deposit.creditedAt) {
+    const remote = await getNowPaymentsPayment(deposit.providerPaymentId);
+    return finalizeNowPaymentsDeposit(remote, { source: "status_api", expectedDepositId: deposit.id });
+  }
   return formatDeposit(deposit);
 }
 
 export async function processNowPaymentsIpn(payload: NowPaymentsPayload, verification: { signatureVerified: true }) {
+  return finalizeNowPaymentsDeposit(payload, { source: "verified_ipn", signatureVerified: verification.signatureVerified });
+}
+
+type NowPaymentsFinalizationContext = {
+  source: "verified_ipn" | "status_api" | "reconciliation";
+  signatureVerified?: true;
+  expectedDepositId?: string;
+};
+
+export type NormalizedNowPaymentsPayment = ReturnType<typeof normalizeNowPaymentsPayment>;
+
+export function normalizeNowPaymentsPayment(payload: NowPaymentsPayload) {
   const paymentId = valueAsString(payload.payment_id);
-  if (!paymentId) throw new Error("NOWPayments callback is missing a provider payment identity");
-  const orderId = valueAsString(payload.order_id);
-  const parentPaymentId = valueAsString(payload.parent_payment_id);
-  const paymentStatus = valueAsString(payload.payment_status) ?? "unknown";
-  const providerInvoiceId = valueAsString(payload.invoice_id ?? payload.purchase_id);
-  const payCurrency = valueAsString(payload.pay_currency)?.toLowerCase();
-  const txHash = valueAsString(payload.payin_hash ?? payload.outcome_hash);
-  const paidAmount = decimalOrUndefined(payload.actually_paid ?? payload.amount_received ?? payload.pay_amount);
-  const payloadConfirmations = Number(payload.confirmations ?? 0);
+  return {
+    paymentId,
+    orderId: valueAsString(payload.order_id),
+    parentPaymentId: valueAsString(payload.parent_payment_id),
+    paymentStatus: valueAsString(payload.payment_status) ?? "unknown",
+    providerInvoiceId: valueAsString(payload.invoice_id ?? payload.purchase_id),
+    payCurrency: valueAsString(payload.pay_currency)?.toLowerCase(),
+    // Standard-payment IPNs document actually_paid as the amount sent by the payer.
+    // Older status responses can omit it; pay_amount is then the provider-confirmed
+    // pay-in amount only once the provider has declared the payment final.
+    actuallyPaid: decimalOrUndefined(payload.actually_paid ?? payload.amount_received),
+    payAmount: decimalOrUndefined(payload.pay_amount),
+    outcomeAmount: decimalOrUndefined(payload.outcome_amount),
+    // payout_hash/outcome_hash identify the merchant payout, not the user's pay-in.
+    payinHash: valueAsString(payload.payin_hash ?? payload.payin_tx_hash ?? payload.payment_hash),
+    payoutHash: valueAsString(payload.payout_hash ?? payload.outcome_hash),
+    confirmations: decimalOrUndefined(payload.confirmations)?.toNumber(),
+  };
+}
+
+export async function finalizeNowPaymentsDeposit(payload: NowPaymentsPayload, context: NowPaymentsFinalizationContext) {
+  const normalized = normalizeNowPaymentsPayment(payload);
+  const { paymentId, orderId, parentPaymentId, paymentStatus, providerInvoiceId, payCurrency } = normalized;
+  if (!paymentId) throw new Error("NOWPayments payment response is missing a provider payment identity");
+  const txHash = normalized.payinHash;
+  const paidAmount = normalized.actuallyPaid ?? (paymentStatus.toLowerCase() === "finished" ? normalized.payAmount : undefined);
+  const payloadConfirmations = normalized.confirmations;
   const now = new Date();
 
   let matchMethod = "none";
@@ -231,9 +266,11 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload, verific
       }
     }
     if (!target) throw new Error("NOWPayments deposit was not found");
+    if (context.expectedDepositId && target.id !== context.expectedDepositId) throw new Error("NOWPayments payment resolved to a different local deposit");
     await tx.$queryRaw`SELECT "id" FROM "Deposit" WHERE "id" = ${target.id} FOR UPDATE`;
     target = await tx.deposit.findUniqueOrThrow({ where: { id: target.id }, include: { asset: true, network: true } });
     if (target.providerPaymentId && target.providerPaymentId !== paymentId) throw new Error("NOWPayments payment ID does not match the stored deposit");
+    if (orderId && target.providerOrderId && target.providerOrderId !== orderId) throw new Error("NOWPayments order ID does not match the stored deposit");
     if (payCurrency && target.payCurrency && payCurrency !== target.payCurrency.toLowerCase()) throw new Error("Deposit currency does not match the selected network");
     if (txHash) {
       const duplicateHash = await tx.deposit.findFirst({ where: { networkId: target.networkId, txHash, eventIndex: target.eventIndex, id: { not: target.id } }, select: { id: true } });
@@ -241,9 +278,8 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload, verific
     }
 
     const status = mapNowPaymentsStatus(paymentStatus);
-    const confirmations = Number.isFinite(payloadConfirmations) && payloadConfirmations > 0
-      ? Math.floor(payloadConfirmations)
-      : paymentStatus.toLowerCase() === "finished" ? target.network.requiredConfirmations : target.confirmations;
+    const confirmations = typeof payloadConfirmations === "number" && Number.isFinite(payloadConfirmations) && payloadConfirmations > 0
+      ? Math.floor(payloadConfirmations) : target.confirmations;
     const creditAmount = paidAmount ?? target.actuallyPaid;
     const requestedAmount = target.amount;
     const tolerance = nowPaymentsDepositTolerance();
@@ -261,25 +297,21 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload, verific
         payCurrency: payCurrency ?? target.payCurrency,
         payAddress: valueAsString(payload.pay_address) ?? target.payAddress,
         paymentStatus,
+        providerPayAmount: normalized.payAmount ?? target.providerPayAmount,
         actuallyPaid: paidAmount,
-        outcomeAmount: decimalOrUndefined(payload.outcome_amount),
+        outcomeAmount: normalized.outcomeAmount,
         txHash: txHash ?? target.txHash,
         confirmations,
         status: amountReviewStatus ?? status,
         rawWebhookJson: payload as Prisma.InputJsonValue,
         webhookReceivedAt: now,
-        signatureVerified: verification.signatureVerified,
+        signatureVerified: context.signatureVerified ?? target.signatureVerified,
         failureReason: amountReviewStatus ? `Paid amount differs from requested amount by more than ${tolerance.toString()} USDT` : null,
       },
       include: { asset: true, network: true },
     });
 
     if (!isCreditableNowPaymentsStatus(paymentStatus) || updated.creditedAt || amountReviewStatus) return formatDeposit(updated);
-    if (!updated.txHash) {
-      const review = await tx.deposit.update({ where: { id: updated.id }, data: { status: "REVIEW_REQUIRED", failureReason: "Finished payment is missing a pay-in transaction hash" }, include: { asset: true, network: true } });
-      return formatDeposit(review);
-    }
-    if (updated.confirmations < updated.network.requiredConfirmations) return formatDeposit(updated);
     if (!creditAmount || creditAmount.lte(0)) {
       const review = await tx.deposit.update({ where: { id: updated.id }, data: { status: "REVIEW_REQUIRED", failureReason: "Finished payment is missing a verified paid amount" }, include: { asset: true, network: true } });
       return formatDeposit(review);
@@ -330,17 +362,35 @@ export async function processNowPaymentsIpn(payload: NowPaymentsPayload, verific
     return formatDeposit(credited);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   console.info("NOWPayments deposit transaction committed", {
-    paymentId,
-    orderId,
-    depositId: result.id,
-    matchMethod,
+    localDepositId: result.id,
+    providerPaymentId: paymentId,
     providerStatus: paymentStatus,
+    requestedAmount: result.amount,
+    providerPayAmount: normalized.payAmount?.toString() ?? null,
+    actuallyPaid: normalized.actuallyPaid?.toString() ?? null,
+    outcomeAmount: normalized.outcomeAmount?.toString() ?? null,
+    payinHash: normalized.payinHash,
+    payoutHash: normalized.payoutHash,
+    confirmations: normalized.confirmations ?? null,
+    requiredConfirmations: result.requiredConfirmations,
+    matchedPaymentId: matchMethod === "payment_id" ? paymentId : null,
+    matchedOrderId: matchMethod === "order_id" ? orderId : null,
+    toleranceDifference: paidAmount ? paidAmount.minus(new Prisma.Decimal(result.amount)).toString() : null,
+    finalReviewReason: result.status === "REVIEW_REQUIRED" || result.status === "UNDERPAID" || result.status === "OVERPAID" ? result.failureReason : null,
+    source: context.source,
+    matchMethod,
     localStatus: result.status,
-    actuallyPaid: result.actuallyPaid,
-    txHash: result.txHash,
     creditedAt: result.creditedAt,
   });
   return result;
+}
+
+export async function reconcileNowPaymentsDeposit(depositId: string) {
+  const deposit = await prisma.deposit.findUniqueOrThrow({ where: { id: depositId } });
+  if (deposit.provider !== "NOWPAYMENTS" || !deposit.providerPaymentId) throw new Error("Deposit has no NOWPayments payment ID");
+  if (deposit.creditedAt) return getUserDepositStatus({ userId: deposit.userId, depositId });
+  const remote = await getNowPaymentsPayment(deposit.providerPaymentId);
+  return finalizeNowPaymentsDeposit(remote, { source: "reconciliation", expectedDepositId: deposit.id });
 }
 
 export async function getUserWithdrawals(userId: string) {
@@ -872,7 +922,7 @@ function validateLocalAddress(address: string, network: string) {
   if (normalizedNetwork === "TRON" && !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(value)) throw new Error("Invalid TRC20 wallet address");
 }
 
-function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: string | null; status: string; confirmations?: number; createdAt: Date; creditedAt?: Date | null; provider?: string; addressMode?: string; providerPaymentId?: string | null; providerOrderId?: string | null; providerInvoiceId?: string | null; providerPaymentUrl?: string | null; payCurrency?: string | null; priceCurrency?: string | null; payAddress?: string | null; paymentStatus?: string | null; expiresAt?: Date | null; clientRequestId?: string | null; actuallyPaid?: Prisma.Decimal | null; outcomeAmount?: Prisma.Decimal | null; webhookReceivedAt?: Date | null; asset: { symbol: string }; network: { key: string; name: string; requiredConfirmations?: number } }) {
+function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: string | null; status: string; confirmations?: number; createdAt: Date; creditedAt?: Date | null; provider?: string; addressMode?: string; providerPaymentId?: string | null; providerOrderId?: string | null; providerInvoiceId?: string | null; providerPaymentUrl?: string | null; payCurrency?: string | null; priceCurrency?: string | null; payAddress?: string | null; paymentStatus?: string | null; expiresAt?: Date | null; clientRequestId?: string | null; providerPayAmount?: Prisma.Decimal | null; actuallyPaid?: Prisma.Decimal | null; outcomeAmount?: Prisma.Decimal | null; webhookReceivedAt?: Date | null; failureReason?: string | null; asset: { symbol: string }; network: { key: string; name: string; requiredConfirmations?: number } }) {
   return {
     id: deposit.id,
     amount: Number(deposit.amount.toString()),
@@ -892,9 +942,11 @@ function formatDeposit(deposit: { id: string; amount: Prisma.Decimal; txHash: st
     expiresAt: deposit.expiresAt?.toISOString() ?? null,
     clientRequestId: deposit.clientRequestId ?? null,
     actuallyPaid: deposit.actuallyPaid ? Number(deposit.actuallyPaid.toString()) : null,
+    providerPayAmount: deposit.providerPayAmount ? Number(deposit.providerPayAmount.toString()) : null,
     outcomeAmount: deposit.outcomeAmount ? Number(deposit.outcomeAmount.toString()) : null,
     txHash: deposit.txHash,
     status: deposit.status,
+    failureReason: deposit.failureReason ?? null,
     displayStatus: deposit.status === "COMPLETED" || deposit.status === "CREDITED" || deposit.status === "APPROVED" ? "Completed" : deposit.status === "CONFIRMING" || deposit.status === "CONFIRMED" || deposit.status === "DETECTED" ? "Confirming" : deposit.status === "FAILED" || deposit.status === "REJECTED" || deposit.status === "EXPIRED" ? "Failed" : deposit.status === "REVIEW_REQUIRED" || deposit.status === "UNDERPAID" || deposit.status === "OVERPAID" ? "Review required" : "Pending",
     confirmations: deposit.confirmations ?? 0,
     requiredConfirmations: deposit.network.requiredConfirmations ?? 0,
