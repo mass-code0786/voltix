@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { Viewport } from "next";
 import { CapacitorBridge } from "@/components/capacitor-bridge";
+import { ThemeProvider, themeBootstrapScript } from "@/components/theme-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,17 +19,23 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#050807",
-  colorScheme: "dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#effaff" },
+    { media: "(prefers-color-scheme: dark)", color: "#050807" },
+  ],
+  colorScheme: "dark light",
   viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} /></head>
       <body>
-        <CapacitorBridge />
-        {children}
+        <ThemeProvider>
+          <CapacitorBridge />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

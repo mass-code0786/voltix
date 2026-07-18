@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType, ReactNode } from "react";
-import { useId } from "react";
+import { useId, type InputHTMLAttributes } from "react";
 import type { LucideProps } from "lucide-react";
 import { ArrowLeft, Bell, ChevronRight, Menu, Search } from "lucide-react";
 import { CoinMark } from "./coin-mark";
@@ -290,4 +290,47 @@ export function PremiumSearchInput({ value, onChange, placeholder }: { value: st
 
 export function RowChevron() {
   return <ChevronRight size={18} className="text-slate-600" />;
+}
+
+/* Theme-token primitives for new screens. Existing exports remain compatible. */
+export const PageHeader = AppHeader;
+export const BottomNavigation = BottomNav;
+
+export function SectionCard({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <section className={`theme-section-card ${className}`}>{children}</section>;
+}
+
+export function BalanceCard({ label, value, children, className = "" }: { label: string; value: string; children?: ReactNode; className?: string }) {
+  return <section className={`theme-balance-card ${className}`}><p>{label}</p><strong>{value}</strong>{children}</section>;
+}
+
+export function ActionButton({ children, className = "", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <button className={`theme-action-button ${className}`} {...props}>{children}</button>;
+}
+
+export function ListRow({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`theme-list-row ${className}`}>{children}</div>;
+}
+
+export function FormField({ label, className = "", ...props }: { label: string; className?: string } & InputHTMLAttributes<HTMLInputElement>) {
+  return <label className={`theme-form-field ${className}`}><span>{label}</span><input {...props} /></label>;
+}
+
+export function Modal({ children, open, onClose, label = "Dialog" }: { children: ReactNode; open: boolean; onClose: () => void; label?: string }) {
+  if (!open) return null;
+  return <div className="theme-modal-overlay" role="presentation" onMouseDown={onClose}><section className="theme-modal" role="dialog" aria-modal="true" aria-label={label} onMouseDown={event=>event.stopPropagation()}>{children}</section></div>;
+}
+
+export function BottomSheet({ children, open, onClose, label = "Bottom sheet" }: { children: ReactNode; open: boolean; onClose: () => void; label?: string }) {
+  if (!open) return null;
+  return <div className="theme-modal-overlay theme-sheet-overlay" role="presentation" onMouseDown={onClose}><section className="theme-bottom-sheet" role="dialog" aria-modal="true" aria-label={label} onMouseDown={event=>event.stopPropagation()}><i aria-hidden="true" />{children}</section></div>;
+}
+
+export function Tabs<T extends string>({ items, value, onChange }: { items: { value: T; label: string }[]; value: T; onChange: (value: T) => void }) {
+  return <div className="theme-tabs" role="tablist">{items.map(item=><button key={item.value} role="tab" aria-selected={item.value===value} onClick={()=>onChange(item.value)}>{item.label}</button>)}</div>;
+}
+
+export function ProgressBar({ value, label }: { value: number; label?: string }) {
+  const bounded=Math.max(0,Math.min(100,value));
+  return <div className="theme-progress" aria-label={label} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={bounded}><span style={{width:`${bounded}%`}} /></div>;
 }
