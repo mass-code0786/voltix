@@ -3,9 +3,10 @@
 import type { ComponentType, ReactNode } from "react";
 import { useId, type InputHTMLAttributes } from "react";
 import type { LucideProps } from "lucide-react";
-import { ArrowLeft, Bell, ChevronRight, Menu, Search } from "lucide-react";
+import { ArrowLeft, Bell, ChevronRight, Menu, Moon, Search, Sun } from "lucide-react";
 import { CoinMark } from "./coin-mark";
 import { Sparkline } from "./sparkline";
+import { useTheme } from "./theme-provider";
 import { compact } from "@/lib/format";
 import { currencyConfigForCountry, formatLocalCurrency } from "@/lib/local-currency";
 
@@ -32,6 +33,11 @@ type HeaderProps = {
 };
 
 export function AppHeader({ title, subtitle, compactBrand = true, initials, unreadNotifications = 0, variant = "default", onBack, onMenuButton, onNotifications, onMenu }: HeaderProps) {
+  const { resolvedTheme, setPreference } = useTheme();
+  const isAqua = resolvedTheme === "aqua";
+  const toggleTheme = () => setPreference(isAqua ? "dark" : "aqua");
+  const themeLabel = isAqua ? "Switch to dark theme" : "Switch to light theme";
+
   if (variant === "ai") {
     return (
       <header className="voltix-app-header sticky top-0 z-30 h-[62px] bg-[#050807]/82 px-4 backdrop-blur-2xl lg:border-b lg:border-white/[.06]">
@@ -47,6 +53,9 @@ export function AppHeader({ title, subtitle, compactBrand = true, initials, unre
               <Bell size={19} />
               <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border border-[#050807] bg-[#18ff8a] shadow-[0_0_10px_rgba(24,255,138,.7)]" />
               {unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#18ff8a] px-1 text-[10px] font-black text-[#050608]">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}
+            </button>
+            <button type="button" onClick={toggleTheme} className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full border border-white/[.1] bg-white/[.045] text-slate-200 shadow-[0_0_24px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label={themeLabel}>
+              {isAqua ? <Moon size={19} /> : <Sun size={19} />}
             </button>
             <button onClick={onMenuButton ?? onMenu} className="grid h-[46px] w-[46px] shrink-0 place-items-center rounded-full border border-[#18ff8a]/20 bg-[#18ff8a]/10 text-[13px] font-black text-[#18ff8a] shadow-[0_0_28px_rgba(24,255,138,.18),inset_0_1px_0_rgba(255,255,255,.1)]" aria-label="Open profile menu">
               {initials}
@@ -68,6 +77,9 @@ export function AppHeader({ title, subtitle, compactBrand = true, initials, unre
             <Bell size={18} />
             <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-[#060a08] bg-[#18ff8a] shadow-[0_0_10px_rgba(24,255,138,.7)]" />
             {unreadNotifications > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#18ff8a] px-1 text-[10px] font-black text-[#050608] shadow-[0_0_18px_rgba(24,255,138,.42)]">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>}
+          </button>
+          <button type="button" onClick={toggleTheme} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/[.08] bg-white/[.045] text-slate-200 shadow-[0_0_24px_rgba(24,255,138,.1),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label={themeLabel}>
+            {isAqua ? <Moon size={18} /> : <Sun size={18} />}
           </button>
           <button onClick={onMenuButton ?? onMenu} className="grid h-9 w-9 shrink-0 place-items-center rounded-[14px] border border-white/[.08] bg-white/[.035] text-white shadow-[0_10px_28px_rgba(0,0,0,.28),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Open menu">
             <Menu size={24} />
