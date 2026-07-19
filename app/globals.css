@@ -5067,3 +5067,151 @@ html[data-theme="aqua"] .neon-button,
 html[data-theme="aqua"] .auth-submit,
 html[data-theme="aqua"] button.bg-lime,
 html[data-theme="aqua"] [class*="bg-[#18ff8a]"]:not(.home-hero-card *) { border-color:transparent !important; background:var(--primaryButton) !important; color:#fff !important; box-shadow:0 12px 26px rgba(23,141,207,.2) !important; }
+
+/* Aqua Light contrast completion. These selectors only translate legacy dark
+   component surfaces to semantic light-theme roles. */
+html[data-theme="aqua"] {
+  --accentText: #087ca8;
+  --accentSurface: #dff3fb;
+  --successText: #087d6f;
+  --successSurface: #dff5ef;
+  --dangerText: #b8324d;
+  --dangerSurface: #fde8ed;
+  --onAccent: #ffffff;
+}
+
+/* Profile identity and account statistics. */
+html[data-theme="aqua"] .profile-hero-card {
+  border-color:var(--borderDefault) !important;
+  background:linear-gradient(145deg,var(--surfacePrimary),var(--surfaceSecondary)) !important;
+  color:var(--textPrimary) !important;
+}
+html[data-theme="aqua"] .profile-hero-card::before { background:var(--accentSurface) !important; }
+html[data-theme="aqua"] .profile-hero-card::after {
+  background-image:linear-gradient(var(--borderDefault) 1px,transparent 1px),linear-gradient(90deg,var(--borderDefault) 1px,transparent 1px) !important;
+  opacity:1 !important;
+}
+html[data-theme="aqua"] .profile-name,
+html[data-theme="aqua"] .profile-identity button,
+html[data-theme="aqua"] .profile-identity p,
+html[data-theme="aqua"] .profile-stat p { color:var(--textSecondary) !important; }
+html[data-theme="aqua"] .profile-name { color:var(--textPrimary) !important; }
+html[data-theme="aqua"] .profile-vip-pill {
+  border-color:var(--borderStrong) !important;
+  background:var(--accentSurface) !important;
+  color:var(--accentText) !important;
+}
+html[data-theme="aqua"] .profile-hero-stats { border-color:var(--borderDefault) !important; }
+html[data-theme="aqua"] .profile-stat { border-color:var(--borderDefault) !important; background:transparent !important; box-shadow:none !important; }
+html[data-theme="aqua"] .profile-stat strong { color:var(--textPrimary) !important; text-shadow:none !important; }
+html[data-theme="aqua"] .profile-row span:not(.profile-row-icon):not(.profile-row-pill) { color:var(--textSecondary) !important; }
+html[data-theme="aqua"] .profile-row b { color:var(--textPrimary) !important; }
+
+/* Wallet totals, wallet types, actions and token balances. */
+html[data-theme="aqua"] .wallet-hero h1 { color:var(--accentText) !important; text-shadow:none !important; }
+html[data-theme="aqua"] .wallet-hero p { color:var(--textSecondary) !important; }
+html[data-theme="aqua"] .wallet-total-card {
+  border-color:var(--borderDefault) !important;
+  background:var(--primaryGradient) !important;
+  color:var(--onAccent) !important;
+}
+html[data-theme="aqua"] .wallet-total-card p,
+html[data-theme="aqua"] .wallet-total-card h2,
+html[data-theme="aqua"] .wallet-total-card span,
+html[data-theme="aqua"] .wallet-total-card em { color:var(--onAccent) !important; }
+html[data-theme="aqua"] .wallet-total-card span { border-color:var(--onAccent) !important; background:transparent !important; }
+html[data-theme="aqua"] .wallet-total-actions button { color:var(--onAccent) !important; }
+html[data-theme="aqua"] .wallet-total-actions button:first-child { border:1px solid var(--onAccent) !important; background:var(--onAccent) !important; color:var(--accentText) !important; }
+html[data-theme="aqua"] .wallet-total-actions button:first-child svg { color:var(--accentText) !important; }
+html[data-theme="aqua"] .wallet-total-actions button:last-child { border-color:var(--onAccent) !important; background:transparent !important; }
+html[data-theme="aqua"] .wallet-type-card p,
+html[data-theme="aqua"] .wallet-card-head label,
+html[data-theme="aqua"] .wallet-ledger-card p,
+html[data-theme="aqua"] .wallet-security-card p { color:var(--textSecondary) !important; }
+html[data-theme="aqua"] .wallet-type-card strong,
+html[data-theme="aqua"] .wallet-card-head h2,
+html[data-theme="aqua"] .wallet-ledger-card h3,
+html[data-theme="aqua"] .wallet-security-card h2,
+html[data-theme="aqua"] .wallet-asset-row p,
+html[data-theme="aqua"] .wallet-asset-row strong { color:var(--textPrimary) !important; }
+html[data-theme="aqua"] .wallet-type-card em,
+html[data-theme="aqua"] .wallet-ledger-card button { color:var(--accentText) !important; }
+html[data-theme="aqua"] .wallet-actions button { background:transparent !important; color:var(--textPrimary) !important; box-shadow:none !important; }
+html[data-theme="aqua"] .wallet-actions span,
+html[data-theme="aqua"] .wallet-asset-actions button,
+html[data-theme="aqua"] .wallet-security-card button {
+  border-color:var(--borderStrong) !important;
+  background:var(--accentSurface) !important;
+  color:var(--accentText) !important;
+  box-shadow:none !important;
+}
+html[data-theme="aqua"] .wallet-actions p { color:var(--textPrimary) !important; }
+html[data-theme="aqua"] .wallet-card-head,
+html[data-theme="aqua"] .wallet-asset-row { border-color:var(--borderDefault) !important; }
+html[data-theme="aqua"] .wallet-asset-row span { background:var(--successSurface) !important; color:var(--successText) !important; }
+html[data-theme="aqua"] .wallet-asset-row em,
+html[data-theme="aqua"] .wallet-asset-row small { color:var(--textSecondary) !important; }
+
+/* Coin detail / trading terminal. TradingView's iframe intentionally remains dark. */
+html[data-theme="aqua"] .coin-detail-page,
+html[data-theme="aqua"] .market-terminal-page {
+  background:radial-gradient(circle at 90% 5%,var(--accentSurface),transparent 18rem),linear-gradient(180deg,var(--surfaceSecondary),var(--appBackground)) !important;
+  color:var(--textPrimary) !important;
+}
+html[data-theme="aqua"] .coin-detail-atmosphere { opacity:0 !important; }
+html[data-theme="aqua"] .market-terminal-header,
+html[data-theme="aqua"] .market-timeframe-tabs,
+html[data-theme="aqua"] .trade-chart-head,
+html[data-theme="aqua"] .trade-timeframes,
+html[data-theme="aqua"] .orderbook-head { border-color:var(--borderDefault) !important; }
+html[data-theme="aqua"] .market-terminal-back,
+html[data-theme="aqua"] .market-terminal-watch {
+  border-color:var(--borderDefault) !important;
+  background:var(--surfaceElevated) !important;
+  color:var(--accentText) !important;
+  box-shadow:var(--shadowCard) !important;
+}
+html[data-theme="aqua"] .market-terminal-pair-row h1,
+html[data-theme="aqua"] .market-terminal-price > p,
+html[data-theme="aqua"] .market-terminal-stat-list dd,
+html[data-theme="aqua"] .trade-chart-head h2,
+html[data-theme="aqua"] .trade-chart-head p,
+html[data-theme="aqua"] .trade-chart-meta span,
+html[data-theme="aqua"] .orderbook-head h3 { color:var(--textPrimary) !important; }
+html[data-theme="aqua"] .market-terminal-price div,
+html[data-theme="aqua"] .market-terminal-stat-list dt,
+html[data-theme="aqua"] .market-timeframe-tabs button,
+html[data-theme="aqua"] .trade-chart-meta p,
+html[data-theme="aqua"] .trade-timeframes button,
+html[data-theme="aqua"] .orderbook-head p,
+html[data-theme="aqua"] .orderbook-last-inline,
+html[data-theme="aqua"] .orderbook-side-columns,
+html[data-theme="aqua"] .orderbook-pressure div:first-child { color:var(--textSecondary) !important; }
+html[data-theme="aqua"] .market-timeframe-tabs button.active { color:var(--accentText) !important; }
+html[data-theme="aqua"] .market-timeframe-tabs button.active::after { background:var(--accentText) !important; box-shadow:none !important; }
+html[data-theme="aqua"] .market-terminal-page .trade-chart-card,
+html[data-theme="aqua"] .market-terminal-page .orderbook-card,
+html[data-theme="aqua"] .market-terminal-page .orderbook-pressure {
+  border-color:var(--borderDefault) !important;
+  background:var(--surfacePrimary) !important;
+  color:var(--textPrimary) !important;
+  box-shadow:var(--shadowCard) !important;
+}
+html[data-theme="aqua"] .market-terminal-page .tradingview-chart-shell { border:1px solid var(--borderDefault) !important; background:#050b08 !important; }
+html[data-theme="aqua"] .orderbook-split { border-color:var(--borderDefault) !important; background:var(--surfaceSecondary) !important; }
+html[data-theme="aqua"] .orderbook-side + .orderbook-side { border-color:var(--borderDefault) !important; }
+html[data-theme="aqua"] .orderbook-row span:not(:first-of-type):not(:last-of-type),
+html[data-theme="aqua"] .orderbook-side.is-buy .orderbook-row span:first-of-type,
+html[data-theme="aqua"] .orderbook-side.is-sell .orderbook-row span:last-of-type { color:var(--textPrimary) !important; }
+html[data-theme="aqua"] .orderbook-side.is-buy .orderbook-side-head,
+html[data-theme="aqua"] .orderbook-row.is-buy span:last-of-type,
+html[data-theme="aqua"] .orderbook-last-inline b { color:var(--successText) !important; }
+html[data-theme="aqua"] .orderbook-side.is-sell .orderbook-side-head,
+html[data-theme="aqua"] .orderbook-row.is-sell span:first-of-type { color:var(--dangerText) !important; }
+html[data-theme="aqua"] .orderbook-row.is-buy i { background:var(--successSurface) !important; opacity:1 !important; }
+html[data-theme="aqua"] .orderbook-row.is-sell i { background:var(--dangerSurface) !important; opacity:1 !important; }
+html[data-theme="aqua"] .orderbook-head > span { background:var(--successSurface) !important; color:var(--successText) !important; }
+html[data-theme="aqua"] .market-fixed-actions { border-color:var(--borderDefault) !important; background:var(--navBackground) !important; box-shadow:0 -10px 32px var(--borderDefault) !important; }
+html[data-theme="aqua"] .market-fixed-actions .coin-action-buy { background:var(--successText) !important; color:var(--onAccent) !important; }
+html[data-theme="aqua"] .market-fixed-actions .coin-action-sell { background:var(--dangerText) !important; color:var(--onAccent) !important; }
+html[data-theme="aqua"] .market-fixed-actions button:disabled { opacity:1 !important; }
