@@ -5215,3 +5215,48 @@ html[data-theme="aqua"] .market-fixed-actions { border-color:var(--borderDefault
 html[data-theme="aqua"] .market-fixed-actions .coin-action-buy { background:var(--successText) !important; color:var(--onAccent) !important; }
 html[data-theme="aqua"] .market-fixed-actions .coin-action-sell { background:var(--dangerText) !important; color:var(--onAccent) !important; }
 html[data-theme="aqua"] .market-fixed-actions button:disabled { opacity:1 !important; }
+
+/* Keep Aqua profile on the same mobile content grid as the other primary tabs. */
+@media (max-width:430px) {
+  html[data-theme="aqua"] .profile-page {
+    width:100% !important;
+    max-width:100vw !important;
+    margin-inline:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+    transform:none !important;
+  }
+  html[data-theme="aqua"] .profile-content {
+    width:100% !important;
+    max-width:100% !important;
+    margin-inline:0 !important;
+    transform:none !important;
+  }
+}
+
+/* Markets hero: light premium artwork surface without changing its geometry. */
+html[data-theme="aqua"] .markets-ref-hero {
+  border-color:var(--borderDefault) !important;
+  background:radial-gradient(circle at 84% 20%,var(--accentSurface),transparent 48%),linear-gradient(145deg,var(--surfacePrimary),#eaf8fe) !important;
+  box-shadow:var(--shadowCard) !important;
+}
+html[data-theme="aqua"] .markets-ref-hero h1 { color:var(--textPrimary) !important; text-shadow:none !important; }
+html[data-theme="aqua"] .markets-ref-hero p { color:var(--textSecondary) !important; }
+html[data-theme="aqua"] .markets-ref-hero-svg { filter:drop-shadow(0 10px 16px var(--borderStrong)) !important; }
+
+/* The TradingView widget is initialized in light mode; these are its host and
+   loading/error surfaces. */
+html[data-theme="aqua"] .market-terminal-page .tradingview-chart-shell,
+html[data-theme="aqua"] .market-terminal-page .tradingview-chart-container {
+  border-color:var(--borderDefault) !important;
+  background:var(--surfacePrimary) !important;
+}
+html[data-theme="aqua"] .tradingview-chart-state {
+  background:radial-gradient(circle at 50% 42%,var(--accentSurface),transparent 38%),var(--surfacePrimary) !important;
+  color:var(--textSecondary) !important;
+}
+html[data-theme="aqua"] .tradingview-chart-state code {
+  border-color:var(--borderDefault) !important;
+  background:var(--surfaceSecondary) !important;
+  color:var(--textPrimary) !important;
+}

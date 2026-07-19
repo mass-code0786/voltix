@@ -455,7 +455,7 @@ export default function ProfilePage() {
         onMenu={() => router.push("/")}
         onMenuButton={() => router.push("/")}
       />
-      <div className="mx-auto w-full max-w-[420px] px-4 pb-40 pt-1 lg:max-w-3xl">
+      <div className="profile-content mx-auto w-full max-w-[420px] px-4 pb-40 pt-1 lg:max-w-3xl">
         {logoutInProgress ? (
           <div className="profile-glass mt-1 rounded-[22px] p-5 text-sm text-slate-400">Logging out...</div>
         ) : loading ? (

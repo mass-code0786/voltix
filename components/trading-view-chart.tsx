@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { browserTimeZone } from "@/lib/local-time";
+import { useTheme } from "@/components/theme-provider";
 
 const TRADING_VIEW_SCRIPT_ID = "tradingview-widget-script";
 const TRADING_VIEW_SCRIPT_SRC = "https://s3.tradingview.com/tv.js";
@@ -47,6 +48,7 @@ export function resolveTradingViewSymbol(symbol: string) {
 }
 
 export function TradingViewChart({ baseSymbol, interval = "1" }: TradingViewChartProps) {
+  const { resolvedTheme } = useTheme();
   const reactId = useId().replace(/:/g, "");
   const containerId = useMemo(() => `tradingview_${baseSymbol.toLowerCase()}_${reactId}`, [baseSymbol, reactId]);
   const widgetRef = useRef<{ remove?: () => void } | null>(null);
@@ -79,6 +81,9 @@ export function TradingViewChart({ baseSymbol, interval = "1" }: TradingViewChar
         const target = document.getElementById(containerId);
         if (!target) throw new Error(`TradingView container not found: ${containerId}`);
         target.innerHTML = "";
+        // The bootstrap script sets data-theme before hydration, so read it as
+        // well as context to avoid briefly creating a dark widget on Aqua load.
+        const isAqua = document.documentElement.dataset.theme === "aqua" || resolvedTheme === "aqua";
         widgetRef.current = new widget({
           autosize: true,
           width: "100%",
@@ -86,7 +91,7 @@ export function TradingViewChart({ baseSymbol, interval = "1" }: TradingViewChar
           symbol: tradingViewSymbol,
           interval,
           timezone: browserTimeZone(),
-          theme: "dark",
+          theme: isAqua ? "light" : "dark",
           style: "1",
           locale: "en",
           enable_publishing: false,
@@ -96,8 +101,8 @@ export function TradingViewChart({ baseSymbol, interval = "1" }: TradingViewChar
           save_image: false,
           calendar: false,
           container_id: containerId,
-          backgroundColor: "#050b08",
-          gridColor: "rgba(24,255,138,0.08)",
+          backgroundColor: isAqua ? "#ffffff" : "#050b08",
+          gridColor: isAqua ? "rgba(53,128,174,0.16)" : "rgba(24,255,138,0.08)",
           support_host: "https://www.tradingview.com",
         });
         setDiagnostics({ scriptLoaded: true, widgetCreated: true, symbol: tradingViewSymbol, exception: null });
@@ -124,7 +129,7 @@ export function TradingViewChart({ baseSymbol, interval = "1" }: TradingViewChar
       const target = document.getElementById(containerId);
       if (target) target.innerHTML = "";
     };
-  }, [containerId, interval, tradingViewSymbol]);
+  }, [containerId, interval, resolvedTheme, tradingViewSymbol]);
 
   return (
     <section className="trade-chart-card tradingview-chart-card">
