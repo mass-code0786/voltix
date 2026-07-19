@@ -1,9 +1,9 @@
 "use client";
 
 import type { ComponentType, ReactNode } from "react";
-import { useId, type InputHTMLAttributes } from "react";
+import { useId, useState, type InputHTMLAttributes } from "react";
 import type { LucideProps } from "lucide-react";
-import { ArrowLeft, Bell, ChevronRight, Menu, Moon, Search, Sun } from "lucide-react";
+import { ArrowLeft, Bell, ChevronRight, Download, Menu, Moon, Search, Sun } from "lucide-react";
 import { CoinMark } from "./coin-mark";
 import { Sparkline } from "./sparkline";
 import { useTheme } from "./theme-provider";
@@ -32,6 +32,31 @@ type HeaderProps = {
   onMenu: () => void;
 };
 
+const apkDownloadUrl = safeHttpsUrl(process.env.NEXT_PUBLIC_ANDROID_APK_URL);
+
+function safeHttpsUrl(value?: string) {
+  if (!value?.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function ApkDownloadAction({ className, iconSize }: { className: string; iconSize: number }) {
+  const [message, setMessage] = useState("");
+  const unavailable = () => {
+    setMessage("APK download is currently unavailable.");
+    window.setTimeout(() => setMessage(""), 3000);
+  };
+  const content = <Download size={iconSize} aria-hidden="true" />;
+  return <>
+    {apkDownloadUrl ? <a href={apkDownloadUrl} download rel="noopener noreferrer" target="_blank" className={className} aria-label="Download Voltix APK" title="Download Voltix APK">{content}</a> : <button type="button" onClick={unavailable} className={className} aria-label="Download Voltix APK" title="Download Voltix APK">{content}</button>}
+    {message && <div role="status" className="fixed inset-x-4 top-20 z-[70] mx-auto w-fit max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-[#111c18] px-4 py-3 text-center text-xs font-bold text-white shadow-2xl">{message}</div>}
+  </>;
+}
+
 export function AppHeader({ title, subtitle, compactBrand = true, initials, unreadNotifications = 0, variant = "default", onBack, onMenuButton, onNotifications, onMenu }: HeaderProps) {
   const { resolvedTheme, setPreference } = useTheme();
   const isAqua = resolvedTheme === "aqua";
@@ -49,6 +74,7 @@ export function AppHeader({ title, subtitle, compactBrand = true, initials, unre
             <img src="/logo.png" alt="VOLTIX" className="block h-[35px] w-auto max-w-none object-contain opacity-100 mix-blend-normal filter-none transform-none" />
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <ApkDownloadAction iconSize={19} className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full border border-white/[.1] bg-white/[.045] text-slate-200 shadow-[0_0_24px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.08)]" />
             <button onClick={onNotifications} className="relative grid h-[42px] w-[42px] place-items-center rounded-full border border-white/[.1] bg-white/[.045] text-slate-200 shadow-[0_0_24px_rgba(24,255,138,.14),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Notifications">
               <Bell size={19} />
               <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border border-[#050807] bg-[#18ff8a] shadow-[0_0_10px_rgba(24,255,138,.7)]" />
@@ -72,7 +98,8 @@ export function AppHeader({ title, subtitle, compactBrand = true, initials, unre
         <div className="flex h-[48px] w-fit shrink-0 items-center justify-start">
           <img src="/logo.png" alt="VOLTIX" className="block h-[21px] w-auto max-w-none object-contain opacity-100 mix-blend-normal filter-none transform-none" />
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1 min-[390px]:gap-1.5">
+          <ApkDownloadAction iconSize={18} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/[.08] bg-white/[.045] text-slate-200 shadow-[0_0_24px_rgba(24,255,138,.1),inset_0_1px_0_rgba(255,255,255,.08)]" />
           <button onClick={onNotifications} className="relative grid h-9 w-9 place-items-center rounded-full border border-white/[.08] bg-white/[.045] text-slate-200 shadow-[0_0_24px_rgba(24,255,138,.1),inset_0_1px_0_rgba(255,255,255,.08)]" aria-label="Notifications">
             <Bell size={18} />
             <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-[#060a08] bg-[#18ff8a] shadow-[0_0_10px_rgba(24,255,138,.7)]" />
