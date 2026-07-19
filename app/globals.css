@@ -2920,7 +2920,7 @@ html[data-theme="aqua"] [class*="fixed"][class*="inset-0"], html[data-theme="aqu
 html[data-theme="aqua"] [class*="bg-black/70"], html[data-theme="aqua"] [class*="bg-black/80"], html[data-theme="aqua"] [class*="bg-black/90"] { background:var(--theme-overlay) !important; backdrop-filter:blur(12px); }
 html[data-theme="aqua"] .shine-confirm-dialog, html[data-theme="aqua"] [role="dialog"] { color:var(--theme-text); }
 
-html[data-theme="aqua"] img[src="/logo.png"], html[data-theme="aqua"] img[src="/shine.png"] { filter:hue-rotate(112deg) saturate(.85) brightness(1.05) !important; }
+html[data-theme="aqua"] img[src="/shine.png"] { filter:hue-rotate(112deg) saturate(.85) brightness(1.05) !important; }
 html[data-theme="aqua"] svg [fill="#18ff8a"], html[data-theme="aqua"] svg [fill="#1EFF88"], html[data-theme="aqua"] svg [fill="#00C96B"] { fill:#22b9e6 !important; }
 html[data-theme="aqua"] svg [stroke="#18ff8a"], html[data-theme="aqua"] svg [stroke="#9cffd9"] { stroke:#36bdeb !important; }
 html[data-theme="aqua"] .app-launch-splash, html[data-theme="aqua"] .voltix-native-overlay { background:radial-gradient(circle at 50% 43%,rgba(47,190,235,.2),transparent 36%),linear-gradient(180deg,#f8fdff,#e9f8ff) !important; }
@@ -5260,3 +5260,90 @@ html[data-theme="aqua"] .tradingview-chart-state code {
   background:var(--surfaceSecondary) !important;
   color:var(--textPrimary) !important;
 }
+
+/* Original brand artwork is an immutable asset in every theme. */
+img[src="/logo.png"] {
+  opacity:1 !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+  transform:none;
+  object-fit:contain;
+}
+
+/* Surface-aware Aqua text roles. */
+html[data-theme="aqua"] {
+  --textOnPrimary:#ffffff;
+  --textOnPrimarySecondary:#eaf8ff;
+  --textOnLight:#102a43;
+  --textOnLightSecondary:#496980;
+  --textOnDark:#f8fcff;
+  --textOnDarkSecondary:#d9edf7;
+  --textDisabled:#60798b;
+  --textMuted:#627d90;
+  --textSuccess:#087d6f;
+  --textWarning:#946006;
+  --textError:#b8324d;
+}
+
+/* Saturated blue/cyan cards always use on-primary text roles. */
+html[data-theme="aqua"] .home-hero-card,
+html[data-theme="aqua"] .wallet-total-card,
+html[data-theme="aqua"] .ai-trade-hero { color:var(--textOnPrimary) !important; }
+html[data-theme="aqua"] .home-hero-card :is(h1,h2,h3,strong),
+html[data-theme="aqua"] .wallet-total-card :is(h1,h2,h3,strong),
+html[data-theme="aqua"] .ai-trade-hero :is(h1,h2,h3,strong) { color:var(--textOnPrimary) !important; }
+html[data-theme="aqua"] .home-hero-card :is(p,span,small,label),
+html[data-theme="aqua"] .wallet-total-card :is(p,span,small,label),
+html[data-theme="aqua"] .ai-trade-hero :is(p,span,small,label) { color:var(--textOnPrimarySecondary) !important; }
+html[data-theme="aqua"] .home-hero-card > * { opacity:1 !important; }
+html[data-theme="aqua"] .home-hero-card button {
+  border-color:var(--textOnPrimarySecondary) !important;
+  color:var(--textOnPrimary) !important;
+}
+html[data-theme="aqua"] .home-hero-card button svg { color:var(--textOnPrimary) !important; }
+html[data-theme="aqua"] .home-hero-card [class*="bg-[#18ff8a]"],
+html[data-theme="aqua"] .home-hero-card [class*="bg-white"] {
+  background:rgba(255,255,255,.18) !important;
+  color:var(--textOnPrimary) !important;
+}
+
+/* White and light-aqua cards use dark semantic roles, independent of legacy utilities. */
+html[data-theme="aqua"] :is(.glass-panel,.home-depth-card,.ai-overview-card,.ai-vip-card,.ai-subscription-panel,.ai-info-strip,.profile-glass,.profile-menu-card,.wallet-glass,.wallet-type-card,.wallet-balances-card,.wallet-ledger-card,.wallet-security-card,.market-panel,.market-live-row,.market-trending-card,.markets-table-card,.markets-promo-card,.theme-section-card,.theme-list-row,.theme-modal,.theme-bottom-sheet) :is(h1,h2,h3,h4,strong,b) {
+  color:var(--textOnLight) !important;
+}
+html[data-theme="aqua"] :is(.glass-panel,.home-depth-card,.ai-overview-card,.ai-vip-card,.ai-subscription-panel,.ai-info-strip,.profile-glass,.profile-menu-card,.wallet-glass,.wallet-type-card,.wallet-balances-card,.wallet-ledger-card,.wallet-security-card,.market-panel,.market-live-row,.market-trending-card,.markets-table-card,.markets-promo-card,.theme-section-card,.theme-list-row,.theme-modal,.theme-bottom-sheet) :is(p,small,label,dt) {
+  color:var(--textOnLightSecondary) !important;
+  opacity:1 !important;
+}
+html[data-theme="aqua"] :is(.profile-row,.wallet-asset-row,.markets-table-row,.ai-vip-row) { opacity:1 !important; }
+html[data-theme="aqua"] :is(.profile-row,.wallet-asset-row,.markets-table-row,.ai-vip-row) :is(h3,strong,b) { color:var(--textOnLight) !important; }
+html[data-theme="aqua"] :is(.profile-row,.wallet-asset-row,.markets-table-row,.ai-vip-row) :is(p,small) { color:var(--textOnLightSecondary) !important; opacity:1 !important; }
+
+/* Explicit feedback and badge roles must not inherit a card's body color. */
+html[data-theme="aqua"] :is(.text-lime,.text-mint,[class*="text-[#18ff8a]"],.is-up) { color:var(--textSuccess) !important; }
+html[data-theme="aqua"] :is(.text-danger,[class*="text-[#ff4f6d]"],.is-down) { color:var(--textError) !important; }
+html[data-theme="aqua"] .profile-vip-pill,
+html[data-theme="aqua"] .profile-row-pill,
+html[data-theme="aqua"] .ai-status-pill,
+html[data-theme="aqua"] .orderbook-head > span {
+  color:var(--accentText) !important;
+  opacity:1 !important;
+}
+html[data-theme="aqua"] .profile-row-pill-green { color:var(--textSuccess) !important; background:var(--successSurface) !important; }
+
+/* Button text follows its fill; disabled controls never fade their children. */
+html[data-theme="aqua"] :is(.neon-button,.auth-submit,.shine-convert-button,button.bg-lime,[class*="bg-[#18ff8a]"]):not(:disabled) { color:var(--textOnPrimary) !important; }
+html[data-theme="aqua"] button:disabled {
+  color:var(--textDisabled) !important;
+  opacity:1 !important;
+  text-shadow:none !important;
+}
+html[data-theme="aqua"] :is(.neon-button,.auth-submit,.shine-convert-button,.ai-row-trade,button.bg-lime,[class*="bg-[#18ff8a]"]):disabled {
+  border-color:var(--borderDefault) !important;
+  background:var(--disabledBackground) !important;
+  color:var(--textDisabled) !important;
+  box-shadow:none !important;
+}
+html[data-theme="aqua"] button:disabled * { color:inherit !important; opacity:1 !important; }
+html[data-theme="aqua"] input::placeholder,
+html[data-theme="aqua"] textarea::placeholder { color:var(--textMuted) !important; opacity:1 !important; }
