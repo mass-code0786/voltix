@@ -5347,3 +5347,50 @@ html[data-theme="aqua"] :is(.neon-button,.auth-submit,.shine-convert-button,.ai-
 html[data-theme="aqua"] button:disabled * { color:inherit !important; opacity:1 !important; }
 html[data-theme="aqua"] input::placeholder,
 html[data-theme="aqua"] textarea::placeholder { color:var(--textMuted) !important; opacity:1 !important; }
+
+/* Final card-role precedence: a component's actual surface wins over any
+   legacy utility class carried by its children. */
+html[data-theme="aqua"] {
+  --cardPrimaryText:var(--textOnLight);
+  --cardSecondaryText:var(--textOnLightSecondary);
+  --cardAccentText:var(--accentText);
+  --textOnBlue:var(--textOnPrimary);
+}
+
+html[data-theme="aqua"] :is(.home-hero-card,.wallet-total-card,.ai-trade-hero),
+html[data-theme="aqua"] :is(.home-hero-card,.wallet-total-card,.ai-trade-hero) * {
+  color:var(--textOnBlue) !important;
+  text-shadow:none !important;
+}
+html[data-theme="aqua"] :is(.home-hero-card,.wallet-total-card,.ai-trade-hero) :is(.text-slate-400,.text-slate-500,.text-slate-600,small,label) {
+  color:var(--textOnPrimarySecondary) !important;
+  opacity:1 !important;
+}
+html[data-theme="aqua"] .home-hero-card :is([class*="text-[#18ff8a]"],.text-lime,.text-mint),
+html[data-theme="aqua"] .wallet-total-card :is([class*="text-[#18ff8a]"],.text-lime,.text-mint) {
+  color:var(--textOnBlue) !important;
+}
+html[data-theme="aqua"] .home-hero-card button,
+html[data-theme="aqua"] .wallet-total-card button {
+  color:var(--textOnBlue) !important;
+}
+
+html[data-theme="aqua"] :is(.glass-panel:not(.home-hero-card),.home-depth-card,.ai-overview-card,.ai-vip-card,.ai-subscription-panel,.ai-info-strip,.profile-glass,.profile-menu-card,.wallet-glass:not(.wallet-total-card),.wallet-type-card,.wallet-balances-card,.wallet-ledger-card,.wallet-security-card,.market-panel,.market-live-row,.market-trending-card,.markets-table-card,.markets-promo-card,.theme-section-card,.theme-list-row,.theme-modal,.theme-bottom-sheet) {
+  color:var(--cardPrimaryText) !important;
+}
+html[data-theme="aqua"] :is(.glass-panel:not(.home-hero-card),.home-depth-card,.ai-overview-card,.ai-vip-card,.ai-subscription-panel,.ai-info-strip,.profile-glass,.profile-menu-card,.wallet-glass:not(.wallet-total-card),.wallet-type-card,.wallet-balances-card,.wallet-ledger-card,.wallet-security-card,.market-panel,.market-live-row,.market-trending-card,.markets-table-card,.markets-promo-card,.theme-section-card,.theme-list-row,.theme-modal,.theme-bottom-sheet) :is(h1,h2,h3,h4,strong,b,.text-white,.text-slate-200,.text-slate-300) {
+  color:var(--cardPrimaryText) !important;
+}
+html[data-theme="aqua"] :is(.glass-panel:not(.home-hero-card),.home-depth-card,.ai-overview-card,.ai-vip-card,.ai-subscription-panel,.ai-info-strip,.profile-glass,.profile-menu-card,.wallet-glass:not(.wallet-total-card),.wallet-type-card,.wallet-balances-card,.wallet-ledger-card,.wallet-security-card,.market-panel,.market-live-row,.market-trending-card,.markets-table-card,.markets-promo-card,.theme-section-card,.theme-list-row,.theme-modal,.theme-bottom-sheet) :is(.text-slate-400,.text-slate-500,.text-slate-600,.text-slate-700,small,label,dt) {
+  color:var(--cardSecondaryText) !important;
+  opacity:1 !important;
+}
+
+/* Meaningful state is the sole third color allowed on light card surfaces. */
+html[data-theme="aqua"] :is(.glass-panel:not(.home-hero-card),.home-depth-card,.ai-overview-card,.ai-vip-card,.ai-subscription-panel,.ai-info-strip,.profile-glass,.profile-menu-card,.wallet-glass:not(.wallet-total-card),.market-panel,.market-live-row,.market-trending-card,.markets-table-card) :is(.text-lime,.text-mint,[class*="text-[#18ff8a]"],.is-up) {
+  color:var(--cardAccentText) !important;
+}
+html[data-theme="aqua"] .vip-row :is(p,strong,b) { color:var(--cardPrimaryText) !important; }
+html[data-theme="aqua"] .vip-row p:last-child { color:var(--cardSecondaryText) !important; }
+html[data-theme="aqua"] .vip-row > div:first-child,
+html[data-theme="aqua"] .vip-row :is(button,.ai-status-pill) { color:var(--cardAccentText) !important; }
