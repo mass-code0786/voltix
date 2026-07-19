@@ -25,7 +25,7 @@ npm run db:push
 
 ## Production boundaries
 
-- Set `NEXT_PUBLIC_ANDROID_APK_URL` to the public HTTPS APK URL exposed by the authenticated app header, for example `https://voltix.zenithsoftech.com/downloads/voltix.apk`. Non-HTTPS and malformed values are rejected by the client.
+- The landing page and authenticated header share the APK source from `NEXT_PUBLIC_ANDROID_APK_URL`, falling back to the production-served `public/downloads/voltix.apk` route when it is unset.
 - USDT BEP20/TRC20 deposits create one standard NOWPayments `/v1/payment` per request and use signed IPN callbacks.
 - Deposits require only `NOWPAYMENTS_API_KEY` and `NOWPAYMENTS_IPN_SECRET`. Configure `NOWPAYMENTS_IPN_CALLBACK_URL` as `https://voltix.zenithsoftech.com/api/webhooks/nowpayments`, or configure `NEXT_PUBLIC_APP_URL`/`APP_URL` so it resolves to that URL in production. Bearer authentication and Customer Management credentials are not used for deposits.
 - NOWPayments Mass Payouts, payout 2FA, and payout IP whitelisting are not used for deposits; withdrawals are handled separately.

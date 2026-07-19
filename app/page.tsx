@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { voltixApkDownloadHref } from "@/lib/apk-download";
 
 export default async function HomePage() {
   const currentUser = await getCurrentUser();
   if (currentUser) redirect("/dashboard");
 
-  const androidHref = withApkCacheVersion(process.env.NEXT_PUBLIC_ANDROID_APK_URL || "/downloads/voltix.apk");
+  const androidHref = voltixApkDownloadHref();
   const iosHref = process.env.NEXT_PUBLIC_IOS_APP_URL || process.env.NEXT_PUBLIC_IOS_IPA_URL || "#";
 
   return (
@@ -39,11 +40,6 @@ export default async function HomePage() {
       <footer className="voltix-landing-footer">Secure • Fast • Reliable</footer>
     </main>
   );
-}
-
-function withApkCacheVersion(href: string) {
-  const separator = href.includes("?") ? "&" : "?";
-  return `${href}${separator}v=20260711-icon2`;
 }
 
 function InstallCard({ title, button, href }: { title: string; button: string; href: string }) {

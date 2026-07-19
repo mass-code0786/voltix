@@ -1,12 +1,13 @@
 "use client";
 
 import type { ComponentType, ReactNode } from "react";
-import { useId, useState, type InputHTMLAttributes } from "react";
+import { useId, type InputHTMLAttributes } from "react";
 import type { LucideProps } from "lucide-react";
 import { ArrowLeft, Bell, ChevronRight, Download, Menu, Moon, Search, Sun } from "lucide-react";
 import { CoinMark } from "./coin-mark";
 import { Sparkline } from "./sparkline";
 import { useTheme } from "./theme-provider";
+import { voltixApkDownloadHref } from "@/lib/apk-download";
 import { compact } from "@/lib/format";
 import { currencyConfigForCountry, formatLocalCurrency } from "@/lib/local-currency";
 
@@ -32,29 +33,10 @@ type HeaderProps = {
   onMenu: () => void;
 };
 
-const apkDownloadUrl = safeHttpsUrl(process.env.NEXT_PUBLIC_ANDROID_APK_URL);
-
-function safeHttpsUrl(value?: string) {
-  if (!value?.trim()) return null;
-  try {
-    const url = new URL(value.trim());
-    return url.protocol === "https:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
+const apkDownloadUrl = voltixApkDownloadHref();
 
 function ApkDownloadAction({ className, iconSize }: { className: string; iconSize: number }) {
-  const [message, setMessage] = useState("");
-  const unavailable = () => {
-    setMessage("APK download is currently unavailable.");
-    window.setTimeout(() => setMessage(""), 3000);
-  };
-  const content = <Download size={iconSize} aria-hidden="true" />;
-  return <>
-    {apkDownloadUrl ? <a href={apkDownloadUrl} download rel="noopener noreferrer" target="_blank" className={className} aria-label="Download Voltix APK" title="Download Voltix APK">{content}</a> : <button type="button" onClick={unavailable} className={className} aria-label="Download Voltix APK" title="Download Voltix APK">{content}</button>}
-    {message && <div role="status" className="fixed inset-x-4 top-20 z-[70] mx-auto w-fit max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-[#111c18] px-4 py-3 text-center text-xs font-bold text-white shadow-2xl">{message}</div>}
-  </>;
+  return <a href={apkDownloadUrl} className={className} aria-label="Download Voltix APK" title="Download Voltix APK"><Download size={iconSize} aria-hidden="true" /></a>;
 }
 
 export function AppHeader({ title, subtitle, compactBrand = true, initials, unreadNotifications = 0, variant = "default", onBack, onMenuButton, onNotifications, onMenu }: HeaderProps) {
