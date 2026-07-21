@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
   ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Bell, Bot, BrainCircuit, ChevronRight, Clock3,
   BarChart3, CircleDollarSign, Eye, EyeOff, FileClock, Filter, Gift, Headphones, History, Home, Info, LineChart, MoreHorizontal,
@@ -71,7 +71,7 @@ function CleanHeader({ routes, section, unreadCount }: { routes: Record<CleanSec
     <Link href={routes.home} className={styles.brand} aria-label="Voltix home"><span>V</span><b>VOLTIX</b></Link>
     <div className={styles.headerActions}>
       {section === "home" && <><Link href={routes.markets} aria-label="Search"><Search /></Link><Link href="/wallet/deposit" aria-label="Scan"><QrCode /></Link><Link href="/profile/support" aria-label="Support"><Headphones /></Link></>}
-      {section === "markets" && <><Link href={routes.markets} aria-label="Search"><Search /></Link><button type="button" aria-label="Favorites"><Star /></button></>}
+      {section === "markets" && <><Link href={routes.markets} aria-label="Search"><Search /></Link><button type="button" aria-label="Favorites are unavailable" disabled><Star /></button></>}
       {section === "futures" && <><Link href={routes.markets} aria-label="Search"><Search /></Link><Link href={recordsHref} aria-label="Records"><FileClock /></Link><Link href={recordsHref} aria-label="Recent activity"><History /></Link></>}
       {(section === "ai-trade" || section === "wallet") && <><Link href={recordsHref} aria-label="Records"><FileClock /></Link><Link href={recordsHref} aria-label="Recent activity"><History /></Link></>}
       <Link href="/profile/notifications" aria-label="Notifications" className={styles.notificationLink}><Bell />{unreadCount > 0 && <span aria-label={`${unreadCount} unread notifications`}>{unreadCount > 9 ? "9+" : unreadCount}</span>}</Link>
@@ -112,20 +112,6 @@ function MarketsPage({ markets, loading }: { markets: Market[]; loading: boolean
     <div className={styles.tableHead}><span>Pair / Volume</span><span>Last Price</span><span>24h Change</span></div>
     <div className={styles.marketList}>{loading ? <SkeletonRows count={9} /> : shown.slice(0, 9).map((row, index) => <MarketRow key={row.symbol} row={row} favorite={index === 0} />)}{!loading && !shown.length && <Empty label={filter === "Favorites" ? "No favorite markets yet" : filter === "New Listings" ? "No new listings available" : "No live market data"} />}</div>
     {!loading && <TickerRail rows={shown.slice(0, 3)} />}
-  </>;
-}
-
-function AiPageLegacy({ data, loading }: { data: Snapshot; loading: boolean }) {
-  const ai = walletValue(data, "aiWallet"), active = data.copy.activeTrade, history = data.copy.history ?? [];
-  return <>
-    <PageTitle title="AI Trade" subtitle="Your real Voltix AI trading activity" />
-    <section className={`${styles.summaryCard} ${styles.aiSummary}`}><div><small>Total AI Balance</small><Money value={ai} loading={loading} large /></div><div><small>Today&apos;s Profit</small>{loading ? <i className={`${styles.skeleton} ${styles.inlineSkeleton}`} /> : <><b className={styles.positive}>{signedMoney(data.aiToday)}</b><small>{data.subscription?.subscription?.active ? `${data.subscription.subscription.remainingDays ?? 0} subscription days left` : "No active subscription"}</small></>}</div><Bot /></section>
-    <div className={styles.aiActions}><Stat icon={Bot} label="AI Trading" value="Trade center" /><Stat icon={Clock3} label="Active Trades" value={active ? "1 running" : "None running"} /><Stat icon={History} label="Trade History" value={`${history.length} records`} /><Stat icon={FileClock} label="Subscription" value={data.subscription?.subscription?.active ? "Active" : "Inactive"} /></div>
-    <SectionTitle title="Active AI Trade" />
-    {loading ? <SkeletonPanel /> : active ? <article className={styles.tradeCard}><div className={styles.tradeTop}><CoinLogo symbol={(active.pair ?? "AI").replace("USDT", "")} /><div><b>{formatPair(active.pair)}</b><small>{active.status ?? "Active"}</small></div><span className={styles.status}>Running</span></div><div className={styles.statGrid}><Metric label="Amount" value={money(Number(active.amount ?? 0))} /><Metric label="Profit" value={signedMoney(Number(active.profit ?? 0))} /><Metric label="Return" value={`${Number(active.returnPercent ?? 0).toFixed(2)}%`} /></div>{active.creditDueAt && <p className={styles.tradeNote}>Credit due {date(active.creditDueAt)}</p>}</article> : <Empty label="No active AI trade" />}
-    <SectionTitle title="Trade windows" />
-    <div className={styles.windowList}>{(data.copy.tradeRows ?? []).slice(0, 3).map((row, index) => <div key={`${row.label}-${index}`}><span>{row.label ?? `Trade ${index + 1}`}</span><b>{row.openTime && row.closeTime ? `${row.openTime} – ${row.closeTime}` : row.tradeStatus ?? "Scheduled"}</b></div>)}{!(data.copy.tradeRows ?? []).length && <Empty label="No trade windows available" />}</div>
-    <Link className={styles.primaryButton} href="/dashboard?view=aiTrade">Open AI trading</Link>
   </>;
 }
 
@@ -193,9 +179,9 @@ function CleanBottomNavigation({ active, routes }: { active: CleanSection; route
 
 function PageTitle({ title, subtitle }: { title: string; subtitle: string }) { return <div className={styles.pageTitle}><h1>{title}</h1><p>{subtitle}</p></div>; }
 function SectionTitle({ title, href }: { title: string; href?: string }) { return <div className={styles.sectionTitle}><h2>{title}</h2>{href && <Link href={href}>View all <ChevronRight /></Link>}</div>; }
-function Empty({ label }: { label: string }) { return <div className={styles.empty}><span><LineChart /></span><b>{label}</b><small>Available data will appear here.</small></div>; }
-function Money({ value, loading, large }: { value: number; loading?: boolean; large?: boolean }) { return <strong className={`${large ? styles.moneyLarge : ""} ${loading ? styles.loadingMoney : ""}`}>{loading ? <span className={styles.skeleton} /> : money(value)}</strong>; }
-function BalanceMoney({ value, loading, visible }: { value: number; loading: boolean; visible: boolean }) { return <strong className={`${styles.moneyLarge} ${loading ? styles.loadingMoney : ""}`}>{loading ? <span className={styles.skeleton} /> : visible ? money(value) : "$••••••"}</strong>; }
+function Empty({ label }: { label: string }) { return <div className={styles.empty} role="status"><span><LineChart /></span><b>{label}</b><small>{emptyHelper(label)}</small></div>; }
+function Money({ value, loading, large }: { value: number; loading?: boolean; large?: boolean }) { const animated = useAnimatedNumber(value); return <strong className={`${large ? styles.moneyLarge : ""} ${loading ? styles.loadingMoney : ""}`}>{loading ? <span className={styles.skeleton} /> : money(animated)}</strong>; }
+function BalanceMoney({ value, loading, visible }: { value: number; loading: boolean; visible: boolean }) { const animated = useAnimatedNumber(value); return <strong className={`${styles.moneyLarge} ${loading ? styles.loadingMoney : ""}`}>{loading ? <span className={styles.skeleton} /> : visible ? money(animated) : "$••••••"}</strong>; }
 function Stat({ icon: Icon, label, value }: { icon: ComponentType<{ size?: number }>; label: string; value: string }) { return <div><Icon /><b>{label}</b><small>{value}</small></div>; }
 function Metric({ label, value }: { label: string; value: string }) { return <div><small>{label}</small><b>{value}</b></div>; }
 function PlanRow({ icon: Icon, label, value, note, badge }: { icon: ComponentType<{ size?: number }>; label: string; value: string; note: string; badge?: string }) { return <div><span><Icon /></span><div><b>{label}</b><small>{note}</small>{badge && <em>{badge}</em>}</div><strong>{value}</strong></div>; }
@@ -212,7 +198,7 @@ function TickerRail({ rows }: { rows: Market[] }) { return rows.length ? <div cl
 function SkeletonRows({ count }: { count: number }) { return <>{Array.from({ length: count }, (_, index) => <div className={styles.skeletonRow} key={index}><span className={styles.skeleton} /><div><span className={styles.skeleton} /><span className={styles.skeleton} /></div><span className={styles.skeleton} /><span className={styles.skeleton} /></div>)}</>; }
 function SkeletonCards({ count }: { count: number }) { return <>{Array.from({ length: count }, (_, index) => <div className={styles.skeletonCard} key={index}><span className={styles.skeleton} /><span className={styles.skeleton} /><span className={styles.skeleton} /></div>)}</>; }
 function SkeletonPanel() { return <div className={styles.skeletonPanel}><span className={styles.skeleton} /><span className={styles.skeleton} /><span className={styles.skeleton} /></div>; }
-function SkeletonWallets() { return <>{Array.from({ length: 3 }, (_, index) => <div className={styles.skeletonWallet} key={index}><span className={styles.skeleton} /><div><span className={styles.skeleton} /><span className={styles.skeleton} /></div><span className={styles.skeleton} /></div>)}</>; }
+function SkeletonWallets() { return <>{Array.from({ length: 5 }, (_, index) => <div className={styles.skeletonWallet} key={index}><span className={styles.skeleton} /><div><span className={styles.skeleton} /><span className={styles.skeleton} /></div><span className={styles.skeleton} /></div>)}</>; }
 function SkeletonTransactions() { return <>{Array.from({ length: 2 }, (_, index) => <div className={styles.skeletonTransaction} key={index}><span className={styles.skeleton} /><div><span className={styles.skeleton} /><span className={styles.skeleton} /></div><span className={styles.skeleton} /></div>)}</>; }
 
 function walletValue(data: Snapshot, key: "spot" | "futures" | "aiWallet") { return Number(data.totals.total?.[key] ?? data.totals.available?.[key] ?? 0); }
@@ -231,3 +217,5 @@ function weightedChange(rows: Market[]) { const total = rows.reduce((sum, row) =
 function price(value: number) { return value >= 1 ? value.toLocaleString("en-US", { maximumFractionDigits: 2 }) : value.toLocaleString("en-US", { maximumFractionDigits: 6 }); }
 function date(value: string) { const d = new Date(value); return Number.isNaN(d.getTime()) ? value : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); }
 function formatPair(pair?: string | null) { return pair ? pair.replace(/USDT$/, " / USDT") : "AI Trade"; }
+function emptyHelper(label: string) { if (label.includes("transaction")) return "Your completed wallet activity will appear here."; if (label.includes("favorite")) return "Choose the star beside a supported market to add it here."; if (label.includes("listing")) return "New supported Voltix markets will appear here."; if (label.includes("trade")) return "Eligible AI trading activity will appear here when available."; return "Live supported data will appear here when available."; }
+function useAnimatedNumber(value: number) { const previous = useRef(value), frame = useRef<number | null>(null); const [display, setDisplay] = useState(value); useEffect(() => { const from = previous.current, to = Number.isFinite(value) ? value : 0; previous.current = to; if (frame.current) cancelAnimationFrame(frame.current); if (typeof window === "undefined" || window.matchMedia("(prefers-reduced-motion: reduce)").matches || from === to) { setDisplay(to); return; } const started = performance.now(); const tick = (now: number) => { const progress = Math.min(1, (now - started) / 180); setDisplay(from + (to - from) * (1 - Math.pow(1 - progress, 3))); if (progress < 1) frame.current = requestAnimationFrame(tick); }; frame.current = requestAnimationFrame(tick); return () => { if (frame.current) cancelAnimationFrame(frame.current); }; }, [value]); return display; }
