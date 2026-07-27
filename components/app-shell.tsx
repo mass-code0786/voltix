@@ -48,7 +48,7 @@ type Tab = "home" | "markets" | "trade" | "aiTrade" | "team" | "wallet";
 type MobileNavTab = Tab | "profile";
 type TradeCategory = "spot" | "futures" | "grid" | "margin" | "copy";
 type WalletSection = "overview" | "assets" | "ledger";
-type WalletAction = "deposit" | null;
+type WalletAction = "deposit" | "transfer" | null;
 type UserWallet = "SPOT" | "FUTURES" | "AI";
 type WalletHistoryCategory = "ALL" | "DEPOSITS" | "TRANSFERS" | "WITHDRAWALS" | "REFERRAL_INCOME" | "LEVEL_INCOME" | "VIP_INCOME";
 type WalletActivity = { icon: typeof ArrowDownLeft; title: string; amount: string; status: string; date: string; details: string[]; category: Exclude<WalletHistoryCategory, "ALL"> | "OTHER" };
@@ -832,7 +832,11 @@ export default function AppShell() {
         ? requestedSection as WalletSection
         : "overview",
     );
-    setWalletAction(params.get("action") === "deposit" ? "deposit" : null);
+    const requestedAction = params.get("action");
+    setWalletAction(requestedAction === "deposit" || requestedAction === "transfer" ? requestedAction : null);
+    if (requestedTab === "wallet" && requestedAction === "transfer") {
+      setTransferOpen({ from: "SPOT", to: "FUTURES" });
+    }
     setMenu(false);
     setTradeMenuOpen(false);
   }, []);

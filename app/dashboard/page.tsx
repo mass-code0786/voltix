@@ -18,6 +18,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
 function cleanSectionFor(params: Record<string, string | string[] | undefined>): CleanSection | null {
   const value = (key: string) => typeof params[key] === "string" ? params[key] : null;
+  // Clean Exchange owns the production landing views. Complex workflows still use
+  // the existing, production-tested controllers until their result is returned to
+  // a Clean landing view. This flag prevents a workflow deep-link from being
+  // swallowed by the design-only route mapping below.
+  if (value("workflow") === "current") return null;
   const view = value("view");
   if (!view || view === "home") return "home";
   if (view === "markets") return "markets";
