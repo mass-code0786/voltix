@@ -1,0 +1,569 @@
+{
+  "generatedAt": "2026-07-27T18:03:29.977Z",
+  "baseUrl": "http://127.0.0.1:3090",
+  "totals": {
+    "passed": 93,
+    "failed": 0,
+    "total": 93
+  },
+  "results": [
+    {
+      "area": "Mobile",
+      "test": "home 360x800 has no horizontal overflow",
+      "passed": true,
+      "details": "360/360"
+    },
+    {
+      "area": "Mobile",
+      "test": "home 360x800 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":743,\"width\":360,\"height\":57,\"top\":743,\"right\":360,\"bottom\":800,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "home 360x800 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "home 360x800 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "home 360x800 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 360x800 has no horizontal overflow",
+      "passed": true,
+      "details": "360/360"
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 360x800 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":743,\"width\":360,\"height\":57,\"top\":743,\"right\":360,\"bottom\":800,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 360x800 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 360x800 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "markets 360x800 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 360x800 has no horizontal overflow",
+      "passed": true,
+      "details": "360/360"
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 360x800 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":743,\"width\":360,\"height\":57,\"top\":743,\"right\":360,\"bottom\":800,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 360x800 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 360x800 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "ai-trade 360x800 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 360x800 has no horizontal overflow",
+      "passed": true,
+      "details": "360/360"
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 360x800 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":743,\"width\":360,\"height\":57,\"top\":743,\"right\":360,\"bottom\":800,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 360x800 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 360x800 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "futures 360x800 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 360x800 has no horizontal overflow",
+      "passed": true,
+      "details": "360/360"
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 360x800 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":743,\"width\":360,\"height\":57,\"top\":743,\"right\":360,\"bottom\":800,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 360x800 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 360x800 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "wallet 360x800 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "home 390x844 has no horizontal overflow",
+      "passed": true,
+      "details": "390/390"
+    },
+    {
+      "area": "Mobile",
+      "test": "home 390x844 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":784,\"width\":390,\"height\":60,\"top\":784,\"right\":390,\"bottom\":844,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "home 390x844 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "home 390x844 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "home 390x844 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 390x844 has no horizontal overflow",
+      "passed": true,
+      "details": "390/390"
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 390x844 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":784,\"width\":390,\"height\":60,\"top\":784,\"right\":390,\"bottom\":844,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 390x844 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 390x844 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "markets 390x844 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 390x844 has no horizontal overflow",
+      "passed": true,
+      "details": "390/390"
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 390x844 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":784,\"width\":390,\"height\":60,\"top\":784,\"right\":390,\"bottom\":844,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 390x844 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 390x844 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "ai-trade 390x844 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 390x844 has no horizontal overflow",
+      "passed": true,
+      "details": "390/390"
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 390x844 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":784,\"width\":390,\"height\":60,\"top\":784,\"right\":390,\"bottom\":844,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 390x844 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 390x844 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "futures 390x844 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 390x844 has no horizontal overflow",
+      "passed": true,
+      "details": "390/390"
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 390x844 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":784,\"width\":390,\"height\":60,\"top\":784,\"right\":390,\"bottom\":844,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 390x844 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 390x844 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "wallet 390x844 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "home 430x932 has no horizontal overflow",
+      "passed": true,
+      "details": "430/430"
+    },
+    {
+      "area": "Mobile",
+      "test": "home 430x932 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":870,\"width\":430,\"height\":62,\"top\":870,\"right\":430,\"bottom\":932,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "home 430x932 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "home 430x932 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "home 430x932 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 430x932 has no horizontal overflow",
+      "passed": true,
+      "details": "430/430"
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 430x932 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":870,\"width\":430,\"height\":62,\"top\":870,\"right\":430,\"bottom\":932,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 430x932 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "markets 430x932 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "markets 430x932 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 430x932 has no horizontal overflow",
+      "passed": true,
+      "details": "430/430"
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 430x932 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":870,\"width\":430,\"height\":62,\"top\":870,\"right\":430,\"bottom\":932,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 430x932 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "ai-trade 430x932 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "ai-trade 430x932 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 430x932 has no horizontal overflow",
+      "passed": true,
+      "details": "430/430"
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 430x932 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":870,\"width\":430,\"height\":62,\"top\":870,\"right\":430,\"bottom\":932,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 430x932 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "futures 430x932 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "futures 430x932 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 430x932 has no horizontal overflow",
+      "passed": true,
+      "details": "430/430"
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 430x932 bottom navigation visible",
+      "passed": true,
+      "details": "{\"x\":0,\"y\":870,\"width\":430,\"height\":62,\"top\":870,\"right\":430,\"bottom\":932,\"left\":0}"
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 430x932 controls are not horizontally clipped",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "area": "Mobile",
+      "test": "wallet 430x932 has no duplicate modal",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "area": "Network",
+      "test": "wallet 430x932 has no duplicate initial API request",
+      "passed": true,
+      "details": "[]"
+    },
+    {
+      "area": "Dashboard",
+      "test": "Balance visibility toggle masks the balance",
+      "passed": true,
+      "details": "$0.00 -> $••••••"
+    },
+    {
+      "area": "Dashboard",
+      "test": "Deposit action is wired",
+      "passed": true,
+      "details": "/wallet/deposit"
+    },
+    {
+      "area": "Dashboard",
+      "test": "Withdraw action is wired",
+      "passed": true,
+      "details": "/wallet/withdraw"
+    },
+    {
+      "area": "Dashboard",
+      "test": "Transfer action is wired",
+      "passed": true,
+      "details": "/dashboard?view=wallet&action=transfer&workflow=current"
+    },
+    {
+      "area": "Dashboard",
+      "test": "More action is wired",
+      "passed": true,
+      "details": "/profile"
+    },
+    {
+      "area": "Dashboard",
+      "test": "AI Copy Trading action is wired",
+      "passed": true,
+      "details": "/clean-preview/ai-trade"
+    },
+    {
+      "area": "Markets",
+      "test": "Initial loading resolves",
+      "passed": true,
+      "details": "false"
+    },
+    {
+      "area": "Markets",
+      "test": "Top Gainers filter activates",
+      "passed": true,
+      "details": "clean-exchange_activePill__Vgvnb"
+    },
+    {
+      "area": "Markets",
+      "test": "Market rows deep-link to coin details when data exists",
+      "passed": true,
+      "details": "null"
+    },
+    {
+      "area": "AI Trade",
+      "test": "All AI summary controls enter the production workflow",
+      "passed": true,
+      "details": "[\"/dashboard?view=aiTrade&workflow=current\",\"/dashboard?view=aiTrade&workflow=current\",\"/dashboard?view=aiTrade&workflow=current\",\"/dashboard?view=aiTrade&workflow=current\"]"
+    },
+    {
+      "area": "AI Trade",
+      "test": "Trade details remain actionable in empty state",
+      "passed": true,
+      "details": "/dashboard?view=aiTrade&workflow=current"
+    },
+    {
+      "area": "Wallet",
+      "test": "Wallet quick actions are all wired",
+      "passed": true,
+      "details": "[[\"Deposit\",\"/wallet/deposit\"],[\"Withdraw\",\"/wallet/withdraw\"],[\"Transfer\",\"/dashboard?view=wallet&action=transfer&workflow=current\"],[\"Convert\",\"/markets/SHINEUSDT\"],[\"History\",\"/dashboard?view=wallet&wallet=ledger&workflow=current\"]]"
+    },
+    {
+      "area": "Wallet",
+      "test": "All wallet cards open a production detail workflow",
+      "passed": true,
+      "details": "[[\"Spot WalletAvailable$0.00$0.00Change amount —Change percentage —\",\"/dashboard?view=wallet&wallet=assets&workflow=current\"],[\"Futures WalletAvailable$0.00$0.00Change amount —Change percentage —\",\"/dashboard?view=wallet&wallet=assets&workflow=current\"],[\"AI WalletAvailable$0.00$0.00Change amount —Change percentage —\",\"/dashboard?view=aiTrade&workflow=current\"],[\"Reward WalletAvailable$0.00$0.00Change amount —Change percentage —\",\"/markets/SHINEUSDT\"],[\"Funds WalletAvailable$0.00$0.00Change amount —Change percentage —\",\"/dashboard?view=wallet&wallet=assets&workflow=current\"]]"
+    },
+    {
+      "area": "Error handling",
+      "test": "Failed APIs resolve loading state",
+      "passed": true,
+      "details": "{\"busy\":\"false\",\"empty\":true}"
+    },
+    {
+      "area": "Error handling",
+      "test": "Failed market data produces an empty state",
+      "passed": true,
+      "details": "{\"busy\":\"false\",\"empty\":true}"
+    },
+    {
+      "area": "Navigation",
+      "test": "Invalid interface preference is sanitized",
+      "passed": true,
+      "details": "{\"stored\":\"current\",\"cookie\":\"voltix_interface=current\"}"
+    },
+    {
+      "area": "Authentication",
+      "test": "Unauthorized dashboard access redirects away",
+      "passed": true,
+      "details": "{\"path\":\"/\",\"search\":\"\"}"
+    },
+    {
+      "area": "Authentication",
+      "test": "Login form exposes required controls",
+      "passed": true,
+      "details": "{\"email\":true,\"password\":true,\"button\":true}"
+    }
+  ]
+}
